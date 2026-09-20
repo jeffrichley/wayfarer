@@ -1,0 +1,4 @@
+.file-versions/
+.od-skills/
+plugin-source/
+*.artifact.json

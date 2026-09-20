@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wayfinder map · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .map-split { grid-template-columns: minmax(0, 1fr) 350px; }
+    .canvas-col { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+    .canvas-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 20px 28px 8px; }
+    .canvas-head h1 { font-size: 28px; line-height: 1.15; margin-top: 4px; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 14px; font-size: 12px; color: var(--muted); max-width: 660px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend .fog-key, .effects .fog-key { display: inline-block; width: 16px; height: 10px; border-radius: 50%; background-image: radial-gradient(var(--muted) 0.9px, transparent 1.1px); background-size: 3.4px 3.4px; }
+
+    .viewport { overflow: auto; padding: 0 24px; }
+    .stage-wrap { position: relative; margin: 4px auto 16px; }
+    .stage { position: absolute; left: 0; top: 0; width: 1180px; height: 700px; transform-origin: 0 0; }
+    .stage svg { position: absolute; inset: 0; overflow: visible; }
+
+    .edge { fill: none; stroke-width: 1.25; transition: opacity .5s ease, stroke .2s ease; }
+    /* the course walked so far is drawn in chart magenta */
+    .edge.met, .edge.from-start.walked, .edge.to-dest.clear { stroke: var(--accent); stroke-width: 2.25; opacity: .9; stroke-dasharray: none; }
+    .edge.open { stroke: var(--muted); stroke-dasharray: 4 4; opacity: .9; }
+    .edge.from-start { stroke: var(--line); }
+    .edge.to-dest { stroke: var(--line); stroke-dasharray: 2 5; }
+    .edge.hot { opacity: 1; stroke-width: 3; }
+    .edge.hot.open, .edge.hot.from-start:not(.walked), .edge.hot.to-dest:not(.clear) { stroke: var(--fg); stroke-width: 1.75; }
+    .edge.hidden { opacity: 0; }
+
+    .start-label { position: absolute; left: 60px; top: 28px; transform: translateX(-50%); text-align: center; white-space: nowrap; }
+    .fog-layer { transition: opacity .8s ease; }
+    .fog-title { position: absolute; top: 28px; transform: translateX(-50%); white-space: nowrap; transition: opacity .6s ease; }
+    /* Fog notes carry a cartographic label halo: a tight knockout in the page
+       colour, so the stipple and route lines stop just short of each letter
+       without cutting a visible shape out of the haze. */
+    .patch, .fog-title {
+      text-shadow: 0 0 1px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg), 0 0 3px var(--bg), 0 0 4px var(--bg), 0 0 6px var(--bg);
+    }
+    .patch {
+      position: absolute; width: 180px; transform: translate(-50%, -50%);
+      font-family: var(--font-display); font-style: italic; font-size: 14.5px; line-height: 1.4; color: var(--ink-2);
+      text-align: center; transition: opacity .6s ease, filter .6s ease;
+    }
+    .patch.gone { opacity: 0; filter: blur(3px); pointer-events: none; }
+    .fog-stipple { opacity: .55; }
+    /* light dots on a dark ground read busier than dark dots on paper */
+    :root[data-theme="dark"] .fog-stipple { opacity: .36; }
+
+    .node {
+      position: absolute; width: 170px; transform: translate(-85px, -9px);
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+      background: none; border: 0; padding: 0; cursor: pointer; text-align: center;
+      transition: left .7s cubic-bezier(.3,.7,.2,1), top .7s cubic-bezier(.3,.7,.2,1), opacity .45s ease;
+    }
+    .node:focus-visible { outline: none; }
+    .node:focus-visible .n-label { box-shadow: 0 0 0 2px var(--fg); }
+    .node .st { width: 18px; height: 18px; background-color: var(--bg); }
+    .node .st-done { background-color: var(--fg); }
+    .node .st-take { background-color: var(--bg); border-width: 2.5px; }
+    .node .st-ask { width: 13px; height: 13px; margin: 2.5px; background-color: var(--fg); }
+    .node .n-label { display: block; padding: 5px 7px 6px; border-radius: 3px; background: var(--bg); transition: background-color .15s ease, box-shadow .15s ease; }
+    .node:hover .n-label { background: var(--hover); }
+    .node[aria-pressed="true"] .n-label { background: var(--surface); box-shadow: 0 0 0 1px var(--fg); }
+    .node .n-name { display: block; font-size: 14.5px; line-height: 1.33; color: var(--fg); }
+    .node .n-type { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .node .n-flag { display: none; margin-top: 3px; font-size: 11.5px; font-weight: 600; color: var(--fg); }
+    .node.s-ask .n-flag, .node.s-working .n-flag { display: block; }
+    .node.s-working .n-flag { font-weight: 500; color: var(--ink-2); }
+    .node.s-blocked .n-name { color: var(--ink-2); }
+    .node.s-out .n-name { color: var(--muted); }
+    .node.s-hidden { opacity: 0; pointer-events: none; }
+    .node.s-hidden .n-label { visibility: hidden; }
+
+    .tray-rule { position: absolute; left: 1000px; width: 176px; border-top: 1px solid var(--border); }
+    .tray-label { position: absolute; left: 1088px; transform: translateX(-50%); white-space: nowrap; background: var(--bg); padding: 0 6px; }
+
+    .dest { position: absolute; width: 184px; transform: translate(-92px, -13px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+    .dest-mark { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--fg); display: grid; place-items: center; background: var(--bg); transition: background-color .5s ease; }
+    .dest-mark::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--fg); transition: background-color .5s ease; }
+    .dest.clear .dest-mark { background: var(--fg); }
+    .dest.clear .dest-mark::after { background: var(--bg); }
+    .dest .d-text { font-family: var(--font-display); font-size: 15px; line-height: 1.35; }
+    .dest .d-clear { display: none; font-size: 12.5px; }
+    .dest.clear .d-clear { display: block; }
+
+    /* scrubber */
+    .scrub { border-top: 1px solid var(--border); padding: 12px 28px 14px; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: 16px; align-items: center; background: var(--bg); }
+    .scrub .caption { grid-column: 2 / 4; display: flex; gap: 12px; align-items: baseline; min-height: 22px; margin-bottom: 4px; }
+    .scrub .caption .when { font-family: var(--font-mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .scrub .caption .what { font-size: 14px; line-height: 1.45; }
+    .scrub .caption .what b { font-family: var(--font-display); font-weight: 500; font-size: 15px; }
+    .play { grid-row: 2; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; cursor: pointer; }
+    .play:hover { background: var(--hover); border-color: var(--line); }
+    .play svg { width: 12px; height: 12px; }
+    .range-wrap { grid-row: 2; position: relative; padding-bottom: 18px; }
+    .scrub input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; cursor: pointer; }
+    .scrub input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--fg); }
+    .scrub input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -7px; border-radius: 50%; background: var(--fg); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--fg); }
+    .scrub input[type=range]::-moz-range-track { height: 2px; background: var(--fg); }
+    .scrub input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--fg); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--fg); }
+    .scrub input[type=range]:focus-visible { outline: 2px solid var(--fg); outline-offset: 4px; }
+    .ticks { position: absolute; left: 8px; right: 8px; top: 16px; height: 18px; pointer-events: none; }
+    .tick { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+    .tick i { width: 1px; height: 5px; background: var(--fg); }
+    .tick span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; margin-top: 1px; }
+    .now-btn { grid-row: 2; align-self: start; }
+
+    /* drawer */
+    .drawer { display: flex; flex-direction: column; min-height: 0; }
+    .drawer .pane { flex: 1; }
+    .d-head { padding: 20px 22px 16px; }
+    .d-head h2 { font-size: 23px; line-height: 1.2; margin-top: 8px; }
+    .d-head h2:focus { outline: none; }
+    .d-state { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13.5px; }
+    .prose { font-size: 14px; line-height: 1.6; }
+    .prose.serif { font-family: var(--font-display); font-size: 16px; line-height: 1.45; }
+    .decision { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; padding: 7px 0; }
+    .decision .st { margin-top: 4px; }
+    .decision button.link { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font-size: 13.5px; line-height: 1.4; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    .decision button.link:hover { text-decoration-color: var(--fg); background: var(--hover); }
+    .decision .gist { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+    .fog-note { font-family: var(--font-display); font-style: italic; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); padding: 5px 0; }
+    .replay-note { margin: 0 22px 0; }
+    .d-actions { display: flex; flex-direction: column; gap: 12px; }
+    .session { margin-top: 16px; }
+
+    /* ─── the way becomes clear ────────────────────────────────────
+       The last close plays once: the node settles, the fog drifts off
+       the chart, the course draws into the destination, and the skill
+       line carries it on to /to-spec. */
+    .fog-layer.lift { opacity: 0; transform: translateX(150px); transition: opacity 1.8s ease .15s, transform 2.6s cubic-bezier(.2,.6,.2,1); }
+    .node.settle .st { animation: settle .7s cubic-bezier(.3,.7,.2,1); }
+    @keyframes settle { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+    .dest-mark { position: relative; }
+    .dest.arrive .dest-mark::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--accent); animation: arrive 1.6s ease-out 1.9s both; }
+    @keyframes arrive { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.8); opacity: 0; } }
+    .handoff-in .reveal { animation: rise .55s cubic-bezier(.3,.7,.2,1) both; animation-delay: var(--d, 0ms); }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .clear-lead { font-size: 14px; line-height: 1.55; color: var(--ink-2); margin-top: 8px; }
+    .hand li { padding-bottom: 18px; }
+    .hand .t-name { font-size: 14px; font-weight: 500; }
+    .hand .t-meta { font-size: 12.5px; line-height: 1.5; }
+    .seam { margin-top: 10px; }
+    .seam .by { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+    .seam-text { font-family: var(--font-display); font-size: 15.5px; line-height: 1.42; margin: 4px 0 12px; }
+    .seam .act, .res-act { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .seam .choice { padding: 9px 11px; }
+    .seam .choice[tabindex="-1"] { cursor: default; }
+    .writing { margin-top: 8px; }
+    .writing li { display: flex; align-items: center; gap: 9px; padding: 3px 0; font-size: 13px; transition: color .2s ease; }
+    .writing li .st { width: 10px; height: 10px; }
+    .writing li .ct { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+    .writing li.waiting { color: var(--muted); }
+    .spec-card { border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); padding: 14px 16px; }
+    .spec-card h3 { font-size: 19px; line-height: 1.25; margin: 6px 0 8px; }
+    .spec-card .prose { font-size: 13.5px; }
+    .spec-card .counts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+    .slice-act { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 14px; }
+    .feeds { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; padding: 7px 0; }
+    .feeds .st { margin-top: 4px; }
+    .feeds .to { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--muted); margin-top: 2px; }
+    .feeds button.link { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font-size: 13.5px; line-height: 1.4; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    .feeds button.link:hover { text-decoration-color: var(--fg); background: var(--hover); }
+    .res-ta { font-family: var(--font-display); font-size: 15px; line-height: 1.45; min-height: 112px; }
+    .effects { margin-top: 12px; }
+    .effects li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 4px 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+    .effects .st, .effects .fog-key, .effects .mini-dest { margin-top: 4px; }
+    .effects em { font-family: var(--font-display); color: var(--fg); }
+    .mini-dest { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--fg); display: grid; place-items: center; }
+    .mini-dest::after { content: ''; width: 4px; height: 4px; border-radius: 50%; background: var(--fg); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fog-layer.lift { transform: none; }
+      .node.settle .st, .dest.arrive .dest-mark::before, .handoff-in .reveal { animation: none; }
+    }
+    @media (max-width: 1180px) { .map-split { grid-template-columns: minmax(0, 1fr) 320px; } }
+    @media (max-width: 920px) {
+      .canvas-head { flex-direction: column; align-items: flex-start; padding: 18px 16px 8px; }
+      .legend { justify-content: flex-start; }
+      .viewport { overflow-x: auto; padding: 0 12px; }
+      .scrub { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+
+  <main class="split map-split" id="content">
+    <section class="canvas-col" data-od-id="map-canvas">
+      <div class="canvas-head">
+        <div>
+          <span class="kicker" id="map-kicker"></span>
+          <h1 id="map-title"></h1>
+        </div>
+        <div class="legend" aria-label="Legend">
+          <span><i class="st st-done" aria-hidden="true"></i>Decided</span>
+          <span><i class="st st-building" aria-hidden="true"></i>Claimed</span>
+          <span><i class="st st-ask" aria-hidden="true"></i>Waiting on you</span>
+          <span><i class="st st-take" aria-hidden="true"></i>Frontier</span>
+          <span><i class="st st-blocked" aria-hidden="true"></i>Blocked</span>
+          <span><i class="st st-out" aria-hidden="true"></i>Out of scope</span>
+          <span><i class="fog-key" aria-hidden="true"></i>Not yet specified</span>
+        </div>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <div class="stage-wrap"><div class="stage" id="stage"></div></div>
+      </div>
+
+      <div class="scrub" data-od-id="replay">
+        <div class="caption" aria-live="polite"><span class="when" id="cap-when"></span><span class="what" id="cap-what"></span></div>
+        <button class="play" id="play" type="button" aria-label="Replay the map from the start" data-od-id="replay-play"></button>
+        <div class="range-wrap">
+          <input type="range" id="range" min="0" step="1" aria-label="Map history" />
+          <div class="ticks" id="ticks"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm now-btn" id="now" type="button" data-od-id="replay-now">Back to now</button>
+      </div>
+    </section>
+
+    <aside class="side drawer" data-od-id="map-drawer">
+      <div class="pane" id="drawer"></div>
+    </aside>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { esc, glyph } = WS;
+
+  /* ─── maps ─────────────────────────────────────────────────────── */
+  const MAPS = {
+    casting: {
+      title: 'Per-chapter voice casting', issue: 147, charted: '9 Sep',
+      destination: WS.EFFORTS.casting.destination,
+      notes: 'Galley domain. Every session consults /domain-modeling for “cast assignment” and “override”. Voices come only from Madrigal.',
+      dest: { x: 1080, y: 300 },
+      nodes: [
+        { n: 151, type: 'research', mode: 'AFK', x: 220, y: 110, created: 3, claimed: 4, blockedBy: [],
+          name: 'Does changing a voice mid-book conflict with ACX’s audio consistency requirements?',
+          question: 'ACX asks for consistent audio across a title. Does a voice that changes between chapters count against that, and is there published guidance on several voices in one audiobook?',
+          claim: 'Research subagent on research/voice-consistency, reading ACX’s audio submission requirements. Findings land on the branch with a pointer from this ticket.' },
+        { n: 148, type: 'grilling', mode: 'HITL', x: 220, y: 300, created: 0, closed: 1, blockedBy: [],
+          name: 'What does a cast assignment belong to — the book or the chapter?',
+          question: 'When an author casts a voice for a character, is that choice made once for the book, or separately for every chapter?',
+          resolution: 'The book, with per-chapter overrides. Most characters keep one voice all the way through, so the chapter only records the exceptions.',
+          gist: 'The book, with per-chapter overrides' },
+        { n: 155, type: 'prototype', mode: 'HITL', x: 220, y: 500, created: 0, out: 1, tx: 1088, ty: 560, blockedBy: [],
+          name: 'Clone a voice from the author’s own recording',
+          question: 'Could an author record a sample and have Galley build a voice from it, to use as an override?',
+          outReason: 'Cloning makes new voices. This effort only rearranges voices that already exist in Madrigal.' },
+        { n: 149, type: 'prototype', mode: 'HITL', x: 450, y: 120, created: 0, closed: 2, blockedBy: [148],
+          name: 'How does an override show up on the Cast page?',
+          question: 'When a character’s voice changes partway through a book, where does the author see that on the Cast page?',
+          resolution: 'As a mark on the character’s chapter sparkline, not a separate list of overrides. The prototype is linked from the issue.',
+          gist: 'A mark on the chapter sparkline' },
+        { n: 150, type: 'grilling', mode: 'HITL', x: 450, y: 300, created: 0, closed: 3, blockedBy: [148],
+          name: 'Can Attribution create overrides, or only Cast?',
+          question: 'Attribution already shows who speaks each line. Should an author be able to create a voice override from there, or only from Cast?',
+          resolution: 'Only Cast. Attribution stays read-only for voices, so checking who speaks a line never changes a casting decision by accident.',
+          gist: 'Only Cast' },
+        { n: 152, type: 'grilling', mode: 'HITL', x: 450, y: 480, created: 0, blockedBy: [148],
+          name: WS.CASTING_GRILL.name,
+          question: 'An override changes which voice speaks a character’s lines. When one is added or edited, what happens to chapters that were already rendered with the old voice?' },
+        { n: 153, type: 'prototype', mode: 'HITL', x: 680, y: 400, created: 2, blockedBy: [152], from: 'Something about what outlives a single change — previews, series.',
+          name: 'Preview an override before committing it',
+          question: 'Before an override is saved, how does the author hear what the change will sound like?' },
+        { n: 154, type: 'grilling', mode: 'HITL', x: 680, y: 570, created: 2, blockedBy: [152], from: 'Something about what outlives a single change — previews, series.',
+          name: 'Do overrides carry into the next book in a series?',
+          question: 'When books in a series share characters, does an override made in book two carry into book three, or does book three start from the original cast?' },
+      ],
+      fog: [
+        { x: 882, y: 120, text: 'Re-render cost once overrides exist — can’t phrase it until we know what re-renders.' },
+        { x: 882, y: 270, text: 'How overrides meet Attribution’s bracketed inferences, like [Eliot].' },
+        { x: 882, y: 420, text: 'Whether the retail sample follows the book’s cast or the chapter’s.' },
+        { x: 882, y: 570, text: 'Something about what outlives a single change — previews, series.', graduated: 2 },
+      ],
+      events: [
+        { when: '9 Sep', what: 'Charted. Destination named; five tickets on the map and four patches of fog.' },
+        { when: '10 Sep', what: '<b>What does a cast assignment belong to?</b> The book, with per-chapter overrides. <b>Clone a voice from the author’s own recording</b> was ruled out of scope.' },
+        { when: '14 Sep', what: 'Overrides show as a mark on the chapter sparkline. One patch of fog graduated into two tickets.' },
+        { when: '15 Sep · 08:26', what: 'Only Cast creates overrides. The answer surfaced a research question about ACX consistency.' },
+        { when: '15 Sep · 08:30', what: 'A research subagent claimed the consistency question. <b>What happens to chapters already rendered?</b> waits on you.' },
+      ],
+    },
+    acx: {
+      title: 'ACX compliance before delivery', issue: 112, charted: '3 Sep',
+      destination: WS.EFFORTS.acx.destination,
+      notes: 'Galley domain. Research tickets cite ACX’s published audio submission requirements. Every session consults /domain-modeling for “check” and “compliance”.',
+      dest: { x: 1080, y: 300 },
+      handoff: { name: 'Pre-delivery compliance checks', n: 124 },
+      nodes: [
+        { n: 113, type: 'research', mode: 'AFK', x: 220, y: 110, created: 0, claimed: 1, closed: 2, blockedBy: [],
+          name: 'What does ACX reject?',
+          question: 'What exactly does ACX check an audiobook’s audio for, and which of those checks lead to a rejection?',
+          resolution: 'Loudness outside −23 to −18 dB RMS, peaks above −3 dB, a noise floor above −60 dB, missing room tone at the head or tail, files over 120 minutes, and missing opening or closing credits.',
+          gist: 'Six rules, all measurable' },
+        { n: 114, type: 'research', mode: 'AFK', x: 220, y: 300, created: 0, claimed: 1, closed: 3, blockedBy: [],
+          name: 'Can loudness be measured in the browser, or only in the render worker?',
+          question: 'Can the loudness, peak and noise floor measurements run in the author’s browser, or do they need the render worker?',
+          resolution: 'The render worker. One FFmpeg pass with the astats filter reports RMS level, peak level and noise floor together.',
+          gist: 'The render worker, in one pass' },
+        { n: 117, type: 'grilling', mode: 'HITL', x: 220, y: 500, created: 0, closed: 6, blockedBy: [],
+          name: 'Does Galley fix problems, or only report them?',
+          question: 'When a chapter fails a check, does Galley try to fix the audio, or only tell the author what is wrong?',
+          resolution: 'Report only. Authors keep control of their audio; Galley says what ACX will reject and where.',
+          gist: 'Report only' },
+        { n: 115, type: 'task', mode: 'AFK', x: 450, y: 110, created: 0, claimed: 2, closed: 4, blockedBy: [113],
+          name: 'Build fixture chapters that each break one ACX rule',
+          question: 'The checks need audio that fails each rule on purpose. Build a fixture chapter for every rule, plus one that passes everything.',
+          resolution: 'Seven fixture chapters: six break one rule each, one passes everything. Stored with the render worker’s test fixtures.',
+          gist: 'Seven fixtures, one per rule plus a clean one' },
+        { n: 116, type: 'grilling', mode: 'HITL', x: 450, y: 265, created: 0, closed: 5, blockedBy: [113],
+          name: 'Which checks block delivery, and which only warn?',
+          question: 'Of the rules ACX enforces, which should stop an author exporting, and which should only warn?',
+          resolution: 'Every ACX audio rule blocks export. A missing retail sample only warns, because authors often choose it last.',
+          gist: 'Every audio rule blocks; the retail sample warns' },
+        { n: 121, type: 'grilling', mode: 'HITL', x: 450, y: 420, created: 3, closed: 7, blockedBy: [114], from: 'Something about re-checking after an author edits — hangs on where analysis can run.',
+          name: 'Where do checks run — on render or on demand?',
+          question: 'Do the checks run automatically as chapters render, or only when an author asks for them?',
+          resolution: 'On every render, cached per chapter against the audio’s hash. Only chapters whose audio changed are checked again.',
+          gist: 'On render, cached per chapter' },
+        { n: 118, type: 'task', mode: 'AFK', x: 450, y: 570, created: 0, out: 6, tx: 1088, ty: 560, blockedBy: [117],
+          name: 'Auto-master chapters that fail loudness',
+          question: 'When a chapter fails loudness, should Galley master it into range automatically?',
+          outReason: 'Galley reports and never alters audio, so mastering sits past this destination.' },
+        { n: 122, type: 'prototype', mode: 'HITL', x: 680, y: 265, created: 5, closed: 8, blockedBy: [116], from: 'How a failure explains itself to an author who doesn’t know audio terms.',
+          name: 'How should a failing chapter explain itself?',
+          question: 'When a chapter fails, what does the author see first, and how do they get to the problem?',
+          resolution: 'A plain-language reason, the measured value beside the limit, and a jump to the timestamp where it fails.',
+          gist: 'Reason, value against limit, timestamp' },
+      ],
+      fog: [
+        { x: 882, y: 265, text: 'How a failure explains itself to an author who doesn’t know audio terms.', graduated: 5 },
+        { x: 882, y: 420, text: 'Something about re-checking after an author edits — hangs on where analysis can run.', graduated: 3 },
+      ],
+      events: [
+        { when: '3 Sep', what: 'Charted. Destination named; six tickets on the map and two patches of fog.' },
+        { when: '3 Sep', what: 'Research subagents claimed <b>What does ACX reject?</b> and the browser-or-worker question.' },
+        { when: '4 Sep', what: '<b>What does ACX reject?</b> Six rules, all measurable. An agent claimed the fixture task.' },
+        { when: '4 Sep', what: 'The render worker, in one pass. Fog about re-checking graduated into <b>Where do checks run?</b>' },
+        { when: '5 Sep', what: 'Seven fixture chapters built: six break one rule each, one passes everything.' },
+        { when: '8 Sep', what: 'Every audio rule blocks; the retail sample only warns. Fog about explaining failures graduated into a prototype.' },
+        { when: '9 Sep', what: 'Report only. <b>Auto-master chapters that fail loudness</b> was ruled out of scope.' },
+        { when: '10 Sep', what: 'Checks run on every render, cached per chapter.' },
+        { when: '11 Sep', what: 'Reason, value against limit, timestamp. The way is clear.' },
+        { when: '12 Sep', what: 'Handed to /to-spec as <b>Pre-delivery compliance checks</b>.' },
+      ],
+    },
+    sample: {
+      title: 'Choosing the retail sample', issue: 160, charted: '10 Sep',
+      destination: WS.EFFORTS.sample.destination,
+      notes: 'Galley domain. Every session consults /domain-modeling for “retail sample” and “suggestion”. Builds on Pre-delivery compliance checks, already on the line.',
+      dest: { x: 1080, y: 300 },
+      nodes: [
+        { n: 161, type: 'research', mode: 'AFK', x: 220, y: 100, created: 0, claimed: 0, closed: 2, blockedBy: [], feeds: 'Testing decisions',
+          name: 'What does ACX require of a retail sample?',
+          question: 'What does ACX check a retail audio sample for, and what gets one rejected?',
+          resolution: 'One to five minutes long, with no explicit material, and it must open on narration rather than credits or music. Findings cite ACX’s published sample requirements.',
+          gist: 'One to five minutes, opening on narration' },
+        { n: 162, type: 'grilling', mode: 'HITL', x: 220, y: 260, created: 0, closed: 1, blockedBy: [], feeds: 'Solution',
+          name: 'Does Galley choose the sample, or does the author?',
+          question: 'Should Galley pick the retail sample for the author, or leave the choice with them?',
+          resolution: 'The author chooses. Galley suggests passages that already meet ACX’s rules and says why each one would work.',
+          gist: 'The author chooses; Galley suggests' },
+        { n: 163, type: 'research', mode: 'AFK', x: 220, y: 420, created: 0, claimed: 0, closed: 2, blockedBy: [], feeds: 'Implementation decisions',
+          name: 'Can a sample be cut from rendered chapters without a new render?',
+          question: 'Can the render worker cut a sample out of a chapter it has already rendered, or does a sample need its own render?',
+          resolution: 'It can be cut. The render worker trims rendered chapter audio at sentence boundaries and keeps room tone either side, so no voice is synthesised again.',
+          gist: 'Cut from rendered audio, no new render' },
+        { n: 167, type: 'prototype', mode: 'HITL', x: 220, y: 580, created: 0, out: 3, tx: 1088, ty: 560, blockedBy: [], feeds: 'Out of scope',
+          name: 'Generate a narrated trailer with music',
+          question: 'Could Galley build a short trailer with music under the narration, to use as the sample?',
+          outReason: 'A trailer is new audio, and a sample can’t open on music. This effort only chooses a passage the book already has.' },
+        { n: 164, type: 'grilling', mode: 'HITL', x: 450, y: 180, created: 0, closed: 4, blockedBy: [161, 162], feeds: 'User stories',
+          name: 'What makes a passage a good suggestion?',
+          question: 'Galley suggests passages. What should it look for when it picks them?',
+          resolution: 'A passage that opens at a scene break, runs three to four minutes, avoids anything the author marks as a spoiler, and meets ACX’s rules for samples.',
+          gist: 'Opens at a scene break, three to four minutes' },
+        { n: 165, type: 'prototype', mode: 'HITL', x: 680, y: 180, created: 4, closed: 5, blockedBy: [164], feeds: 'User stories', from: 'How a suggestion explains itself to an author choosing a sample for the first time.',
+          name: 'How does an author audition suggested passages?',
+          question: 'Where does an author hear the suggestions, and how do they choose one?',
+          resolution: 'A strip of three suggestions on the book’s Compliance page. Each plays in place and shows its chapter and length. The prototype is linked from the issue.',
+          gist: 'Three suggestions that play in place on Compliance' },
+        { n: 166, type: 'grilling', mode: 'HITL', x: 450, y: 420, created: 0, claimed: 6, withYou: true, blockedBy: [163], feeds: 'Implementation decisions',
+          name: WS.EFFORTS.sample.last.name,
+          question: 'An author picks a sample, then re-renders the chapter it came from. Does the sample change with the chapter, or stay as it was chosen?',
+          resolution: 'The sample stays as the author chose it. When its chapter is re-rendered, Galley marks the sample out of date and asks the author to listen again. It never re-cuts a sample on its own.',
+          gist: 'Stays as chosen; flagged when its chapter changes' },
+      ],
+      fog: [
+        { x: 882, y: 180, text: 'How a suggestion explains itself to an author choosing a sample for the first time.', graduated: 4 },
+        { x: 882, y: 420, text: 'Whether a changed sample needs its checks run again. Hangs on whether samples follow edits.' },
+      ],
+      events: [
+        { when: '10 Sep', what: 'Charted. Destination named; six tickets on the map and two patches of fog. Research subagents claimed both research questions.' },
+        { when: '10 Sep', what: '<b>Does Galley choose the sample, or does the author?</b> The author chooses; Galley suggests.' },
+        { when: '11 Sep', what: 'A sample runs one to five minutes and opens on narration. It can be cut from rendered audio without a new render.' },
+        { when: '11 Sep', what: '<b>Generate a narrated trailer with music</b> was ruled out of scope.' },
+        { when: '14 Sep', what: 'A good suggestion opens at a scene break. Fog about explaining suggestions graduated into a prototype.' },
+        { when: '14 Sep', what: 'Three suggestions that play in place on the Compliance page.' },
+        { when: '15 Sep · 09:32', what: 'You opened a grilling session on the last open ticket: <b>Does the sample follow later edits to its chapter?</b>' },
+      ],
+    },
+  };
+
+  const effortId = ['acx', 'sample'].indexOf(WS.param('effort')) !== -1 ? WS.param('effort') : 'casting';
+  const M = MAPS[effortId];
+  const SAMPLE = effortId === 'sample';
+  const LAST = SAMPLE ? M.nodes.find((nd) => nd.withYou) : null;
+
+  /* Replaying stored progress: the close and the handoff become events on the map. */
+  function closeSampleOnMap(resolution) {
+    M.events.push({ when: '15 Sep · now', what: 'The sample stays as chosen. The last patch of fog cleared without a new ticket. <b>The way is clear.</b>' });
+    LAST.closed = M.events.length - 1;
+    if (resolution) LAST.resolution = resolution;
+    M.fog[1].graduated = LAST.closed;
+  }
+  function handSampleOff() {
+    M.events.push({ when: '15 Sep · now', what: 'Handed to /to-spec as <b>' + WS.EFFORTS.sample.spec.name + '</b>. The map is closed.' });
+  }
+  if (SAMPLE && WS.has('sample', 'closed')) closeSampleOnMap(WS.got('sample', 'closed'));
+  if (SAMPLE && WS.has('sample', 'written')) handSampleOff();
+  let NOW = M.events.length - 1;
+  const byN = {};
+  M.nodes.forEach((nd) => { byN[nd.n] = nd; });
+  let step = NOW;
+  let selected = null;
+  let handoffIntro = false;
+
+  WS.renderTopbar({ page: 'wayfinder', effort: effortId });
+  WS.renderRoute({ page: 'wayfinder', effort: effortId });
+  document.title = M.title + ' · Wayfinder map · Waystation';
+  document.getElementById('map-kicker').textContent = '/wayfinder · map #' + M.issue + ' · charted ' + M.charted;
+  document.getElementById('map-title').textContent = M.title;
+
+  const TYPE = { research: 'Research', prototype: 'Prototype', grilling: 'Grilling', task: 'Task' };
+  const WORD = { closed: 'Decided', working: 'Claimed', ask: 'Waiting on you', take: 'Frontier · unclaimed', blocked: 'Blocked', out: 'Out of scope' };
+  const GLYPH = { closed: 'st-done', working: 'st-building', ask: 'st-ask', take: 'st-take', blocked: 'st-blocked', out: 'st-out', hidden: 'st-pending' };
+
+  function grilledNow(nd, s) { return (effortId === 'casting' && nd.n === 152 && s === NOW && WS.has('grilled', 152)) || (nd.withYou && nd.claimed <= s); }
+  function stateAt(nd, s) {
+    if (nd.created > s) return 'hidden';
+    if (nd.out != null && nd.out <= s) return 'out';
+    if (nd.closed != null && nd.closed <= s) return 'closed';
+    if ((nd.claimed != null && nd.claimed <= s) || grilledNow(nd, s)) return 'working';
+    const blocked = nd.blockedBy.some((b) => !(byN[b].closed != null && byN[b].closed <= s));
+    if (blocked) return 'blocked';
+    return nd.mode === 'HITL' ? 'ask' : 'take';
+  }
+
+  /* ─── build the stage once; later updates only touch classes ───── */
+  const stage = document.getElementById('stage');
+  const W = 1180, H = 700, START_X = 60;
+  const NS = 'http://www.w3.org/2000/svg';
+  const curve = (x1, y1, x2, y2) => { const dx = Math.max(36, (x2 - x1) * 0.55); return 'M' + x1 + ',' + y1 + ' C' + (x1 + dx) + ',' + y1 + ' ' + (x2 - dx) + ',' + y2 + ' ' + x2 + ',' + y2; };
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML =
+    '<defs>' +
+      '<pattern id="stipple" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="1.6" cy="1.6" r="0.95" style="fill: var(--muted)"/><circle cx="5.1" cy="5.1" r="0.7" style="fill: var(--muted)"/></pattern>' +
+      '<linearGradient id="fogFade" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="white" stop-opacity="0"/><stop offset=".22" stop-color="white" stop-opacity="1"/><stop offset=".8" stop-color="white" stop-opacity="1"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>' +
+      '<mask id="fogMask"><rect x="740" y="0" width="290" height="' + H + '" fill="url(#fogFade)"/></mask>' +
+    '</defs>' +
+    '<line x1="' + START_X + '" y1="64" x2="' + START_X + '" y2="' + (H - 40) + '" style="stroke: var(--fg)" stroke-width="1.5"/>' +
+    '<g id="edges"></g>' +
+    '<g class="fog-layer" id="fog-layer" mask="url(#fogMask)">' +
+      '<rect x="740" y="44" width="290" height="' + (H - 64) + '" style="fill: var(--bg)" opacity=".82"/>' +
+      '<rect class="fog-stipple" x="740" y="44" width="290" height="' + (H - 64) + '" fill="url(#stipple)"/>' +
+    '</g>';
+  stage.appendChild(svg);
+  const edgesG = svg.querySelector('#edges');
+  const fogLayer = svg.querySelector('#fog-layer');
+
+  // edges: blocker → ticket, start → unblocked ticket, ticket → destination
+  const edges = [];
+  function addEdge(kind, from, to, d) {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('class', 'edge hidden');
+    edgesG.appendChild(p);
+    edges.push({ kind: kind, from: from, to: to, el: p });
+  }
+  M.nodes.forEach((nd) => {
+    if (!nd.blockedBy.length) addEdge('start', null, nd.n, 'M' + START_X + ',' + nd.y + ' L' + (nd.x - 11) + ',' + nd.y);
+    nd.blockedBy.forEach((b) => { const s = byN[b]; addEdge('dep', b, nd.n, curve(s.x + 11, s.y, nd.x - 11, nd.y)); });
+    addEdge('dest', nd.n, null, curve(nd.x + 11, nd.y, M.dest.x - 15, M.dest.y));
+  });
+
+  // start line label, fog title, tray, destination
+  const add = (html) => { stage.insertAdjacentHTML('beforeend', html); return stage.lastElementChild; };
+  add('<div class="start-label"><span class="kicker">Charted</span><div class="meta num">' + M.charted + '</div></div>');
+  const fogTitle = add('<div class="fog-title kicker" style="left:885px">Not yet specified</div>');
+  add('<div class="tray-rule" style="top:478px"></div>');
+  add('<div class="tray-label kicker" style="top:470px">Beyond the destination</div>');
+  const patches = M.fog.map((f) => add('<div class="patch" style="left:' + f.x + 'px; top:' + f.y + 'px">' + esc(f.text) + '</div>'));
+  const dest = add('<div class="dest" style="left:' + M.dest.x + 'px; top:' + M.dest.y + 'px" data-od-id="destination"><span class="dest-mark" aria-hidden="true"></span><span class="kicker">Destination</span><span class="d-text">' + esc(M.destination) + '</span>' +
+    (M.handoff ? '<span class="d-clear">The way is clear. <a class="nm" href="spec-reader.html">Handed to /to-spec</a></span>' : SAMPLE ? '<span class="d-clear" id="d-clear"></span>' : '') + '</div>');
+
+  const nodeEls = {};
+  M.nodes.forEach((nd) => {
+    const b = add('<button type="button" class="node" data-n="' + nd.n + '" data-od-id="map-ticket-' + nd.n + '" aria-pressed="false" style="left:' + nd.x + 'px; top:' + nd.y + 'px">' +
+      '<span class="st" aria-hidden="true"></span>' +
+      '<span class="n-label"><span class="n-name">' + esc(nd.name) + '</span><span class="n-type">' + TYPE[nd.type] + ' · ' + nd.mode + '</span><span class="n-flag"></span></span></button>');
+    nodeEls[nd.n] = b;
+    b.addEventListener('click', () => select(selected === nd.n ? null : nd.n));
+  });
+
+  WS.fitCanvas(document.getElementById('viewport'), stage, W, H, 0.74);
+
+  /* ─── apply a step ─────────────────────────────────────────────── */
+  function apply(keepDrawer) {
+    const states = {};
+    M.nodes.forEach((nd) => { states[nd.n] = stateAt(nd, step); });
+
+    M.nodes.forEach((nd) => {
+      const el = nodeEls[nd.n], s = states[nd.n];
+      el.className = 'node s-' + s;
+      el.querySelector('.st').className = 'st ' + GLYPH[s];
+      const out = s === 'out';
+      el.style.left = (out ? nd.tx : nd.x) + 'px';
+      el.style.top = (out ? nd.ty : nd.y) + 'px';
+      el.tabIndex = s === 'hidden' ? -1 : 0;
+      el.setAttribute('aria-label', nd.name + '. ' + TYPE[nd.type] + ', ' + nd.mode + '. ' + (WORD[s] || 'Not yet on the map'));
+      const flag = el.querySelector('.n-flag');
+      flag.textContent = s === 'ask' ? 'Waiting on you' : s === 'working' ? (grilledNow(nd, step) ? 'Grilling with you' : nd.mode === 'AFK' ? 'Claimed by an agent' : 'Claimed') : '';
+      if (s === 'hidden' && selected === nd.n) selected = null;
+    });
+
+    const visible = (n) => states[n] !== 'hidden' && states[n] !== 'out';
+    const dependents = (n) => M.nodes.filter((o) => o.blockedBy.indexOf(n) !== -1 && visible(o.n));
+    const openLeft = M.nodes.some((nd) => visible(nd.n) && states[nd.n] !== 'closed');
+    const fogLeft = M.fog.some((f) => !(f.graduated != null && f.graduated <= step));
+    const clear = !openLeft && !fogLeft;
+
+    edges.forEach((e) => {
+      let cls = 'edge';
+      if (e.kind === 'start') {
+        cls += ' from-start' + (states[e.to] === 'closed' ? ' walked' : '') + (visible(e.to) ? '' : ' hidden');
+      } else if (e.kind === 'dep') {
+        const on = visible(e.to) && states[e.from] !== 'hidden' && states[e.from] !== 'out';
+        cls += (states[e.from] === 'closed' ? ' met' : ' open') + (on ? '' : ' hidden');
+      } else {
+        // a leaf has no dependents at all (out-of-scope ones still count), and
+        // closed leaves only reach the destination once the way is clear
+        const leaf = visible(e.from) && dependents(e.from).length === 0 &&
+          M.nodes.every((o) => o.blockedBy.indexOf(e.from) === -1 || states[o.n] === 'hidden') &&
+          (clear || states[e.from] !== 'closed');
+        cls += ' to-dest' + (clear ? ' clear' : '') + (leaf ? '' : ' hidden');
+      }
+      if (selected != null && (e.from === selected || e.to === selected) && cls.indexOf('hidden') === -1) cls += ' hot';
+      e.el.setAttribute('class', cls);
+    });
+
+    M.fog.forEach((f, i) => patches[i].classList.toggle('gone', f.graduated != null && f.graduated <= step));
+    fogLayer.style.opacity = clear ? 0 : 1;
+    if (step !== NOW) fogLayer.classList.remove('lift');
+    fogTitle.style.opacity = clear ? 0 : 1;
+    dest.classList.toggle('clear', clear && step === NOW);
+    if (SAMPLE) {
+      const written = WS.has('sample', 'written');
+      document.getElementById('d-clear').textContent = written ? 'The way is clear. Written up as ' + WS.EFFORTS.sample.spec.name + '.' : 'The way is clear. Next: /to-spec.';
+    }
+
+    Object.keys(nodeEls).forEach((n) => nodeEls[n].setAttribute('aria-pressed', String(Number(n) === selected)));
+
+    paintCaption();
+    if (!keepDrawer) renderDrawer(states);
+  }
+
+  function paintCaption() {
+    const ev = M.events[step];
+    document.getElementById('cap-when').textContent = (step === NOW ? 'Now · ' : 'Step ' + (step + 1) + ' of ' + M.events.length + ' · ') + ev.when;
+    document.getElementById('cap-what').innerHTML = ev.what;
+    document.getElementById('range').value = step;
+    document.getElementById('now').style.visibility = step === NOW ? 'hidden' : 'visible';
+  }
+
+  /* ─── drawer: the map body, or one ticket ──────────────────────── */
+  const drawer = document.getElementById('drawer');
+  const nameBtn = (n) => '<button type="button" class="link" data-go="' + n + '">' + esc(byN[n].name) + '</button>';
+
+  function renderDrawer(states) {
+    const past = step !== NOW;
+    const replay = past ? '<div class="notice replay-note" style="margin:16px 22px 0"><span class="st st-pending" aria-hidden="true"></span><span>Replaying ' + esc(M.events[step].when) + '. Return to now to act on the map.</span></div>' : '';
+    let html;
+    drawer.classList.toggle('handoff-in', !!handoffIntro);
+    if (selected == null && SAMPLE && !past && WS.sampleStage() !== 'last') {
+      html = handoffHtml(states);
+    } else if (selected == null) {
+      const decided = M.nodes.filter((nd) => states[nd.n] === 'closed').sort((a, b) => a.closed - b.closed);
+      const frontier = M.nodes.filter((nd) => ['ask', 'take', 'working'].indexOf(states[nd.n]) !== -1);
+      const fog = M.fog.filter((f) => !(f.graduated != null && f.graduated <= step));
+      const out = M.nodes.filter((nd) => states[nd.n] === 'out');
+      const lastCall = SAMPLE && !past && states[LAST.n] === 'working';
+      html = '<div class="d-head"><span class="kicker">Map #' + M.issue + ' · wayfinder:map</span><h2 tabindex="-1">' + esc(M.title) + '</h2></div>' + replay +
+        (lastCall ? '<div class="block last-call" data-od-id="last-call"><span class="kicker">One decision from a clear way</span><p class="prose">Everything else on this map is decided or ruled out, and the last patch of fog hangs on one ticket. Closing it clears the way.</p>' +
+          '<div class="decision" style="margin-top:6px">' + glyph('building') + '<div>' + nameBtn(LAST.n) + '<span class="gist">In session with you · Grilling, HITL</span></div></div></div>' : '') +
+        '<div class="block"><span class="kicker">Destination</span><p class="prose serif">' + esc(M.destination) + '</p></div>' +
+        (dest.classList.contains('clear') && M.handoff ? '<div class="block"><span class="kicker">Handed off</span><p class="prose">The way is clear. This map became <a class="nm" href="spec-reader.html">' + esc(M.handoff.name) + '</a><span class="id">#' + M.handoff.n + '</span>.</p></div>' : '') +
+        '<div class="block"><span class="kicker">Notes</span><p class="prose">' + esc(M.notes) + '</p></div>' +
+        '<div class="block"><span class="kicker">Decisions so far · ' + decided.length + '</span>' + (decided.length ? decided.map((nd) => '<div class="decision">' + glyph('landed') + '<div>' + nameBtn(nd.n) + '<span class="gist">' + esc(nd.gist) + '</span></div></div>').join('') : '<p class="meta">None yet.</p>') + '</div>' +
+        (frontier.length ? '<div class="block"><span class="kicker">On the frontier · ' + frontier.length + '</span>' + frontier.map((nd) => '<div class="decision"><span class="st ' + GLYPH[states[nd.n]] + '" aria-hidden="true"></span><div>' + nameBtn(nd.n) + '<span class="gist">' + WORD[states[nd.n]] + ' · ' + TYPE[nd.type] + ', ' + nd.mode + '</span></div></div>').join('') + '</div>' : '') +
+        '<div class="block"><span class="kicker">Not yet specified · ' + fog.length + '</span>' + (fog.length ? fog.map((f) => '<p class="fog-note">' + esc(f.text) + '</p>').join('') : '<p class="meta">No fog left between here and the destination.</p>') + '</div>' +
+        '<div class="block"><span class="kicker">Out of scope · ' + out.length + '</span>' + (out.length ? out.map((nd) => '<div class="decision">' + '<span class="st st-out" aria-hidden="true"></span><div>' + nameBtn(nd.n) + '<span class="gist">' + esc(nd.outReason) + '</span></div></div>').join('') : '<p class="meta">Nothing ruled out yet.</p>') + '</div>';
+    } else {
+      const nd = byN[selected], s = states[selected];
+      const blocks = M.nodes.filter((o) => o.blockedBy.indexOf(nd.n) !== -1 && states[o.n] !== 'hidden');
+      const closedWhen = nd.closed != null ? M.events[nd.closed].when : '';
+      html = '<div class="d-head"><button type="button" class="btn btn-ghost btn-sm" data-back style="margin-left:-10px">← Map</button>' +
+        '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px"><span class="chip">' + TYPE[nd.type] + '</span><span class="chip">' + nd.mode + '</span><span class="chip">Issue #' + nd.n + '</span></div>' +
+        '<h2 tabindex="-1">' + esc(nd.name) + '</h2>' +
+        '<div class="d-state"><span class="st ' + GLYPH[s] + '" aria-hidden="true"></span><span>' + (s === 'working' && nd.withYou ? 'Claimed by you · in session since 09:32' : WORD[s]) + (s === 'closed' ? ' · ' + esc(closedWhen) : '') + '</span></div></div>' + replay +
+        '<div class="block"><span class="kicker">Question</span><p class="prose">' + esc(nd.question) + '</p></div>' +
+        (s === 'closed' ? '<div class="block"><span class="kicker">Resolution comment</span><p class="prose serif">' + esc(nd.resolution) + '</p></div>' : '') +
+        (s === 'out' ? '<div class="block"><span class="kicker">Why it is out of scope</span><p class="prose">' + esc(nd.outReason) + '</p></div>' : '') +
+        (s === 'working' && nd.claim ? '<div class="block"><span class="kicker">Claim</span><p class="prose">' + esc(nd.claim) + '</p></div>' : '') +
+        (nd.from ? '<div class="block"><span class="kicker">Graduated from fog</span><p class="fog-note">' + esc(nd.from) + '</p></div>' : '') +
+        '<div class="block"><span class="kicker">Blocked by</span>' + (nd.blockedBy.length ? '<ul class="edge-list">' + nd.blockedBy.map((b) => '<li><span class="st ' + GLYPH[states[b]] + '" aria-hidden="true"></span>' + nameBtn(b) + '</li>').join('') + '</ul>' : '<p class="meta">Nothing. Unblocked from the start.</p>') +
+        (blocks.length ? '<span class="kicker" style="display:block; margin:16px 0 10px">Blocks</span><ul class="edge-list">' + blocks.map((o) => '<li><span class="st ' + GLYPH[states[o.n]] + '" aria-hidden="true"></span>' + nameBtn(o.n) + '</li>').join('') + '</ul>' : '') + '</div>' +
+        actionsFor(nd, s, past);
+    }
+    drawer.innerHTML = html;
+    handoffIntro = false;
+    drawer.querySelectorAll('.edge-list button.link, .decision button.link, .feeds button.link, .last-call button.link').forEach((b) => b.addEventListener('click', () => { select(Number(b.dataset.go)); nodeEls[b.dataset.go].focus(); }));
+    const back = drawer.querySelector('[data-back]');
+    if (back) back.addEventListener('click', () => { const was = selected; select(null); if (nodeEls[was]) nodeEls[was].focus(); });
+    bindSession();
+    if (SAMPLE) bindSample();
+  }
+
+  function actionsFor(nd, s, past) {
+    if (past || s === 'closed' || s === 'out' || s === 'hidden') return '';
+    if (s === 'blocked') {
+      const open = nd.blockedBy.filter((b) => !(byN[b].closed != null && byN[b].closed <= step));
+      return '<div class="block"><p class="meta">Reaches the frontier once ' + open.map((b) => '“' + esc(byN[b].name) + '”').join(' and ') + ' closes.</p></div>';
+    }
+    if (s === 'working' && nd.mode === 'AFK') return '<div class="block"><p class="meta">Started ' + esc(M.events[nd.claimed].when) + '. You’ll see the resolution here and in the chronicle when the subagent closes the ticket.</p></div>';
+    if (effortId === 'casting' && nd.n === 152) {
+      const started = WS.has('grilled', 152);
+      return '<div class="block" data-od-id="grilling-session"><span class="kicker">Human in the loop</span>' +
+        '<div class="d-actions"><p class="prose">This ticket only resolves in a live exchange with you. The session runs /grilling and /domain-modeling, as the map’s notes ask.</p>' +
+        '<div><button type="button" class="btn ' + (started ? 'btn-secondary' : 'btn-primary') + '" id="start-grill" data-od-id="start-grilling"' + (started ? ' aria-disabled="true"' : '') + '>' + (started ? 'Session in progress' : 'Start grilling session') + '</button></div></div>' +
+        '<div class="session" id="session"' + (started ? '' : ' hidden') + '>' + sessionHtml() + '</div></div>';
+    }
+    if (nd.withYou && s === 'working') return lastTicketHtml(nd);
+    const verb = nd.type === 'prototype' ? 'prototype' : 'grilling';
+    return '<div class="block"><p class="meta">HITL · ' + verb + ' session with you. Opens when its blocker closes.</p></div>';
+  }
+
+  /* ─── the last ticket: a session already under way with you ────── */
+  const msg = (who, by, text) => '<div class="msg' + (who === 'You' ? ' you' : '') + '"><span class="who">' + who + '</span><div class="body"><span class="by">' + by + '</span>' + esc(text) + '</div></div>';
+
+  function lastTicketHtml(nd) {
+    return '<div class="block" data-od-id="last-ticket-session"><span class="kicker">Grilling session · with you</span><div class="convo">' +
+        msg('AI', '/grilling · 09:32', 'An author picks a sample from chapter 3, then re-renders chapter 3 with a different voice for Eliot. What should happen to the sample?') +
+        msg('You', 'You · 09:36', 'It shouldn’t change quietly. They picked that passage because of how it sounded.') +
+        msg('AI', '/grilling · /domain-modeling · 09:37', 'So a sample is a chosen cut, not a live window onto its chapter. When the chapter changes, should Galley only flag the sample, or offer to re-cut it?') +
+        msg('You', 'You · 09:41', 'Flag it and ask them to listen again. Never re-cut it on its own.') +
+        msg('AI', '/grilling · 09:42', 'That’s sharp enough to close. A sample never changes by itself, so the fog about re-running its checks has nothing left to decide.') +
+      '</div></div>' +
+      '<div class="block" data-od-id="resolution-comment"><span class="kicker">Resolution comment</span>' +
+        '<label class="field-label" for="resolution">Drafted from your answers. Edit it before it posts to the ticket.</label>' +
+        '<textarea class="textarea res-ta" id="resolution">' + esc(nd.resolution) + '</textarea>' +
+        '<span class="kicker" style="display:block; margin-top:16px">Closing this ticket</span>' +
+        '<ul class="effects">' +
+          '<li>' + glyph('landed') + '<span>Posts the resolution and adds it to Decisions so far</span></li>' +
+          '<li><i class="fog-key" aria-hidden="true"></i><span>Clears the last patch of fog without a new ticket: <em>' + esc(M.fog[1].text) + '</em></span></li>' +
+          '<li><i class="mini-dest" aria-hidden="true"></i><span>Leaves nothing open between here and the destination</span></li>' +
+        '</ul>' +
+        '<div class="res-act"><button type="button" class="btn btn-primary" id="close-last" data-od-id="close-last-ticket">Post resolution and close</button><span class="meta" id="close-hint" aria-live="polite"></span></div>' +
+      '</div>';
+  }
+
+  /* ─── handoff: the way is clear, so the course continues at /to-spec ── */
+  const SECTIONS = [['Problem statement', ''], ['Solution', ''], ['User stories', '12'], ['Implementation decisions', '4'], ['Testing decisions', '3'], ['Out of scope', '1'], ['Further notes', '']];
+  const SEAMS = {
+    existing: { title: 'Use the compliance read model', sub: 'Existing seam, which /to-spec prefers. One seam across Compliance, My Books and the sample.', agreed: 'Tests go through the compliance read model.' },
+    own: { title: 'Give samples their own seam', sub: 'A sample read model beside compliance. Two seams to test through.', agreed: 'Samples get their own read model to test through.' },
+  };
+
+  function handoffHtml(states) {
+    const stage = WS.sampleStage();
+    const seam = WS.got('sample', 'seam');
+    const writtenYet = stage === 'written' || stage === 'slicing';
+    const decided = M.nodes.filter((nd) => states[nd.n] === 'closed').sort((a, b) => a.closed - b.closed);
+    const out = M.nodes.filter((nd) => states[nd.n] === 'out');
+    const r = (d) => ' reveal" style="--d:' + d + 'ms';
+
+    const seamBlock = writtenYet ?
+      '<div class="t-meta">Agreed with you. ' + SEAMS[seam || 'existing'].agreed + '</div>' :
+      '<div class="seam" data-od-id="seam-proposal"><p class="by">/to-spec · proposed seam</p>' +
+        '<p class="seam-text">Test through the compliance read model that Pre-delivery compliance checks already built. Suggestions and the out-of-date flag both read it.</p>' +
+        '<div role="radiogroup" aria-label="Seam for the spec">' + Object.keys(SEAMS).map((k) =>
+          '<button type="button" class="choice" role="radio" aria-checked="' + (k === 'existing') + '" data-seam="' + k + '"><span class="radio"></span><span><span class="c-title">' + SEAMS[k].title + '</span><span class="c-sub" style="display:block">' + SEAMS[k].sub + '</span></span></button>').join('') + '</div>' +
+        '<label class="field-label" for="seam-note" style="margin-top:10px">Anything the spec should know</label>' +
+        '<textarea class="textarea" id="seam-note" style="min-height:64px" placeholder="Optional. /to-spec reads this before it writes."></textarea>' +
+        '<div class="act"><button type="button" class="btn btn-primary" id="agree-seam" data-od-id="agree-seam">Agree seam and write the spec</button></div></div>';
+
+    return '<div class="d-head' + r(900) + '"><span class="kicker">Map #' + M.issue + (writtenYet ? ' · closed' : ' · wayfinder:map') + '</span>' +
+        '<h2 tabindex="-1" id="handoff-title">The way is clear</h2>' +
+        '<p class="clear-lead">Every ticket on ' + esc(M.title) + ' is decided or ruled out, and no fog is left. The destination is a spec, so the course continues at /to-spec.</p></div>' +
+      '<div class="block' + r(1250) + '" data-od-id="handoff-to-spec"><span class="kicker">Hand off to /to-spec</span>' +
+        '<ol class="thread hand">' +
+          '<li><span class="t-mark">' + glyph('landed') + '</span><div><span class="t-skill">Read</span><div class="t-name">Read the map and its decisions</div><div class="t-meta">' + decided.length + ' decisions, ' + out.length + ' ruled out, and CONTEXT.md. /to-spec writes from what’s decided and doesn’t interview you.</div></div></li>' +
+          '<li id="step-seam"' + (writtenYet ? '' : ' class="next-pending"') + '><span class="t-mark" id="seam-mark">' + glyph(writtenYet ? 'landed' : 'asking') + '</span><div><span class="t-skill">With you</span><div class="t-name">Agree the seam</div>' + seamBlock + '</div></li>' +
+          '<li id="step-write"' + (writtenYet ? '' : ' class="pending"') + '><span class="t-mark" id="write-mark">' + (writtenYet ? glyph('landed') : '<span class="st st-pending" aria-hidden="true"></span>') + '</span><div><span class="t-skill">Publish</span><div class="t-name">Write and publish the spec</div>' +
+            '<div class="t-meta" id="write-meta">' + (writtenYet ? publishedText() : 'Problem, solution, user stories, implementation and testing decisions, and out of scope, labelled ready-for-agent.') + '</div><ol class="writing" id="writing"></ol></div></li>' +
+        '</ol>' +
+        '<div id="spec-slot">' + (writtenYet ? specCardHtml() : '') + '</div>' +
+      '</div>' +
+      '<div class="block' + r(1500) + '"><span class="kicker">Destination</span><p class="prose serif">' + esc(M.destination) + '</p></div>' +
+      '<div class="block' + r(1650) + '" data-od-id="spec-sources"><span class="kicker">Written from these decisions · ' + (decided.length + out.length) + '</span>' +
+        decided.concat(out).map((nd) => '<div class="feeds"><span class="st ' + (states[nd.n] === 'out' ? 'st-out' : 'st-done') + '" aria-hidden="true"></span><div><button type="button" class="link" data-go="' + nd.n + '">' + esc(nd.name) + '</button><span class="to">→ ' + nd.feeds + '</span></div></div>').join('') +
+      '</div>';
+  }
+
+  function publishedText() {
+    const spec = WS.EFFORTS.sample.spec;
+    return 'Published as ' + esc(spec.name) + ' <span class="id">#' + spec.n + '</span>, labelled ready-for-agent. The map is closed with a pointer to it.';
+  }
+
+  function specCardHtml() {
+    const spec = WS.EFFORTS.sample.spec;
+    const slicing = WS.sampleStage() === 'slicing';
+    return '<div class="spec-card" data-od-id="spec-168" style="margin-top:4px"><span class="kicker">/to-spec · issue #' + spec.n + ' · ready-for-agent</span>' +
+        '<h3>' + esc(spec.name) + '</h3>' +
+        '<p class="prose">Authors reach the retail sample last and pick one by scrubbing through chapters. Galley suggests passages that already meet ACX’s rules, and keeps a chosen sample steady when chapters change.</p>' +
+        '<div class="counts"><span>12 user stories</span><span>4 implementation decisions</span><span>3 testing decisions</span></div></div>' +
+      '<div class="slice-act"><button type="button" class="btn ' + (slicing ? 'btn-secondary' : 'btn-primary') + '" id="slice"' + (slicing ? ' aria-disabled="true"' : '') + ' data-od-id="slice-into-tickets">' + (slicing ? 'Slicing into tickets' : 'Slice into tickets') + '</button>' +
+        '<span class="meta" id="slice-hint">' + (slicing ? '/to-tickets is drafting. You check the tickets before they publish.' : 'Runs /to-tickets. You check the drafts before they publish.') + '</span></div>';
+  }
+
+  function refreshShell() {
+    WS.renderTopbar({ page: 'wayfinder', effort: effortId });
+    WS.renderRoute({ page: 'wayfinder', effort: effortId });
+  }
+
+  function bindSample() {
+    const close = document.getElementById('close-last');
+    if (close) close.addEventListener('click', () => {
+      const text = document.getElementById('resolution').value.trim();
+      if (!text) { const h = document.getElementById('close-hint'); h.textContent = 'The resolution can’t be empty.'; h.style.color = 'var(--fg)'; return; }
+      clearTheWay(text);
+    });
+
+    const choices = drawer.querySelectorAll('.seam .choice');
+    choices.forEach((ch) => ch.addEventListener('click', () => {
+      if (ch.getAttribute('tabindex') === '-1') return;
+      choices.forEach((o) => o.setAttribute('aria-checked', String(o === ch)));
+    }));
+    const agree = document.getElementById('agree-seam');
+    if (agree) agree.addEventListener('click', () => {
+      if (agree.getAttribute('aria-disabled') === 'true') return;
+      const picked = drawer.querySelector('.seam .choice[aria-checked="true"]').dataset.seam;
+      WS.mark('sample', 'seam', picked);
+      agree.setAttribute('aria-disabled', 'true');
+      agree.classList.replace('btn-primary', 'btn-secondary');
+      agree.textContent = 'Seam agreed';
+      choices.forEach((o) => o.setAttribute('tabindex', '-1'));
+      document.getElementById('seam-note').readOnly = true;
+      document.getElementById('seam-mark').innerHTML = glyph('landed');
+      document.getElementById('step-seam').classList.remove('next-pending');
+      writeSpec();
+    });
+    bindSlice();
+  }
+
+  function bindSlice() {
+    const slice = document.getElementById('slice');
+    if (slice) slice.addEventListener('click', () => {
+      if (slice.getAttribute('aria-disabled') === 'true') return;
+      WS.mark('sample', 'sliced');
+      slice.setAttribute('aria-disabled', 'true');
+      slice.classList.replace('btn-primary', 'btn-secondary');
+      slice.textContent = 'Slicing into tickets';
+      document.getElementById('slice-hint').textContent = '/to-tickets is drafting. You check the tickets before they publish.';
+      refreshShell();
+    });
+  }
+
+  /* /to-spec writes section by section, then publishes and closes the map. */
+  function writeSpec() {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // state moves at once, so a reload or another screen mid-write reads the result
+    WS.mark('sample', 'written');
+    handSampleOff();
+    const list = document.getElementById('writing');
+    document.getElementById('step-write').classList.remove('pending');
+    document.getElementById('write-mark').innerHTML = glyph('building');
+    document.getElementById('write-meta').textContent = '/to-spec is writing from the map.';
+    list.innerHTML = SECTIONS.map((s) => '<li class="waiting"><span class="st st-pending" aria-hidden="true"></span>' + s[0] + '<span class="ct">' + s[1] + '</span></li>').join('');
+    const gap = reduced ? 0 : 320;
+    list.querySelectorAll('li').forEach((row, i) => setTimeout(() => {
+      row.classList.remove('waiting');
+      row.querySelector('.st').className = 'st st-done';
+    }, gap * (i + 1)));
+    setTimeout(() => {
+      NOW = M.events.length - 1;
+      buildTicks();
+      refreshShell();
+      if (!document.contains(list)) { step = NOW; apply(); return; }  // the panel moved on mid-write
+      step = NOW;
+      apply(true);
+      list.innerHTML = '';
+      document.getElementById('write-mark').innerHTML = glyph('landed');
+      document.getElementById('write-meta').innerHTML = publishedText();
+      document.getElementById('spec-slot').innerHTML = specCardHtml();
+      bindSlice();
+      WS.drawTrack('spec', 150);
+    }, gap * (SECTIONS.length + 1) + (reduced ? 0 : 250));
+  }
+
+  /* The last close: the resolution posts, the fog lifts, the course reaches the destination. */
+  function clearTheWay(text) {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    WS.mark('sample', 'closed', text);
+    closeSampleOnMap(text);
+    NOW = M.events.length - 1;
+    step = NOW;
+    buildTicks();
+    selected = null;
+    history.replaceState(null, '', location.pathname + location.search);
+    if (!reduced) {
+      fogLayer.classList.add('lift');
+      dest.classList.remove('arrive'); void dest.offsetWidth; dest.classList.add('arrive');
+      handoffIntro = true;
+    }
+    apply();
+    if (!reduced) {
+      nodeEls[LAST.n].classList.add('settle');
+      drawCourse();
+    }
+    refreshShell();
+    WS.drawTrack('wayfinder', reduced ? 0 : 1900);
+    document.getElementById('handoff-title').focus();
+  }
+
+  function drawCourse() {
+    let k = 0;
+    edges.forEach((e) => {
+      if (e.kind !== 'dest' || e.el.getAttribute('class').indexOf('hidden') !== -1) return;
+      const el = e.el, len = el.getTotalLength(), delay = 900 + k * 260;
+      el.style.transition = 'none';
+      el.style.strokeDasharray = len;
+      el.style.strokeDashoffset = len;
+      el.getBoundingClientRect();
+      el.style.transition = 'stroke-dashoffset 1.3s cubic-bezier(.3,.7,.2,1) ' + delay + 'ms';
+      el.style.strokeDashoffset = '0';
+      setTimeout(() => { el.style.transition = ''; el.style.strokeDasharray = ''; el.style.strokeDashoffset = ''; }, delay + 1400);
+      k++;
+    });
+  }
+
+  function sessionHtml() {
+    return '<div class="convo" id="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling · claimed by you</span>' + esc(WS.CASTING_GRILL.opener) + '</div></div></div>' +
+      '<label class="field-label" for="grill-reply" style="margin-top:16px">Your answer</label>' +
+      '<textarea class="textarea" id="grill-reply" placeholder="Answer in your own words. The agent keeps asking until the decision is sharp."></textarea>' +
+      '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-od-id="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to issue #152 when you close the session.</span></div>';
+  }
+
+  function bindSession() {
+    const start = document.getElementById('start-grill');
+    if (start) start.addEventListener('click', () => {
+      if (start.getAttribute('aria-disabled') === 'true') return;
+      WS.mark('grilled', 152);
+      start.setAttribute('aria-disabled', 'true');
+      start.classList.remove('btn-primary'); start.classList.add('btn-secondary');
+      start.textContent = 'Session in progress';
+      document.getElementById('session').hidden = false;
+      refreshNodesOnly();
+      WS.renderTopbar({ page: 'wayfinder', effort: effortId });
+    });
+    const send = document.getElementById('grill-send');
+    if (send) send.addEventListener('click', () => {
+      const ta = document.getElementById('grill-reply');
+      const text = ta.value.trim();
+      const hint = document.getElementById('grill-hint');
+      if (!text) { hint.textContent = 'Write an answer first.'; hint.style.color = 'var(--fg)'; return; }
+      const convo = document.getElementById('convo');
+      convo.insertAdjacentHTML('beforeend', '<div class="msg you"><span class="who">You</span><div class="body"><span class="by">You · now</span>' + esc(text) + '</div></div>' +
+        '<div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling</span>' + esc(WS.CASTING_GRILL.followUp) + '</div></div>');
+      ta.value = '';
+      hint.textContent = 'Keep going, or close the session in Claude Code to post the resolution.';
+    });
+  }
+
+  function refreshNodesOnly() {
+    M.nodes.forEach((nd) => {
+      const s = stateAt(nd, step), el = nodeEls[nd.n];
+      el.className = 'node s-' + s;
+      el.querySelector('.st').className = 'st ' + GLYPH[s];
+      el.querySelector('.n-flag').textContent = s === 'ask' ? 'Waiting on you' : s === 'working' ? (grilledNow(nd, step) ? 'Grilling with you' : 'Claimed by an agent') : '';
+    });
+  }
+
+  function select(n) {
+    selected = n;
+    if (n != null) history.replaceState(null, '', location.pathname + location.search + '#' + n);
+    else history.replaceState(null, '', location.pathname + location.search);
+    apply();
+  }
+
+  /* ─── scrubber ─────────────────────────────────────────────────── */
+  const range = document.getElementById('range');
+  range.addEventListener('input', () => { stop(); step = Number(range.value); apply(); });
+  const ticks = document.getElementById('ticks');
+  function buildTicks() {
+    range.max = NOW;
+    let lastDay = '', html = '';
+    M.events.forEach((ev, i) => {
+      const day = ev.when.split(' · ')[0];
+      const label = i === NOW ? 'Now' : day !== lastDay ? day : '';
+      lastDay = day;
+      html += '<span class="tick" style="left:' + (i / NOW * 100) + '%"><i></i>' + (label ? '<span>' + label + '</span>' : '') + '</span>';
+    });
+    ticks.innerHTML = html;
+  }
+  buildTicks();
+
+  const play = document.getElementById('play');
+  const ICON_PLAY = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9l7.5-4.5z" style="fill: var(--fg)"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.5h2.5v9H2.5zM7 1.5h2.5v9H7z" style="fill: var(--fg)"/></svg>';
+  let timer = null, intro = false;
+  function stop() { intro = false; if (timer) { clearInterval(timer); timer = null; } play.innerHTML = ICON_PLAY; play.setAttribute('aria-label', 'Replay the map from the start'); }
+  function startPlay(ms) {
+    play.innerHTML = ICON_PAUSE; play.setAttribute('aria-label', 'Pause the replay');
+    timer = setInterval(() => {
+      if (step >= NOW) { stop(); return; }
+      step++; apply();
+    }, ms);
+  }
+  play.innerHTML = ICON_PLAY;
+  play.addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    if (step === NOW) { step = 0; apply(); }
+    startPlay(1700);
+  });
+  document.getElementById('now').addEventListener('click', () => { stop(); step = NOW; apply(); range.focus(); });
+
+  // The first visit in a session tells the map's story once, quickly.
+  // Touching anything outside the replay bar skips straight to now.
+  const skipIntro = (e) => {
+    if (!intro || e.target.closest('.scrub')) return;
+    stop(); step = NOW; apply();
+  };
+  document.addEventListener('pointerdown', skipIntro, true);
+  document.addEventListener('keydown', skipIntro, true);
+
+  const hashN = Number(location.hash.slice(1));
+  if (byN[hashN]) selected = hashN;
+  const introKey = 'waystation.intro.' + effortId;
+  let seen = true;
+  try { seen = !!sessionStorage.getItem(introKey); sessionStorage.setItem(introKey, '1'); } catch (e) { /* storage blocked */ }
+  if (!seen && selected == null && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    step = 0;
+    apply();
+    intro = true;
+    startPlay(1100);
+  } else {
+    apply();
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pre-delivery compliance checks · Spec · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .spec-split { grid-template-columns: 250px minmax(0, 1fr); }
+    .toc { padding: 24px 18px 24px 24px; }
+    .toc .kicker { display: block; margin-bottom: 10px; }
+    .toc ol { margin-bottom: 28px; }
+    .toc a { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; margin-left: -10px; border-radius: var(--r); text-decoration: none; font-size: 13.5px; color: var(--fg); }
+    .toc a:hover { background: var(--hover); }
+    .toc a[aria-current="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); font-weight: 500; }
+    .toc a .num { color: var(--muted); font-size: 12px; }
+    .toc .seam { font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+
+    .doc { padding: 40px 48px 120px; }
+    .doc-inner { max-width: 1010px; margin: 0 auto; }
+    .r { display: grid; grid-template-columns: minmax(0, 650px) 290px; column-gap: 56px; }
+    .r > .trace { font-size: 13px; }
+
+    .doc-head { padding-bottom: 30px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; align-items: end; }
+    .doc-head h1 { font-size: clamp(34px, 3.4vw, 46px); line-height: 1.06; margin: 12px 0 14px; }
+    .doc-head .byline { font-size: 14px; color: var(--ink-2); }
+    .coverage .figure { font-family: var(--font-display); font-size: 30px; line-height: 1; margin: 8px 0 10px; }
+    .coverage .figure small { font-size: 15px; color: var(--muted); font-family: var(--font-body); margin-left: 4px; }
+    .bar { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; margin-bottom: 10px; }
+    .bar i { height: 14px; border: 1px solid var(--fg); display: block; }
+    .bar i.delivered { background: var(--fg); }
+    .bar i.flight { background: linear-gradient(0deg, var(--fg) 50%, transparent 50%); }
+    .bar i.waiting { background: transparent; }
+    .bar i.none { border: 1px dashed var(--muted); }
+    .bar-key { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+    .bar-key span { display: inline-flex; align-items: center; gap: 7px; }
+    .bar-key i { width: 10px; height: 10px; display: inline-block; border: 1px solid var(--fg); }
+
+    .sec { padding-top: 40px; scroll-margin-top: 16px; }
+    .sec-head { align-items: baseline; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+    .sec-head h2 { font-size: 26px; }
+    .prose { font-size: 16px; line-height: 1.7; color: var(--fg); }
+    .prose + .prose { margin-top: 14px; }
+
+    .items > li { padding: 12px 0; border-bottom: 1px solid var(--border); transition: background-color .15s ease; }
+    .items > li:hover, .items > li.linked { background: var(--wash); box-shadow: -12px 0 0 var(--wash), 12px 0 0 var(--wash); }
+    .items > li.linked { box-shadow: -12px 0 0 var(--wash), 12px 0 0 var(--wash), -14px 0 0 var(--fg); }
+    .items .text { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; font-size: 15.5px; line-height: 1.6; }
+    .items .text .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 4px; }
+    .items .trace { padding-top: 3px; }
+    .tr-line { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 9px; align-items: start; padding: 2px 0; }
+    .tr-line .st { margin-top: 3px; }
+    .tr-line .word { display: block; font-size: 12px; color: var(--muted); }
+    .tr-line .gap { color: var(--fg); font-weight: 500; }
+
+    .draft { margin-top: 22px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); padding: 20px 22px; }
+    .draft h3 { font-size: 20px; margin: 4px 0 4px; }
+    .draft-ticket { padding: 14px 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; }
+    .draft-ticket .t-title { font-family: var(--font-display); font-size: 17px; }
+    .draft-ticket .t-meta { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+    .draft-actions { display: flex; gap: 10px; align-items: center; padding-top: 14px; border-top: 1px solid var(--border); }
+
+    @media (max-width: 1180px) {
+      .r { grid-template-columns: minmax(0, 1fr) 250px; column-gap: 32px; }
+      .doc { padding: 32px 28px 100px; }
+    }
+    @media (max-width: 920px) {
+      .toc { display: none; }
+      .r { grid-template-columns: 1fr; }
+      .r > .trace { margin-top: 8px; padding-left: 36px; }
+      .doc-head .coverage { margin-top: 24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+
+  <main class="split spec-split" id="content">
+    <aside class="pane side-l toc" data-od-id="spec-outline">
+      <span class="kicker">Spec #124</span>
+      <ol id="toc">
+        <li><a href="#problem" data-sec="problem">Problem statement</a></li>
+        <li><a href="#solution" data-sec="solution">Solution</a></li>
+        <li><a href="#stories" data-sec="stories">User stories <span class="num">16</span></a></li>
+        <li><a href="#implementation" data-sec="implementation">Implementation decisions <span class="num">6</span></a></li>
+        <li><a href="#testing" data-sec="testing">Testing decisions <span class="num">3</span></a></li>
+        <li><a href="#out" data-sec="out">Out of scope <span class="num">3</span></a></li>
+        <li><a href="#notes" data-sec="notes">Further notes</a></li>
+      </ol>
+      <span class="kicker">Seam agreed with you</span>
+      <p class="seam">One seam: the compliance read model. The Compliance page, My Books, and the export gate all read it, and every test goes through it.</p>
+    </aside>
+
+    <div class="pane doc" id="doc">
+      <article class="doc-inner" data-od-id="spec-document">
+        <header class="r doc-head" data-od-id="spec-header">
+          <div>
+            <span class="kicker">/to-spec · issue #124 · ready-for-agent</span>
+            <h1>Pre-delivery compliance checks</h1>
+            <p class="byline">Written from the map <a class="nm" href="wayfinder-map.html?effort=acx">ACX compliance before delivery</a> and its seven decisions. Published 12 Sep; sliced into nine tickets on 14 Sep.</p>
+          </div>
+          <div class="coverage" data-od-id="story-coverage">
+            <span class="kicker">Story coverage</span>
+            <div class="figure" id="cov-figure"></div>
+            <div class="bar" id="cov-bar" aria-hidden="true"></div>
+            <div class="bar-key" id="cov-key"></div>
+          </div>
+        </header>
+
+        <section class="sec" id="problem" data-od-id="spec-problem">
+          <div class="r sec-head"><h2>Problem statement</h2></div>
+          <div class="r"><div>
+            <p class="prose">Authors finish a Galley audiobook, upload it to ACX, and wait days to learn a chapter was rejected for loudness, peaks, or missing room tone. Every rejection means another render, another upload, and another wait in the review queue.</p>
+            <p class="prose">Galley already has the audio. It should say what ACX will reject before the author submits.</p>
+          </div></div>
+        </section>
+
+        <section class="sec" id="solution" data-od-id="spec-solution">
+          <div class="r sec-head"><h2>Solution</h2></div>
+          <div class="r"><div>
+            <p class="prose">Galley checks every rendered chapter against ACX’s audio submission requirements as part of rendering. The Compliance page lists each check per chapter in plain language, with the measured value beside the limit and a jump to the moment that fails.</p>
+            <p class="prose">ACX export stays locked until every blocking check passes.</p>
+          </div></div>
+        </section>
+
+        <section class="sec" id="stories" data-od-id="spec-stories">
+          <div class="r sec-head"><h2>User stories</h2><span class="kicker">Delivered by</span></div>
+          <ol class="items" id="story-list"></ol>
+          <div class="r"><div id="draft-slot"></div></div>
+        </section>
+
+        <section class="sec" id="implementation" data-od-id="spec-implementation">
+          <div class="r sec-head"><h2>Implementation decisions</h2><span class="kicker">Decided on the map</span></div>
+          <ol class="items" id="impl-list"></ol>
+        </section>
+
+        <section class="sec" id="testing" data-od-id="spec-testing">
+          <div class="r sec-head"><h2>Testing decisions</h2><span class="kicker">Came from</span></div>
+          <ol class="items" id="test-list"></ol>
+        </section>
+
+        <section class="sec" id="out" data-od-id="spec-out-of-scope">
+          <div class="r sec-head"><h2>Out of scope</h2><span class="kicker">Ruled out</span></div>
+          <ol class="items" id="out-list"></ol>
+        </section>
+
+        <section class="sec" id="notes" data-od-id="spec-notes">
+          <div class="r sec-head"><h2>Further notes</h2></div>
+          <div class="r"><div>
+            <p class="prose">ACX’s requirements, as researched on the map: every file between −23 and −18 dB RMS, peaks no higher than −3 dB, a noise floor no higher than −60 dB RMS, 0.5–1 second of room tone at the head and 1–5 seconds at the tail, no file longer than 120 minutes, and opening and closing credits.</p>
+          </div></div>
+        </section>
+      </article>
+    </div>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { ticket, glyph, esc, STATES } = WS;
+  WS.renderTopbar({ page: 'spec', effort: 'acx' });
+  WS.renderRoute({ page: 'spec', effort: 'acx' });
+
+  const STORIES = [
+    'As an <b>author</b>, I want every chapter checked against ACX’s requirements when it renders, so that I find problems before I upload.',
+    'As an <b>author</b>, I want to see a chapter’s RMS loudness next to the −23 to −18 dB range, so that I know how far off it is.',
+    'As an <b>author</b>, I want chapters with peaks above −3 dB flagged, so that clipping never reaches a listener.',
+    'As an <b>author</b>, I want the timestamp of the loudest peak, so that I can hear the problem instead of hunting for it.',
+    'As an <b>author</b>, I want chapters with a noise floor above −60 dB flagged, so that hiss and room noise don’t get the book rejected.',
+    'As an <b>author</b>, I want to know when a chapter is missing room tone at the head or tail, so that transitions sound the way ACX expects.',
+    'As an <b>author</b>, I want chapters over 120 minutes flagged, so that I can split them before submitting.',
+    'As an <b>author</b>, I want Galley to tell me when opening or closing credits are missing, so that the book isn’t sent back for them.',
+    'As an <b>author</b>, I want each failure explained in plain language, so that I don’t need to know what RMS means.',
+    'As an <b>author</b>, I want only changed chapters checked again after a re-render, so that fixing one chapter doesn’t mean waiting on the whole book.',
+    'As an <b>author</b>, I want ACX export blocked while any blocking check fails, so that I can’t submit a book I already know will bounce.',
+    'As an <b>author</b>, I want to see which checks still block export, so that I know exactly what is left.',
+    'As an <b>author</b>, I want a book’s compliance status on My Books, so that I can see which books are ready without opening each one.',
+    'As an <b>author</b>, I want a warning, not a block, when no retail sample is chosen, so that I can pick one last.',
+    'As an <b>author</b>, I want the checks to measure the same way on every render, so that a chapter that passed yesterday doesn’t fail today for no reason.',
+    'As an <b>author</b>, I want to download a book’s compliance results, so that I can keep them with my ACX submission records.',
+  ];
+  const byStory = {};
+  WS.ORDER.forEach((n) => ticket(n).stories.forEach((s) => { (byStory[s] = byStory[s] || []).push(n); }));
+  const drafted = {};
+
+  function coverageClass(s) {
+    const ns = byStory[s] || [];
+    if (drafted[s]) return 'waiting';
+    if (!ns.length) return 'none';
+    const states = ns.map((n) => ticket(n).state);
+    if (states.every((x) => x === 'landed')) return 'delivered';
+    if (states.some((x) => ['building', 'asking', 'review', 'landed'].indexOf(x) !== -1)) return 'flight';
+    return 'waiting';
+  }
+
+  function renderCoverage() {
+    const cls = STORIES.map((_, i) => coverageClass(i + 1));
+    const count = (k) => cls.filter((c) => c === k).length;
+    const covered = 16 - count('none');
+    document.getElementById('cov-figure').innerHTML = covered + ' of 16<small>stories have a ticket</small>';
+    document.getElementById('cov-bar').innerHTML = cls.map((c) => '<i class="' + c + '"></i>').join('');
+    document.getElementById('cov-key').innerHTML =
+      '<span><i style="background:var(--fg)"></i>' + count('delivered') + ' delivered</span>' +
+      '<span><i style="background:linear-gradient(0deg, var(--fg) 50%, transparent 50%)"></i>' + count('flight') + ' being built or reviewed</span>' +
+      '<span><i></i>' + count('waiting') + ' waiting to start</span>' +
+      (count('none') ? '<span><i style="border-style:dashed; border-color:var(--muted)"></i><a class="nm" href="#story-14" data-jump="story-14">' + count('none') + ' without a ticket</a></span>' : '');
+    const jump = document.querySelector('[data-jump]');
+    if (jump) jump.addEventListener('click', (e) => { e.preventDefault(); scrollToId('story-14'); });
+  }
+
+  function traceFor(s) {
+    if (drafted[s]) return '<div class="tr-line">' + glyph('takeable') + '<span><a class="nm" href="ticket-graph.html">' + esc(drafted[s].name) + '</a><span class="id">#' + drafted[s].n + '</span><span class="word">Published just now · takeable</span></span></div>';
+    const ns = byStory[s] || [];
+    if (!ns.length) return '<div class="tr-line"><span class="st st-blocked" aria-hidden="true"></span><span class="gap">No ticket delivers this yet</span></div>';
+    return ns.map((n) => {
+      const t = ticket(n);
+      return '<div class="tr-line">' + glyph(t.state) + '<span><a class="nm" href="ticket-graph.html#' + n + '" data-ticket="' + n + '">' + esc(t.name) + '</a><span class="id">#' + n + '</span><span class="word">' + STATES[t.state].word + '</span></span></div>';
+    }).join('');
+  }
+
+  const storyList = document.getElementById('story-list');
+  storyList.innerHTML = STORIES.map((text, i) => {
+    const s = i + 1;
+    return '<li class="r" id="story-' + s + '" data-od-id="story-' + s + '" data-tickets="' + (byStory[s] || []).join(' ') + '"><div class="text"><span class="n">' + String(s).padStart(2, '0') + '</span><span>' + text + '</span></div><div class="trace">' + traceFor(s) + '</div></li>';
+  }).join('');
+
+  // hovering a ticket lights every story it delivers
+  function bindLinks(root) {
+    root.querySelectorAll('a[data-ticket]').forEach((a) => {
+      const on = () => storyList.querySelectorAll('li').forEach((li) => li.classList.toggle('linked', (' ' + li.dataset.tickets + ' ').indexOf(' ' + a.dataset.ticket + ' ') !== -1));
+      const off = () => storyList.querySelectorAll('li.linked').forEach((li) => li.classList.remove('linked'));
+      a.addEventListener('mouseenter', on); a.addEventListener('focus', on);
+      a.addEventListener('mouseleave', off); a.addEventListener('blur', off);
+    });
+  }
+  bindLinks(storyList);
+
+  // the two uncovered stories can be sliced from here
+  const slot = document.getElementById('draft-slot');
+  slot.innerHTML = '<div style="display:flex; gap:12px; align-items:center; margin-top:18px"><button type="button" class="btn btn-secondary" id="slice" aria-expanded="false" aria-controls="draft" data-od-id="slice-uncovered">Slice the 2 uncovered stories</button><span class="meta">Runs /to-tickets on stories 14 and 16 only.</span></div>' +
+    '<div class="draft" id="draft" hidden data-od-id="draft-tickets">' +
+      '<span class="kicker">Drafted by /to-tickets · not published</span><h3>Two tickets for the uncovered stories</h3><p class="meta">Check the granularity and blocking edges before publishing.</p>' +
+      '<div class="draft-ticket" style="margin-top:12px"><span class="st st-take" aria-hidden="true" style="margin-top:5px"></span><div><div class="t-title">Warn when no retail sample is chosen</div><div class="t-meta">Delivers story 14 · Blocked by nothing: the compliance read model already exists</div></div></div>' +
+      '<div class="draft-ticket"><span class="st st-take" aria-hidden="true" style="margin-top:5px"></span><div><div class="t-title">Download a book’s compliance results</div><div class="t-meta">Delivers story 16 · Blocked by nothing: reads the same model</div></div></div>' +
+      '<div class="draft-actions"><button type="button" class="btn btn-primary" id="publish" data-od-id="publish-drafts">Publish 2 tickets</button><span class="meta" id="publish-note">Labels them ready-for-agent on GitHub.</span></div>' +
+    '</div>';
+  const slice = document.getElementById('slice'), draft = document.getElementById('draft');
+  slice.addEventListener('click', () => {
+    const open = draft.hidden;
+    draft.hidden = !open;
+    slice.setAttribute('aria-expanded', String(open));
+    slice.textContent = open ? 'Hide the draft' : 'Slice the 2 uncovered stories';
+  });
+  const publish = document.getElementById('publish');
+  publish.addEventListener('click', () => {
+    if (publish.getAttribute('aria-disabled') === 'true') return;
+    drafted[14] = { n: 144, name: 'Warn when no retail sample is chosen' };
+    drafted[16] = { n: 145, name: 'Download a book’s compliance results' };
+    [14, 16].forEach((s) => { const li = document.getElementById('story-' + s); li.querySelector('.trace').innerHTML = traceFor(s); });
+    publish.setAttribute('aria-disabled', 'true');
+    publish.textContent = 'Published as #144 and #145';
+    document.getElementById('publish-note').textContent = 'Every story now has a ticket.';
+    slice.setAttribute('aria-disabled', 'true');
+    renderCoverage();
+  });
+
+  const decision = (n) => '<div class="tr-line">' + glyph('landed') + '<span><a class="nm" href="wayfinder-map.html?effort=acx#' + n + '">' + esc(WS.ACX_DECISIONS[n]) + '</a><span class="id">#' + n + '</span></span></div>';
+  const note = (text) => '<div class="tr-line"><span class="st st-pending" aria-hidden="true"></span><span>' + text + '</span></div>';
+  const rows = (id, items) => { document.getElementById(id).innerHTML = items.map((it, i) => '<li class="r" data-od-id="' + id.replace('-list', '') + '-' + (i + 1) + '"><div class="text"><span class="n">' + String(i + 1).padStart(2, '0') + '</span><span>' + it[0] + '</span></div><div class="trace">' + it[1] + '</div></li>').join(''); };
+
+  rows('impl-list', [
+    ['Analysis runs in the render worker as a single pass that measures RMS level, peak level, and noise floor together.', decision(114)],
+    ['Results are cached per chapter, keyed by the rendered audio’s hash. Only chapters whose audio changed are analysed again.', decision(121)],
+    ['Every ACX audio rule blocks export. A missing retail sample only warns.', decision(116)],
+    ['A failing check reports a plain-language reason, the measured value, the limit, and the timestamp where it fails.', decision(122)],
+    ['Galley reports problems and never alters audio to fix them.', decision(117)],
+    ['A book’s compliance results are one read model that the Compliance page, My Books, and the export gate all read.', note('Agreed during /to-spec, when the seams were checked with you')],
+  ]);
+  rows('test-list', [
+    ['Tests go through the analysis pass’s public interface, using fixture chapters that each break one rule on purpose, plus one that passes all of them.', decision(115)],
+    ['The Compliance page, My Books, and the export gate are tested against the compliance read model, never against the worker.', note('The one seam agreed during /to-spec')],
+    ['Prior art: the manuscript upload parse tests use the same fixture pattern.', note('Found while exploring the repo')],
+  ]);
+  rows('out-list', [
+    ['Fixing audio automatically, including mastering and noise reduction.', '<div class="tr-line"><span class="st st-out" aria-hidden="true"></span><span><a class="nm" href="wayfinder-map.html?effort=acx#118">Auto-master chapters that fail loudness</a><span class="id">#118</span></span></div>'],
+    ['Delivery rules for retailers other than ACX.', note('A separate effort, not yet charted')],
+    ['Checking bitrate and sample rate. The render worker already encodes to ACX’s format.', note('Settled while exploring the repo')],
+  ]);
+
+  renderCoverage();
+
+  /* ─── outline: smooth scroll + active section ──────────────────── */
+  const doc = document.getElementById('doc');
+  const links = Array.from(document.querySelectorAll('#toc a'));
+  function scrollToId(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const top = el.getBoundingClientRect().top - doc.getBoundingClientRect().top + doc.scrollTop - 12;
+    if (doc.scrollHeight > doc.clientHeight + 4) doc.scrollTo({ top: top, behavior: 'smooth' });
+    else window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+  }
+  links.forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); scrollToId(a.dataset.sec); history.replaceState(null, '', '#' + a.dataset.sec); }));
+  function markActive() {
+    let current = 'problem';
+    links.forEach((a) => {
+      const el = document.getElementById(a.dataset.sec);
+      if (el.getBoundingClientRect().top - doc.getBoundingClientRect().top < 140) current = a.dataset.sec;
+    });
+    links.forEach((a) => a.setAttribute('aria-current', String(a.dataset.sec === current)));
+  }
+  doc.addEventListener('scroll', markActive, { passive: true });
+  markActive();
+  if (location.hash.length > 1) setTimeout(() => scrollToId(location.hash.slice(1)), 60);
+})();
+</script>
+</body>
+</html>

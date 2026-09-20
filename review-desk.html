@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The desk · Needs you · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .desk-split { grid-template-columns: 350px minmax(0, 1fr); }
+
+    .queue { padding: 20px 0 24px; }
+    .queue h1 { font-size: 26px; padding: 0 20px; }
+    .queue > .meta { display: block; padding: 4px 20px 16px; }
+    .q-group > .kicker { display: block; padding: 14px 20px 8px; }
+    .item {
+      display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 3px 11px; width: 100%;
+      padding: 13px 20px 14px; text-align: left; background: none; border: 0; border-top: 1px solid var(--border); cursor: pointer;
+      transition: background-color .15s ease;
+    }
+    .item:hover { background: var(--hover); }
+    .item[aria-pressed="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); }
+    .item:focus-visible { outline-offset: -2px; }
+    .item .st { margin-top: 4px; }
+    .item .i-kind { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .item .i-name { grid-column: 2; font-family: var(--font-display); font-size: 16px; line-height: 1.3; }
+    .item .i-ask { grid-column: 2; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+    .item .i-unblocks { grid-column: 2; font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .item.resolved .i-name { color: var(--ink-2); }
+
+    .main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+    .m-pane { padding: 24px 40px 40px; }
+    .m-inner { max-width: 980px; }
+    .m-head h2 { font-size: 30px; line-height: 1.15; margin: 8px 0 10px; }
+    .m-head h2 a { text-decoration: none; }
+    .m-head h2 a:hover { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+    .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); align-items: center; }
+    .facts span { display: inline-flex; gap: 7px; align-items: center; }
+    .sec { margin-top: 34px; }
+    .sec > .kicker { display: block; padding-bottom: 10px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
+
+    .axes { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .axis h3 { font-size: 19px; display: flex; align-items: center; gap: 9px; }
+    .axis .verdict { font-size: 13px; color: var(--ink-2); margin: 4px 0 10px; }
+    .axis p { font-size: 14px; line-height: 1.6; }
+    .finding { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+    .finding .quote { font-family: var(--font-display); font-size: 15.5px; line-height: 1.4; margin: 6px 0 8px; }
+    .finding p + p { margin-top: 8px; }
+    .finding .act { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    .ct { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .ct td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ct td:first-child { width: 22px; padding-top: 13px; }
+    .ct td.test { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); width: 38%; }
+    .ct td.res { width: 130px; font-size: 12.5px; color: var(--muted); }
+    .ct td.res.weak { color: var(--fg); font-weight: 500; }
+
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px 9px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); cursor: pointer; white-space: nowrap; margin-bottom: -1px; }
+    .tab:hover { background: var(--hover); color: var(--fg); }
+    .tab[aria-selected="true"] { border-bottom-color: var(--fg); color: var(--fg); }
+    .tab .d { color: var(--muted); margin-left: 6px; }
+    .diff { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; background: var(--surface); border: 1px solid var(--border); border-top: 0; }
+    .diff td { padding: 0 10px; white-space: pre; vertical-align: top; }
+    .diff td.ln { width: 44px; text-align: right; color: var(--muted); user-select: none; padding: 0 8px; }
+    .diff td.sg { width: 22px; text-align: center; padding: 0; }
+    .diff td.code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .diff tr.add td.code, .diff tr.add td.ln { background: var(--wash); }
+    .diff tr.add td.sg { background: var(--fg); color: var(--surface); }
+    .diff tr.del td.sg { box-shadow: inset 0 0 0 1px var(--fg); color: var(--fg); }
+    .diff tr.del td.code { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--line); }
+    .diff tr.line { cursor: pointer; }
+    .diff tr.line:hover td.code, .diff tr.line:hover td.ln { background: var(--hover); }
+    .diff tr.line:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
+    .diff tr.note td { white-space: normal; font-family: var(--font-body); padding: 10px 14px 12px 76px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg); }
+    .diff tr.note .by { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); display: block; margin-bottom: 3px; }
+    .diff tr.note p { font-size: 13.5px; line-height: 1.5; }
+    .diff tr.note .textarea { min-height: 60px; margin-top: 4px; }
+    .diff-hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+
+    .bar { border-top: 1px solid var(--border); background: var(--bg); padding: 12px 40px; display: flex; align-items: center; gap: 16px; }
+    .bar .b-text { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); max-width: 64ch; }
+    .bar .b-text b { font-family: var(--font-display); font-weight: 500; font-size: 15px; color: var(--fg); }
+    .bar .b-actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
+    .changes { padding: 14px 40px 0; border-top: 1px solid var(--border); background: var(--bg); }
+    .changes .textarea { max-width: 720px; }
+
+    .ctx p { font-size: 14px; line-height: 1.6; }
+    .ctx .tr-line { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; padding: 6px 0; font-size: 13.5px; }
+    .ctx .tr-line .st { margin-top: 4px; }
+    .two { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+    .panel { border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); padding: 20px 22px; }
+    .fog-note { font-family: var(--font-display); font-style: italic; font-size: 14.5px; color: var(--ink-2); }
+
+    @media (max-width: 1180px) { .axes, .two { grid-template-columns: 1fr; } .m-pane { padding: 20px 24px 32px; } .bar, .changes { padding-inline: 24px; } }
+    @media (max-width: 920px) { .bar { flex-direction: column; align-items: flex-start; } .bar .b-actions { margin-left: 0; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+
+  <main class="split desk-split" id="content">
+    <aside class="pane side-l queue" data-od-id="needs-you-queue">
+      <h1>Needs you</h1>
+      <span class="meta">Grouped by effort, most unblocking first.</span>
+      <div id="queue"></div>
+    </aside>
+    <section class="main" data-od-id="desk-item">
+      <div class="pane m-pane" id="m-pane"><div class="m-inner" id="m-inner"></div></div>
+      <div id="m-foot"></div>
+    </section>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { ticket, glyph, esc } = WS;
+  const render = () => { WS.renderTopbar({ page: 'review', effort: 'acx' }); WS.renderRoute({ page: 'review', effort: 'acx' }); };
+  render();
+
+  const ITEMS = [
+    { key: 'pr-141', group: 'acx', kind: 'Review', name: ticket(127).name, ask: '/code-review found one gap against the spec', unblocks: 'Unblocks 1 ticket', done: () => WS.has('merged', 127), doneText: 'Merged just now', doneKind: 'Landed', glyph: 'review' },
+    { key: 'q-130', group: 'acx', kind: 'Question', name: ticket(130).name, ask: 'Should DOCX books without credits fail or warn?', unblocks: 'Unblocks 1 ticket', done: () => WS.has('answered', 130), doneText: 'Answered · the session resumed', doneKind: 'Answered', glyph: 'asking' },
+    { key: 'map-160', group: 'sample', name: WS.EFFORTS.sample.name,
+      get kind() { return WS.sampleStage() === 'last' ? 'Grilling · HITL' : 'Seam · /to-spec'; },
+      get ask() { return WS.sampleStage() === 'last' ? 'The last open ticket on the map is in session with you' : 'The way is clear. /to-spec needs you to agree the seam'; },
+      get unblocks() { return WS.sampleStage() === 'last' ? 'Clears the way to the destination' : 'Unblocks the spec'; },
+      done: () => WS.has('sample', 'written'), doneText: 'Spec written from the map', doneKind: 'Handed off', glyph: 'asking' },
+    { key: 'g-152', group: 'casting', kind: 'Grilling · HITL', name: WS.CASTING_GRILL.name, ask: 'Frontier ticket on the map', unblocks: 'Unblocks 2 tickets and clears fog', done: () => WS.has('grilled', 152), doneText: 'Session in progress with you', doneKind: 'In session', glyph: 'asking' },
+  ];
+  let current = WS.param('item');
+  if (!ITEMS.some((i) => i.key === current)) current = 'pr-141';
+
+  /* ─── queue (built once, updated in place) ─────────────────────── */
+  const queue = document.getElementById('queue');
+  queue.innerHTML =
+    '<div class="q-group"><span class="kicker">ACX compliance before delivery</span>' + ITEMS.filter((i) => i.group === 'acx').map(itemHtml).join('') + '</div>' +
+    '<div class="q-group"><span class="kicker">Elsewhere · Choosing the retail sample</span>' + ITEMS.filter((i) => i.group === 'sample').map(itemHtml).join('') + '</div>' +
+    '<div class="q-group"><span class="kicker">Elsewhere · Per-chapter voice casting</span>' + ITEMS.filter((i) => i.group === 'casting').map(itemHtml).join('') + '</div>';
+  function itemHtml(it) { return '<button type="button" class="item" data-key="' + it.key + '" data-od-id="desk-' + it.key + '" aria-pressed="false"></button>'; }
+  function paintQueue() {
+    ITEMS.forEach((it) => {
+      const el = queue.querySelector('[data-key="' + it.key + '"]');
+      const done = it.done();
+      el.classList.toggle('resolved', done);
+      el.setAttribute('aria-pressed', String(it.key === current));
+      el.innerHTML = (done ? glyph(it.key === 'g-152' ? 'building' : 'landed') : glyph(it.glyph)) +
+        '<span class="i-kind">' + (done ? it.doneKind : it.kind) + '</span>' +
+        '<span class="i-name">' + esc(it.name) + '</span>' +
+        '<span class="i-ask">' + (done ? it.doneText : esc(it.ask)) + '</span>' +
+        (done ? '' : '<span class="i-unblocks">' + it.unblocks + '</span>');
+    });
+  }
+  queue.querySelectorAll('.item').forEach((el) => el.addEventListener('click', () => {
+    current = el.dataset.key;
+    history.replaceState(null, '', '?item=' + current);
+    paintQueue();
+    renderMain();
+  }));
+
+  const inner = document.getElementById('m-inner'), foot = document.getElementById('m-foot'), mpane = document.getElementById('m-pane');
+  function renderMain() {
+    mpane.scrollTo({ top: 0 });
+    if (current === 'pr-141') renderPR();
+    else if (current === 'q-130') renderQuestion();
+    else if (current === 'map-160') renderSample();
+    else renderGrill();
+  }
+
+  /* ─── PR review ────────────────────────────────────────────────── */
+  const FILES = [
+    { path: 'worker/analysis/limits.ts', rows: [
+      [3, 3, ' ', 'export const ACX_LIMITS = {'],
+      [4, 4, ' ', '  rms: { min: -23, max: -18 },'],
+      [null, 5, '+', '  peak: { max: -3 },'],
+      [5, 6, ' ', '} as const;'],
+    ] },
+    { path: 'worker/analysis/checks/peak.ts', rows: [
+      "import { ACX_LIMITS } from '../limits';", "import { explain } from '../explain';", "import type { ChapterAnalysis, CheckResult } from '../types';", '',
+      'export function checkPeak(chapter: ChapterAnalysis): CheckResult {', '  const { peakDb, peakAt } = chapter;', '  const limit = ACX_LIMITS.peak.max;', '',
+      '  if (peakDb <= limit) {', "    return { check: 'peak', status: 'pass', measured: peakDb, limit };", '  }', '',
+      '  return {', "    check: 'peak',", "    status: 'fail',", '    measured: peakDb,', '    limit,', '    at: peakAt,', '    reason: explain.peak({ measured: peakDb, limit, at: peakAt }),', '  };', '}',
+    ].map((code, i) => [null, i + 1, '+', code]) },
+    { path: 'worker/analysis/checks/peak.test.ts', finding: 19, rows: [
+      "import { describe, expect, it } from 'vitest';", "import { analyseFixture } from '../../test/fixtures';", "import { checkPeak } from './peak';", '',
+      "describe('checkPeak', () => {", "  it('passes the clean fixture', async () => {", "    const result = checkPeak(await analyseFixture('clean'));", "    expect(result.status).toBe('pass');", '  });', '',
+      "  it('flags the clipped fixture above -3 dB', async () => {", "    const result = checkPeak(await analyseFixture('clipped'));", "    expect(result.status).toBe('fail');", '    expect(result.measured).toBeGreaterThan(-3);', '  });', '',
+      "  it('reports when the loudest peak happens', async () => {", '    const result = checkPeak(await analyseFixture(\'clipped\'));', '    expect(result.at).toBeDefined();', '  });', '});',
+    ].map((code, i) => [null, i + 1, '+', code]) },
+    { path: 'app/compliance/check-label.ts', rows: [
+      [1, null, '-', "export type CheckName = 'loudness';"],
+      [null, 1, '+', "export type CheckName = 'loudness' | 'peak';"],
+      [2, 2, ' ', ''],
+      [3, 3, ' ', 'export const CHECK_LABELS: Record<CheckName, string> = {'],
+      [4, 4, ' ', "  loudness: 'Loudness',"],
+      [null, 5, '+', "  peak: 'Peaks',"],
+      [5, 6, ' ', '};'],
+    ] },
+  ];
+  const adds = FILES.reduce((a, f) => a + f.rows.filter((r) => r[2] === '+').length, 0);
+  const dels = FILES.reduce((a, f) => a + f.rows.filter((r) => r[2] === '-').length, 0);
+  let fileIdx = 2;
+
+  function renderPR() {
+    const t = ticket(127), merged = WS.has('merged', 127), sent = WS.has('findingSent', 127);
+    inner.innerHTML =
+      '<header class="m-head" data-od-id="pr-header"><span class="kicker">/code-review · PR #141 · wt/peak-ceiling → main</span>' +
+      '<h2><a href="ticket-graph.html#127">' + esc(t.name) + '</a></h2>' +
+      '<div class="facts"><span>' + glyph(merged ? 'landed' : 'review') + (merged ? 'Merged' : 'Open, waiting on you') + '</span><span class="num">+' + adds + ' −' + dels + ' · ' + FILES.length + ' files</span><span>' + glyph('landed') + 'CI passed</span><span>Delivers stories 3 and 4</span></div></header>' +
+
+      '<section class="sec" data-od-id="code-review-axes"><span class="kicker">/code-review · two axes, reviewed in parallel</span><div class="axes">' +
+        '<div class="axis"><h3>' + glyph('landed') + 'Standards</h3><p class="verdict">No findings</p><p>Follows the check shape set by <a class="nm" href="ticket-graph.html#126">' + esc(ticket(126).name) + '</a>. Tests go through the analysis pass, the one seam the spec agreed.</p></div>' +
+        '<div class="axis"><h3>' + glyph('review') + 'Spec</h3><p class="verdict">1 finding</p>' +
+          '<div class="finding" data-od-id="spec-finding"><span class="kicker">Story 4 · criterion 3</span><p class="quote">“A failure names the timestamp of the loudest peak.”</p>' +
+          '<p>The test checks that a timestamp exists, not that it is right. It would still pass if every peak were reported at 0:00.</p><p>Suggested: assert the clipped fixture’s known peak time.</p>' +
+          '<div class="act"><button type="button" class="btn btn-secondary" id="send-finding" data-od-id="send-finding"' + (sent || merged ? ' aria-disabled="true"' : '') + '>' + (sent ? 'Sent · the agent is adding the assertion' : 'Send to the agent') + '</button><button type="button" class="btn btn-ghost" id="jump-finding">Show in diff</button></div></div>' +
+        '</div></div></section>' +
+
+      '<section class="sec" data-od-id="criteria-tests"><span class="kicker">Acceptance criteria, proven by tests</span><table class="ct"><tbody>' +
+        t.criteria.map((c) => '<tr><td>' + (c.done === 'part' ? '<span class="box part" aria-label="Weakly covered"></span>' : '<span class="box on" aria-label="Covered"></span>') + '</td><td>' + esc(c.text) + '</td><td class="test">' + esc(c.test) + '</td><td class="res' + (c.done === 'part' ? ' weak' : '') + '">' + (c.done === 'part' ? 'Passes, weakly asserted' : 'Passes') + '</td></tr>').join('') +
+      '</tbody></table></section>' +
+
+      '<section class="sec" data-od-id="pr-diff"><span class="kicker">Changes</span><div class="tabs" role="tablist" id="tabs">' +
+        FILES.map((f, i) => '<button type="button" role="tab" class="tab" aria-selected="' + (i === fileIdx) + '" data-i="' + i + '">' + f.path.split('/').slice(-2).join('/') + '<span class="d">+' + f.rows.filter((r) => r[2] === '+').length + (f.rows.some((r) => r[2] === '-') ? ' −' + f.rows.filter((r) => r[2] === '-').length : '') + '</span></button>').join('') +
+      '</div><table class="diff" id="diff"><tbody></tbody></table><p class="diff-hint">Click any line to leave a comment for the agent. Comments go to wt/peak-ceiling, not just to GitHub.</p></section>';
+
+    paintDiff();
+    const tabs = inner.querySelectorAll('.tab');
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      fileIdx = Number(tab.dataset.i);
+      tabs.forEach((x) => x.setAttribute('aria-selected', String(x === tab)));
+      paintDiff();
+    }));
+    const sendF = document.getElementById('send-finding');
+    sendF.addEventListener('click', () => {
+      if (sendF.getAttribute('aria-disabled') === 'true') return;
+      WS.mark('findingSent', 127);
+      sendF.setAttribute('aria-disabled', 'true');
+      sendF.textContent = 'Sent · the agent is adding the assertion';
+    });
+    document.getElementById('jump-finding').addEventListener('click', () => {
+      fileIdx = 2;
+      tabs.forEach((x) => x.setAttribute('aria-selected', String(Number(x.dataset.i) === 2)));
+      paintDiff();
+      const row = document.querySelector('#diff tr.finding-row');
+      if (row) mpane.scrollTo({ top: row.getBoundingClientRect().top - mpane.getBoundingClientRect().top + mpane.scrollTop - 160, behavior: 'smooth' });
+    });
+
+    renderPRBar();
+  }
+
+  function paintDiff() {
+    const f = FILES[fileIdx];
+    const body = document.querySelector('#diff tbody');
+    body.innerHTML = f.rows.map((r, i) => {
+      const cls = r[2] === '+' ? 'add' : r[2] === '-' ? 'del' : 'ctx';
+      let row = '<tr class="line ' + cls + '" tabindex="0" data-row="' + i + '" aria-label="Comment on line ' + (r[1] || r[0]) + '"><td class="ln">' + (r[0] == null ? '' : r[0]) + '</td><td class="ln">' + (r[1] == null ? '' : r[1]) + '</td><td class="sg">' + (r[2] === '-' ? '−' : r[2] === '+' ? '+' : '') + '</td><td class="code">' + (esc(r[3]) || ' ') + '</td></tr>';
+      if (f.finding === i + 1) row += '<tr class="note finding-row"><td colspan="4"><span class="by">/code-review · Spec axis</span><p>Only checks that <code>at</code> exists. Assert the clipped fixture’s known peak time so story 4 is actually proven.</p></td></tr>';
+      return row;
+    }).join('');
+    body.querySelectorAll('tr.line').forEach((tr) => {
+      const open = () => {
+        if (tr.nextElementSibling && tr.nextElementSibling.classList.contains('composer-row')) { tr.nextElementSibling.querySelector('textarea').focus(); return; }
+        tr.insertAdjacentHTML('afterend', '<tr class="note composer-row"><td colspan="4"><label class="by" for="c-' + tr.dataset.row + '">Comment for the agent · line ' + (tr.children[1].textContent || tr.children[0].textContent) + '</label><textarea class="textarea" id="c-' + tr.dataset.row + '" placeholder="What should change here?"></textarea><div style="display:flex; gap:8px; margin-top:8px"><button type="button" class="btn btn-secondary btn-sm" data-send>Send to agent</button><button type="button" class="btn btn-ghost btn-sm" data-cancel>Cancel</button></div></td></tr>');
+        const row = tr.nextElementSibling;
+        row.querySelector('[data-cancel]').addEventListener('click', () => { row.remove(); tr.focus(); });
+        row.querySelector('[data-send]').addEventListener('click', (e) => {
+          const text = row.querySelector('textarea').value.trim();
+          if (!text) { row.querySelector('textarea').focus(); return; }
+          const btn = e.currentTarget;
+          row.querySelector('td').insertAdjacentHTML('afterbegin', '<span class="by">You · sent to wt/peak-ceiling</span><p>' + esc(text) + '</p>');
+          row.querySelector('label').remove(); row.querySelector('textarea').remove(); row.querySelector('[data-cancel]').remove();
+          btn.setAttribute('aria-disabled', 'true'); btn.textContent = 'Sent';
+        });
+      };
+      tr.addEventListener('click', (e) => { if (!e.target.closest('.note')) open(); });
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
+  }
+
+  function renderPRBar() {
+    const merged = WS.has('merged', 127);
+    const waiting = ticket(133).blockedBy.filter((b) => b !== 127 && ticket(b).state !== 'landed').length;
+    foot.innerHTML = '<div class="changes" id="changes" hidden><label class="field-label" for="changes-text">What should the agent change before this can merge?</label><textarea class="textarea" id="changes-text"></textarea><div style="padding:10px 0 2px"><button type="button" class="btn btn-secondary btn-sm" id="changes-send">Send changes request</button></div></div>' +
+      '<div class="bar" data-od-id="merge-bar"><p class="b-text" id="bar-text">' + (merged
+        ? '<b>' + esc(ticket(127).name) + '</b> landed. ' + WS.counts().landed + ' of 9 tickets are in.'
+        : 'Merging lands <b>' + esc(ticket(127).name) + '</b>. <b>' + esc(ticket(133).name) + '</b> will still wait on ' + waiting + ' tickets.') + '</p>' +
+      '<div class="b-actions"><button type="button" class="btn btn-secondary" id="request" aria-expanded="false"' + (merged ? ' aria-disabled="true"' : '') + ' data-od-id="request-changes">Request changes</button>' +
+      '<button type="button" class="btn btn-primary" id="merge"' + (merged ? ' aria-disabled="true"' : '') + ' data-od-id="approve-merge">' + (merged ? 'Merged' : 'Approve and merge') + '</button></div></div>';
+
+    const merge = document.getElementById('merge'), request = document.getElementById('request'), changes = document.getElementById('changes');
+    merge.addEventListener('click', () => {
+      if (merge.getAttribute('aria-disabled') === 'true') return;
+      WS.mark('merged', 127);
+      merge.setAttribute('aria-disabled', 'true');
+      merge.textContent = 'Merged';
+      request.setAttribute('aria-disabled', 'true');
+      changes.hidden = true;
+      document.getElementById('bar-text').innerHTML = '<b>' + esc(ticket(127).name) + '</b> landed. ' + WS.counts().landed + ' of 9 tickets are in.';
+      const facts = inner.querySelector('.facts span');
+      if (facts) facts.innerHTML = glyph('landed') + 'Merged';
+      paintQueue();
+      render();
+    });
+    request.addEventListener('click', () => {
+      if (request.getAttribute('aria-disabled') === 'true') return;
+      const open = changes.hidden;
+      changes.hidden = !open;
+      request.setAttribute('aria-expanded', String(open));
+    });
+    document.getElementById('changes-send').addEventListener('click', (e) => {
+      const ta = document.getElementById('changes-text');
+      if (!ta.value.trim()) { ta.focus(); return; }
+      e.currentTarget.setAttribute('aria-disabled', 'true');
+      e.currentTarget.textContent = 'Sent · the session reopened in wt/peak-ceiling';
+      ta.readOnly = true;
+    });
+  }
+
+  /* ─── agent question ───────────────────────────────────────────── */
+  function renderQuestion() {
+    const t = ticket(130), answered = WS.got('answered', 130);
+    inner.innerHTML =
+      '<header class="m-head" data-od-id="question-header"><span class="kicker">/tdd · Claude Code · wt/credits · paused 09:18</span>' +
+      '<h2><a href="ticket-graph.html#130">' + esc(t.name) + '</a></h2>' +
+      '<div class="facts"><span>' + glyph(answered ? 'building' : 'asking') + (answered ? 'Resumed with your answer' : 'Waiting on you') + '</span><span>' + t.criteria.filter((c) => c.done === true).length + ' of ' + t.criteria.length + ' criteria passing</span><span>Unblocks ' + esc(ticket(133).short) + '</span></div></header>' +
+      '<div class="two sec">' +
+        '<div class="panel" id="q-panel">' + (answered
+          ? '<div class="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">Claude Code · 09:18</span>' + esc(t.question.text) + '</div></div><div class="msg you"><span class="who">You</span><div class="body"><span class="by">You</span>' + esc(answered) + '</div></div></div><p class="meta" style="margin-top:14px">Posted to #130. <a class="nm" href="live-build.html?session=130">Watch the session resume</a></p>'
+          : WS.questionCard(130)) + '</div>' +
+        '<div class="ctx">' +
+          '<span class="kicker" style="display:block; margin-bottom:10px">What the spec already says</span>' +
+          '<p class="prose">“Every ACX audio rule blocks export. A missing retail sample only warns.”</p>' +
+          '<p class="meta" style="margin:4px 0 18px">Implementation decision 3, from <a class="nm" href="wayfinder-map.html?effort=acx#116">Which checks block delivery, and which only warn?</a></p>' +
+          '<p class="prose">“As an author, I want Galley to tell me when opening or closing credits are missing, so that the book isn’t sent back for them.”</p>' +
+          '<p class="meta" style="margin:4px 0 18px">Story 8</p>' +
+          '<span class="kicker" style="display:block; margin:6px 0 8px">Criteria so far</span>' + WS.criteriaList(t) +
+        '</div>' +
+      '</div>';
+    if (!answered) WS.bindQuestion(document.getElementById('q-panel'), 130, () => { paintQueue(); render(); });
+    foot.innerHTML = '';
+  }
+
+  /* ─── retail sample: the last ticket, then the handoff ─────────── */
+  function renderSample() {
+    const stage = WS.sampleStage(), last = WS.EFFORTS.sample.last;
+    const closing = stage === 'last';
+    inner.innerHTML =
+      '<header class="m-head" data-od-id="sample-header"><span class="kicker">/wayfinder · Choosing the retail sample · map #160' + (closing ? ' · issue #' + last.n : '') + '</span>' +
+      '<h2><a href="wayfinder-map.html?effort=sample' + (closing ? '#' + last.n : '') + '">' + esc(closing ? last.name : 'The way is clear') + '</a></h2>' +
+      '<div class="facts">' + (closing ? '<span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph('asking') + 'Claimed by you · in session since 09:32</span>' : '<span>' + glyph(stage === 'clear' ? 'asking' : 'landed') + (stage === 'clear' ? 'Handing off to /to-spec · the seam waits on you' : 'Spec written from the map') + '</span>') + '</div></header>' +
+      '<div class="two sec"><div class="panel" data-od-id="sample-panel">' +
+        '<p class="prose" style="margin-bottom:14px">' + (closing ? 'Everything else on this map is decided or ruled out. The grilling session has a drafted resolution for you to check. Closing it clears the last fog, and the way to the destination is clear.' : stage === 'clear' ? 'Every ticket is decided and no fog is left. /to-spec has read the map and proposes a seam before it writes.' : 'The spec is written and labelled ready-for-agent. The map is closed with a pointer to it.') + '</p>' +
+        (stage === 'written' || stage === 'slicing' ? '' : '<a class="btn btn-primary btn-arrow" href="wayfinder-map.html?effort=sample' + (closing ? '#' + last.n : '') + '" data-od-id="open-sample-map">' + (closing ? 'Check the resolution on the map' : 'Agree the seam on the map') + '</a>') +
+      '</div><div class="ctx">' +
+        '<span class="kicker" style="display:block; margin-bottom:8px">Destination</span>' +
+        '<p>' + esc(WS.EFFORTS.sample.destination) + '</p>' +
+      '</div></div>';
+    foot.innerHTML = '';
+  }
+
+  /* ─── grilling session ─────────────────────────────────────────── */
+  function renderGrill() {
+    const started = WS.has('grilled', 152);
+    inner.innerHTML =
+      '<header class="m-head" data-od-id="grilling-header"><span class="kicker">/wayfinder · Per-chapter voice casting · map #147 · issue #152</span>' +
+      '<h2><a href="wayfinder-map.html?effort=casting#152">' + esc(WS.CASTING_GRILL.name) + '</a></h2>' +
+      '<div class="facts"><span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph(started ? 'building' : 'asking') + (started ? 'Claimed by you · in session' : 'On the frontier · waiting on you') + '</span></div></header>' +
+      '<div class="two sec">' +
+        '<div class="panel" data-od-id="grilling-panel">' +
+          '<p class="prose" style="margin-bottom:14px">This ticket only resolves in a live exchange with you. The session runs /grilling and /domain-modeling, as the map’s notes ask.</p>' +
+          '<button type="button" class="btn ' + (started ? 'btn-secondary' : 'btn-primary') + '" id="start-grill"' + (started ? ' aria-disabled="true"' : '') + ' data-od-id="start-grilling">' + (started ? 'Session in progress' : 'Start grilling session') + '</button>' +
+          '<div id="session" style="margin-top:18px"' + (started ? '' : ' hidden') + '>' +
+            '<div class="convo" id="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling · claimed by you</span>' + esc(WS.CASTING_GRILL.opener) + '</div></div></div>' +
+            '<label class="field-label" for="grill-reply" style="margin-top:16px">Your answer</label><textarea class="textarea" id="grill-reply" placeholder="Answer in your own words. The agent keeps asking until the decision is sharp."></textarea>' +
+            '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-od-id="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to #152 when you close the session.</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ctx">' +
+          '<span class="kicker" style="display:block; margin-bottom:8px">Answering this unblocks</span>' +
+          '<div class="tr-line">' + glyph('blocked') + '<a class="nm" href="wayfinder-map.html?effort=casting#153">Preview an override before committing it</a></div>' +
+          '<div class="tr-line">' + glyph('blocked') + '<a class="nm" href="wayfinder-map.html?effort=casting#154">Do overrides carry into the next book in a series?</a></div>' +
+          '<span class="kicker" style="display:block; margin:20px 0 8px">And clears the way toward</span>' +
+          '<p class="fog-note">Re-render cost once overrides exist — can’t phrase it until we know what re-renders.</p>' +
+          '<span class="kicker" style="display:block; margin:20px 0 8px">Decided so far on this map</span>' +
+          '<div class="tr-line">' + glyph('landed') + '<span>What does a cast assignment belong to? <span class="meta" style="display:block">The book, with per-chapter overrides</span></span></div>' +
+          '<div class="tr-line">' + glyph('landed') + '<span>Can Attribution create overrides, or only Cast? <span class="meta" style="display:block">Only Cast</span></span></div>' +
+        '</div>' +
+      '</div>';
+    foot.innerHTML = '';
+    const start = document.getElementById('start-grill');
+    start.addEventListener('click', () => {
+      if (start.getAttribute('aria-disabled') === 'true') return;
+      WS.mark('grilled', 152);
+      start.setAttribute('aria-disabled', 'true');
+      start.classList.remove('btn-primary'); start.classList.add('btn-secondary');
+      start.textContent = 'Session in progress';
+      document.getElementById('session').hidden = false;
+      paintQueue();
+      render();
+    });
+    document.getElementById('grill-send').addEventListener('click', () => {
+      const ta = document.getElementById('grill-reply'), hint = document.getElementById('grill-hint');
+      const text = ta.value.trim();
+      if (!text) { hint.textContent = 'Write an answer first.'; hint.style.color = 'var(--fg)'; return; }
+      document.getElementById('convo').insertAdjacentHTML('beforeend', '<div class="msg you"><span class="who">You</span><div class="body"><span class="by">You · now</span>' + esc(text) + '</div></div><div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling</span>' + esc(WS.CASTING_GRILL.followUp) + '</div></div>');
+      ta.value = '';
+      hint.textContent = 'Keep going, or close the session to post the resolution.';
+      hint.style.color = '';
+    });
+  }
+
+  paintQueue();
+  renderMain();
+})();
+</script>
+</body>
+</html>

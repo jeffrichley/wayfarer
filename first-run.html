@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>madrigal · First chart · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .run-split { grid-template-columns: minmax(0, 1fr) 360px; }
+    .canvas-col { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+    .canvas-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 20px 28px 8px; min-height: 92px; }
+    .canvas-head h1 { font-size: 28px; line-height: 1.15; margin-top: 4px; }
+    .canvas-head .lead { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); max-width: 64ch; margin-top: 6px; }
+    .canvas-head .lead.idea { font-family: var(--font-display); font-style: italic; font-size: 15.5px; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 14px; font-size: 12px; color: var(--muted); max-width: 520px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend[hidden] { display: none; }
+    .fog-key { display: inline-block; flex: none; width: 16px; height: 10px; border-radius: 50%; background-image: radial-gradient(var(--muted) 0.9px, transparent 1.1px); background-size: 3.4px 3.4px; }
+    .mini-dest { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--fg); display: grid; place-items: center; }
+    .mini-dest::after { content: ''; width: 4px; height: 4px; border-radius: 50%; background: var(--fg); }
+
+    .viewport { position: relative; overflow: auto; padding: 0 24px; }
+    .stage-wrap { position: relative; margin: 4px auto 16px; }
+    .stage { position: absolute; left: 0; top: 0; width: 1180px; height: 600px; transform-origin: 0 0; }
+    .stage svg { position: absolute; inset: 0; overflow: visible; }
+    .edges { transition: opacity .3s ease; }
+    .edge { fill: none; stroke-width: 1.25; }
+    .edge.start { stroke: var(--line); }
+    .edge.dep { stroke: var(--muted); stroke-dasharray: 4 4; }
+    .edge.to-dest { stroke: var(--line); stroke-dasharray: 2 5; }
+    .course-hint { transition: opacity .6s ease; }
+    .fog-stipple { opacity: .55; }
+    :root[data-theme="dark"] .fog-stipple { opacity: .36; }
+
+    .start-label { position: absolute; left: 60px; top: 28px; transform: translateX(-50%); text-align: center; white-space: nowrap; }
+    .fog-title { position: absolute; top: 28px; transform: translateX(-50%); white-space: nowrap; transition: left 1.2s cubic-bezier(.3,.7,.2,1), opacity .4s ease; }
+    .fog-title, .cel.as-fog .n-name { text-shadow: 0 0 1px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg), 0 0 3px var(--bg), 0 0 4px var(--bg), 0 0 6px var(--bg); }
+
+    /* one element per candidate: a ticket node, or a note in the fog */
+    .cel {
+      position: absolute; width: 176px; transform: translate(-88px, -9px);
+      display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center;
+      transition: left .7s cubic-bezier(.3,.7,.2,1), top .7s cubic-bezier(.3,.7,.2,1), opacity .45s ease;
+    }
+    .cel.entering { opacity: 0; }
+    .cel .st { width: 18px; height: 18px; background-color: var(--bg); transition: opacity .3s ease; }
+    .cel .st-ask { width: 13px; height: 13px; margin: 2.5px; background-color: var(--fg); }
+    .cel .n-label { display: block; padding: 5px 7px 6px; border-radius: 3px; background: var(--bg); transition: background-color .3s ease; }
+    .cel .n-name { display: block; font-size: 14.5px; line-height: 1.33; color: var(--fg); }
+    .cel .n-type { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .cel.as-fog .st { display: none; }
+    .cel.as-fog .n-label { background: transparent; }
+    .cel.as-fog .n-name { font-family: var(--font-display); font-style: italic; color: var(--ink-2); }
+    .cel.as-fog .n-type { display: none; }
+
+    .dest { position: absolute; width: 190px; transform: translate(-95px, -13px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+    .dest-mark { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--fg); display: grid; place-items: center; background: var(--bg); transition: border-color .4s ease; }
+    .dest-mark::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--fg); transition: background-color .4s ease; }
+    .dest .d-text { font-family: var(--font-display); font-size: 15px; line-height: 1.35; transition: opacity .3s ease; }
+    .dest.unnamed .dest-mark { border-style: dashed; border-color: var(--muted); }
+    .dest.unnamed .dest-mark::after { background: transparent; }
+    .dest.unnamed .d-text { font-style: italic; color: var(--muted); }
+
+    /* the loose idea sits in the fog until charting starts */
+    .composer {
+      position: absolute; left: 50%; top: 50%; z-index: 4; width: 470px; max-width: calc(100% - 48px);
+      transform: translate(-46%, -54%); padding: 20px 22px 18px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+      box-shadow: 0 22px 48px -30px var(--shadow); transition: opacity .35s ease, transform .35s ease;
+    }
+    .composer.leaving { opacity: 0; transform: translate(-46%, -50%); pointer-events: none; }
+    .composer .c-title { display: block; font-family: var(--font-display); font-size: 21px; line-height: 1.25; margin: 6px 0 12px; }
+    .idea-ta { min-height: 104px; font-size: 14.5px; }
+    .c-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 6px; min-height: 22px; }
+    .c-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .link-btn { background: none; border: 0; padding: 2px 0; cursor: pointer; font-size: 12.5px; color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; white-space: nowrap; }
+    .link-btn:hover { text-decoration-color: var(--fg); background: var(--hover); }
+
+    /* charting steps, where the map's replay bar sits */
+    .steps-bar { border-top: 1px solid var(--border); padding: 12px 28px 14px; background: var(--bg); }
+    .steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .steps li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
+    .steps li .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .steps li .no { font-family: var(--font-mono); font-size: 11.5px; }
+    .steps li.active, .steps li.done { color: var(--fg); }
+    .steps li.active .t { font-weight: 500; }
+    .steps-cap { margin-top: 8px; font-size: 12.5px; color: var(--muted); min-height: 19px; }
+
+    /* side panel */
+    .drawer { display: flex; flex-direction: column; min-height: 0; }
+    .drawer .pane { flex: 1; }
+    .d-head { padding: 20px 22px 16px; }
+    .d-head h2 { font-size: 23px; line-height: 1.2; margin-top: 8px; }
+    .d-head h2:focus { outline: none; }
+    .d-lead { font-size: 14px; line-height: 1.55; color: var(--ink-2); margin-top: 8px; }
+    .prose { font-size: 14px; line-height: 1.6; }
+    .prose.serif { font-family: var(--font-display); font-size: 16px; line-height: 1.45; }
+    .prose + .prose { margin-top: 10px; }
+    .checks li, .keys li, .frontier li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 7px 0; }
+    .checks .st, .keys .st, .frontier .st, .keys .fog-key, .keys .mini-dest { margin-top: 4px; }
+    .checks b, .keys b { font-weight: 500; font-size: 13.5px; }
+    .checks .meta, .keys .meta, .frontier .meta { display: block; margin-top: 1px; }
+    .frontier .f-name { font-size: 13.5px; line-height: 1.4; }
+    .fog-note { font-family: var(--font-display); font-style: italic; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); padding: 5px 0; }
+    .act { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .choices { margin-top: 14px; }
+    .choice[tabindex="-1"] { cursor: default; }
+
+    .sort li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 11px 0; border-top: 1px solid var(--border); }
+    .sort li:first-child { border-top: 0; padding-top: 2px; }
+    .sort .c-name { display: block; font-size: 13.5px; line-height: 1.4; }
+    .sort .is-fog .c-name { font-family: var(--font-display); font-style: italic; font-size: 14.5px; color: var(--ink-2); }
+    .sort .c-type { display: block; margin-top: 3px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); }
+    .seg button { min-height: 28px; padding: 3px 9px; border: 0; border-radius: 2px; background: transparent; color: var(--fg); font-size: 12px; cursor: pointer; }
+    .seg button:hover { background: var(--hover); }
+    .seg button[aria-checked="true"], .seg button[aria-checked="true"]:hover { background: var(--fg); color: var(--surface); }
+    .seg button[aria-disabled="true"] { cursor: default; }
+    .seg button:focus-visible { outline-offset: 1px; }
+
+    .reveal { animation: rise .45s cubic-bezier(.3,.7,.2,1) both; animation-delay: var(--d, 0ms); }
+    @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .reveal { animation: none; } }
+
+    @media (max-width: 1180px) { .run-split { grid-template-columns: minmax(0, 1fr) 330px; } }
+    @media (max-width: 920px) {
+      .canvas-head { flex-direction: column; align-items: flex-start; padding: 18px 16px 8px; min-height: 0; }
+      .legend { justify-content: flex-start; }
+      .viewport { overflow-x: auto; padding: 0 12px; }
+      .composer { position: static; transform: none; width: auto; max-width: none; margin: 8px 0 12px; }
+      .composer.leaving { transform: none; }
+      .steps-bar { padding: 12px 16px; }
+      .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .seg button { min-height: 44px; padding: 3px 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+
+  <main class="split run-split" id="content">
+    <section class="canvas-col" data-od-id="blank-chart">
+      <div class="canvas-head">
+        <div>
+          <span class="kicker" id="c-kicker">madrigal · connected today</span>
+          <h1 id="c-title">Nothing charted yet</h1>
+          <p class="lead" id="c-lead">A map charts work too big for one agent session: where it’s headed, what can be decided from here, and the fog in between.</p>
+        </div>
+        <div class="legend" id="legend" aria-label="Legend" hidden>
+          <span><i class="st st-building" aria-hidden="true"></i>Researching</span>
+          <span><i class="st st-ask" aria-hidden="true"></i>Waiting on you</span>
+          <span><i class="st st-take" aria-hidden="true"></i>Frontier</span>
+          <span><i class="st st-blocked" aria-hidden="true"></i>Blocked</span>
+          <span><i class="fog-key" aria-hidden="true"></i>Not yet specified</span>
+        </div>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <form class="composer" id="composer" data-od-id="loose-idea" novalidate>
+          <span class="kicker">Start from a loose idea</span>
+          <label class="c-title" for="idea">What’s too big for one agent session?</label>
+          <textarea class="textarea idea-ta" id="idea" placeholder="Say it the way you’d say it to a colleague. Rough is fine."></textarea>
+          <div class="c-row"><span class="meta" id="idea-hint" aria-live="polite"></span><button type="button" class="link-btn" id="example" data-od-id="use-example-idea">Use an example idea</button></div>
+          <div class="c-foot"><button type="submit" class="btn btn-primary" data-od-id="start-charting">Start charting</button><span class="meta">Runs /wayfinder in Claude Code. You name the destination together first.</span></div>
+        </form>
+        <div class="stage-wrap"><div class="stage" id="stage"></div></div>
+      </div>
+
+      <div class="steps-bar" data-od-id="charting-steps">
+        <ol class="steps" id="steps" aria-label="Charting a map"></ol>
+        <p class="steps-cap" id="steps-cap" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <aside class="side drawer" data-od-id="first-run-panel">
+      <div class="pane" id="panel"></div>
+    </aside>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { esc, glyph } = WS;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = (ms) => (reduced ? 0 : ms);
+
+  WS.renderTopbar({ page: 'firstrun', repo: 'madrigal' });
+  WS.renderRoute({ page: 'firstrun', effort: 'madrigal' });
+
+  /* ─── sample content ───────────────────────────────────────────── */
+  const EXAMPLE = 'Madrigal only has English voices. Authors keep asking for Spanish and German, and I can’t yet see everything that touches.';
+  const DESTS = {
+    spec: { kind: 'A spec', text: 'A spec for offering Madrigal voices in languages beyond English, ready for /to-spec.', title: 'Madrigal voices beyond English' },
+    decision: { kind: 'A decision', text: 'A decision on which language Madrigal adds after English, locked before any build is planned.', title: 'Madrigal’s first language after English' },
+    change: { kind: 'A change made in place', text: 'Every Madrigal voice records the language it speaks, migrated in place.', title: 'A language on every Madrigal voice' },
+  };
+  const NOTES = 'Madrigal domain. Every session consults /domain-modeling for “voice” and “language”.';
+  const MAP_N = 38;
+  const TYPE = { research: 'Research', prototype: 'Prototype', grilling: 'Grilling', task: 'Task' };
+  const CANDS = [
+    { name: 'Which languages do Madrigal’s voice models support today?', type: 'research', mode: 'AFK', kind: 'ticket', blockedBy: [] },
+    { name: 'Which audiobook languages can authors sell through ACX?', type: 'research', mode: 'AFK', kind: 'ticket', blockedBy: [] },
+    { name: 'Does a language belong to a voice, or to a book?', type: 'grilling', mode: 'HITL', kind: 'ticket', blockedBy: [] },
+    { name: 'How does an author find voices by language in the Library?', type: 'prototype', mode: 'HITL', kind: 'ticket', blockedBy: [2] },
+    { name: 'How Attribution copes with a book that switches language mid-chapter.', type: 'grilling', mode: 'HITL', kind: 'fog', blockedBy: [2] },
+    { name: 'Pronouncing character names across languages. Hangs on whether a language belongs to the voice.', chart: 'Pronouncing character names across languages.', type: 'grilling', mode: 'HITL', kind: 'fog', blockedBy: [2] },
+    { name: 'Something about cost, if other languages take longer to render.', type: 'grilling', mode: 'HITL', kind: 'fog', blockedBy: [] },
+  ];
+
+  /* stored once the map is created; before that, a reload starts fresh */
+  let stage = WS.madrigalStage() === 'charted' ? 'charted' : 'empty';
+  let idea = WS.got('madrigal', 'idea') || '';
+  let dest = WS.got('madrigal', 'dest') || null;           // { key, text, title }
+  const kinds = WS.got('madrigal', 'kinds');
+  if (kinds) kinds.forEach((k, i) => { CANDS[i].kind = k; });
+
+  /* ─── stage: the blank chart ───────────────────────────────────── */
+  const W = 1180, H = 600, START_X = 60, DEST = { x: 1080, y: 290 };
+  const NS = 'http://www.w3.org/2000/svg';
+  const stageEl = document.getElementById('stage');
+  const FOG_WIDE = { x: 100, w: 910 }, FOG_BAND = { x: 740, w: 290 };
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML =
+    '<defs>' +
+      '<pattern id="stipple" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="1.6" cy="1.6" r="0.95" style="fill: var(--muted)"/><circle cx="5.1" cy="5.1" r="0.7" style="fill: var(--muted)"/></pattern>' +
+      '<linearGradient id="fogFade" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="white" stop-opacity="0"/><stop offset=".22" stop-color="white" stop-opacity="1"/><stop offset=".8" stop-color="white" stop-opacity="1"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>' +
+      '<mask id="fogMask"><rect class="fog-geo" y="0" height="' + H + '" fill="url(#fogFade)"/></mask>' +
+    '</defs>' +
+    '<line x1="' + START_X + '" y1="64" x2="' + START_X + '" y2="' + (H - 40) + '" style="stroke: var(--fg)" stroke-width="1.5"/>' +
+    '<g mask="url(#fogMask)">' +
+      '<rect class="fog-geo" y="44" height="' + (H - 64) + '" style="fill: var(--bg)" opacity=".82"/>' +
+      '<rect class="fog-geo fog-stipple" y="44" height="' + (H - 64) + '" fill="url(#stipple)"/>' +
+    '</g>' +
+    '<path class="edge to-dest course-hint" id="course-hint" d="M' + (START_X + 12) + ',' + DEST.y + ' L' + (DEST.x - 16) + ',' + DEST.y + '"/>' +
+    '<g class="edges" id="edges"></g>';
+  stageEl.appendChild(svg);
+  const edgesG = svg.querySelector('#edges');
+  const fogGeo = svg.querySelectorAll('.fog-geo');
+  const setFog = (x, w) => fogGeo.forEach((r) => { r.setAttribute('x', x); r.setAttribute('width', w); });
+
+  const add = (html) => { stageEl.insertAdjacentHTML('beforeend', html); return stageEl.lastElementChild; };
+  add('<div class="start-label"><span class="kicker">Here</span><div class="meta">madrigal today</div></div>');
+  const fogTitle = add('<div class="fog-title kicker" style="left:555px">Not yet charted</div>');
+  const destEl = add('<div class="dest unnamed" style="left:' + DEST.x + 'px; top:' + DEST.y + 'px" data-od-id="destination"><span class="dest-mark" aria-hidden="true"></span><span class="kicker">Destination</span><span class="d-text" id="d-text">Not named yet</span></div>');
+
+  WS.fitCanvas(document.getElementById('viewport'), stageEl, W, H, 0.74);
+
+  function setDestOnChart() {
+    destEl.classList.toggle('unnamed', !dest);
+    document.getElementById('d-text').textContent = dest ? dest.text : (stage === 'dest' ? 'Naming it with you' : 'Not named yet');
+  }
+
+  /* fog pulls back from the whole sheet to a band before the destination */
+  function recedeFog() {
+    const t0 = performance.now(), dur = wait(1500);
+    fogTitle.style.left = '885px';
+    fogTitle.textContent = 'Not yet specified';
+    document.getElementById('course-hint').style.opacity = 0;
+    if (!dur) { setFog(FOG_BAND.x, FOG_BAND.w); return; }
+    const ease = (p) => 1 - Math.pow(1 - p, 3);
+    (function frame(now) {
+      const p = ease(Math.min(1, (now - t0) / dur));
+      setFog(FOG_WIDE.x + (FOG_BAND.x - FOG_WIDE.x) * p, FOG_WIDE.w + (FOG_BAND.w - FOG_WIDE.w) * p);
+      if (p < 1) requestAnimationFrame(frame);
+    })(t0);
+  }
+
+  /* ─── candidates on the chart ──────────────────────────────────── */
+  const isTicket = (c) => c.kind === 'ticket';
+  const blockerOf = (c) => c.blockedBy.find((b) => isTicket(CANDS[b]));
+  function layout() {
+    const tickets = CANDS.filter(isTicket), fogs = CANDS.filter((c) => !isTicket(c));
+    const free = tickets.filter((c) => blockerOf(c) == null), held = tickets.filter((c) => blockerOf(c) != null);
+    const spread = (n, i, top, bottom) => Math.round(top + (bottom - top) * (i + 0.5) / n);
+    const twoCols = free.length > 4;
+    free.forEach((c, i) => { c.x = twoCols && i % 2 ? 450 : 220; c.y = spread(free.length, i, 55, 505); });
+    const groups = {};
+    held.forEach((c) => { const b = blockerOf(c); (groups[b] = groups[b] || []).push(c); });
+    // a blocked group sits beside its blocker, shifted as a whole to stay on the sheet
+    Object.keys(groups).forEach((b) => {
+      const g = groups[b];
+      const ys = g.map((c, j) => CANDS[b].y + (j - (g.length - 1) / 2) * 125);
+      const shift = Math.max(0, 55 - ys[0]) - Math.max(0, ys[ys.length - 1] - 505);
+      g.forEach((c, j) => { c.x = twoCols ? 680 : 450; c.y = Math.round(ys[j] + shift); });
+    });
+    fogs.forEach((c, i) => { c.x = 885; c.y = spread(fogs.length, i, 55, 520) - 25; });
+  }
+
+  function candState(c) {
+    if (!isTicket(c)) return 'fog';
+    if (stage !== 'charted') return 'draft';
+    if (blockerOf(c) != null) return 'blocked';
+    if (c.type === 'research') return 'researching';
+    return c.mode === 'HITL' ? 'waiting' : 'frontier';
+  }
+  const STATE_GLYPH = { draft: 'st-pending', blocked: 'st-blocked', researching: 'st-building', waiting: 'st-ask', frontier: 'st-take', fog: 'st-pending' };
+  const STATE_WORD = { blocked: 'Blocked', researching: 'Claimed by a research subagent', waiting: 'Waiting on you', frontier: 'Frontier · unclaimed' };
+  function ticketNo(c) { return MAP_N + 1 + CANDS.filter(isTicket).indexOf(c); }
+  const typeLine = (c) => (stage === 'charted' ? '#' + ticketNo(c) + ' · ' : '') + TYPE[c.type] + ' · ' + c.mode;
+
+  const cels = [];
+  function placeCandidates(stagger) {
+    layout();
+    CANDS.forEach((c, i) => {
+      let el = cels[i];
+      if (!el) {
+        el = add('<div class="cel entering" data-od-id="chart-candidate-' + i + '"><span class="st" aria-hidden="true"></span><span class="n-label"><span class="n-name">' + esc(c.chart || c.name) + '</span><span class="n-type"></span></span></div>');
+        cels[i] = el;
+        el.style.left = c.x + 'px'; el.style.top = c.y + 'px';
+        setTimeout(() => el.classList.remove('entering'), stagger ? wait(250 + i * 140) : 0);
+      }
+      el.classList.toggle('as-fog', !isTicket(c));
+      el.style.left = c.x + 'px'; el.style.top = c.y + 'px';
+      el.querySelector('.st').className = 'st ' + STATE_GLYPH[candState(c)];
+      el.querySelector('.n-type').textContent = typeLine(c);
+    });
+    drawEdges(stagger ? wait(900) : wait(420));
+  }
+
+  let edgeTimer = null;
+  function drawEdges(delay) {
+    edgesG.style.opacity = 0;
+    clearTimeout(edgeTimer);
+    edgeTimer = setTimeout(() => {
+      const curve = (x1, y1, x2, y2) => { const dx = Math.max(36, (x2 - x1) * 0.55); return 'M' + x1 + ',' + y1 + ' C' + (x1 + dx) + ',' + y1 + ' ' + (x2 - dx) + ',' + y2 + ' ' + x2 + ',' + y2; };
+      let d = '';
+      const path = (cls, p) => { d += '<path class="edge ' + cls + '" d="' + p + '"/>'; };
+      const tickets = CANDS.filter(isTicket);
+      tickets.forEach((c) => {
+        const b = blockerOf(c);
+        if (b == null) path('start', 'M' + START_X + ',' + c.y + ' L' + (c.x - 11) + ',' + c.y);
+        else path('dep', curve(CANDS[b].x + 11, CANDS[b].y, c.x - 11, c.y));
+        const leaf = !tickets.some((o) => blockerOf(o) === CANDS.indexOf(c));
+        if (leaf) path('to-dest', curve(c.x + 11, c.y, DEST.x - 16, DEST.y));
+      });
+      edgesG.innerHTML = d;
+      edgesG.style.opacity = 1;
+    }, delay);
+  }
+
+  /* ─── charting steps ───────────────────────────────────────────── */
+  const STEPS = [['dest', 'Name the destination'], ['frontier', 'Map the frontier'], ['map', 'Create the map'], ['wire', 'Wire the tickets'], ['research', 'Fire research']];
+  document.getElementById('steps').innerHTML = STEPS.map((s, i) => '<li data-step="' + s[0] + '"><span class="st st-pending" aria-hidden="true"></span><span class="no">' + (i + 1) + '</span><span class="t">' + s[1] + '</span></li>').join('');
+  function setStep(key, state, withYou) {
+    const li = document.querySelector('[data-step="' + key + '"]');
+    li.className = state === 'pending' ? '' : state;
+    li.querySelector('.st').className = 'st ' + (state === 'done' ? 'st-done' : state === 'active' ? (withYou ? 'st-ask' : 'st-building') : 'st-pending');
+  }
+  const caption = (text) => { document.getElementById('steps-cap').textContent = text; };
+
+  /* ─── panel ────────────────────────────────────────────────────── */
+  const panel = document.getElementById('panel');
+  const msg = (who, by, text) => '<div class="msg' + (who === 'You' ? ' you' : '') + '"><span class="who">' + who + '</span><div class="body"><span class="by">' + by + '</span>' + esc(text) + '</div></div>';
+  const reveal = (d) => (reduced ? '' : ' reveal" style="--d:' + d + 'ms');
+  const focusTitle = () => { const h = panel.querySelector('h2'); if (h) h.focus(); };
+
+  function readinessHtml() {
+    return '<div class="d-head"><span class="kicker">madrigal · connected today</span><h2 tabindex="-1">Ready for the skill line</h2>' +
+        '<p class="d-lead">Waystation read the setup that /setup-matt-pocock-skills wrote. The skill line above shows which skills are installed.</p></div>' +
+      '<div class="block" data-od-id="setup-found"><span class="kicker">Setup it found</span><ul class="checks">' +
+        '<li>' + glyph('landed') + '<span><b>Issue tracker</b><span class="meta">GitHub Issues, from docs/agents/issue-tracker.md</span></span></li>' +
+        '<li>' + glyph('landed') + '<span><b>Triage labels</b><span class="meta">ready-for-agent and the four other defaults</span></span></li>' +
+        '<li>' + glyph('landed') + '<span><b>Domain docs</b><span class="meta">CONTEXT.md at the root. No ADRs yet.</span></span></li>' +
+        '<li><span class="st st-pending" aria-hidden="true"></span><span><b>Wayfinder labels</b><span class="meta">wayfinder:map and the four ticket types. Created with your first map.</span></span></li>' +
+        '<li>' + glyph('blocked') + '<span><b>/code-review is not installed</b><span class="meta">PRs come to your desk without a review pass. Add it from mattpocock/skills.</span></span></li>' +
+      '</ul></div>' +
+      '<div class="block" data-od-id="skip-the-map"><span class="kicker">Not every idea needs a map</span>' +
+        '<p class="prose">If the way is already clear and the work fits one agent session, skip charting. Run <span class="skill">/to-spec</span> in the Claude Code session where you talked it through.</p>' +
+        '<p class="prose">Specs labelled <span class="skill">ready-for-agent</span> join the line at /to-tickets on their own. There are none in madrigal yet.</p></div>' +
+      '<div class="block" data-od-id="map-key"><span class="kicker">How a map fills in</span><ul class="keys">' +
+        '<li><i class="mini-dest" aria-hidden="true"></i><span><b>Destination</b><span class="meta">What reaching the end looks like. Named first, because it fixes the scope.</span></span></li>' +
+        '<li>' + glyph('takeable') + '<span><b>Frontier</b><span class="meta">Tickets that are open, unblocked and unclaimed</span></span></li>' +
+        '<li>' + glyph('blocked') + '<span><b>Blocked</b><span class="meta">Sharp questions that wait on another ticket</span></span></li>' +
+        '<li><i class="fog-key" aria-hidden="true"></i><span><b>Fog</b><span class="meta">In scope, but not sharp enough to ticket yet</span></span></li>' +
+        '<li>' + glyph('landed') + '<span><b>Decided</b><span class="meta">A closed ticket with its resolution. Fog clears ahead of it.</span></span></li>' +
+      '</ul></div>';
+  }
+
+  function destinationHtml() {
+    return '<div class="d-head"><span class="kicker">/wayfinder · charting with you</span><h2 tabindex="-1">Name the destination</h2>' +
+        '<p class="d-lead">The destination fixes the scope, so it’s settled before anything becomes a ticket. /grilling and /domain-modeling run together.</p></div>' +
+      '<div class="block" data-od-id="destination-session"><div class="convo" id="convo">' +
+        msg('You', 'You · loose idea', idea) +
+        msg('AI', '/grilling', 'Before anything else: what does reaching the end of this look like? I can see three kinds of destination. I’d start with the spec, because the language question touches the Library, Attribution and rendering at once.') +
+      '</div>' +
+      '<div class="choices" role="radiogroup" aria-label="Destination">' + Object.keys(DESTS).map((k) =>
+        '<button type="button" class="choice" role="radio" aria-checked="' + (k === 'spec') + '" data-dest="' + k + '"><span class="radio"></span><span><span class="c-title">' + DESTS[k].kind + '</span><span class="c-sub" style="display:block">' + esc(DESTS[k].text) + '</span></span></button>').join('') + '</div>' +
+      '<label class="field-label" for="dest-own" style="margin-top:12px">Or say it in your own words</label>' +
+      '<textarea class="textarea" id="dest-own" style="min-height:64px" placeholder="Used instead of the options above if you write one."></textarea>' +
+      '<div class="act" id="dest-act"><button type="button" class="btn btn-primary" id="set-dest" data-od-id="set-destination">Set the destination</button></div></div>';
+  }
+
+  function sortHtml() {
+    return '<div class="d-head"><span class="kicker">/wayfinder · breadth-first</span><h2 tabindex="-1">Ticket or fog?</h2>' +
+        '<p class="d-lead">I fanned out across the whole idea instead of going deep on one thread. A question becomes a ticket if it can be stated precisely now, even if it can’t be answered yet. Move anything I sorted wrongly.</p></div>' +
+      '<div class="block" data-od-id="ticket-or-fog"><span class="kicker" id="sort-count"></span><ul class="sort" id="sort">' +
+        CANDS.map((c, i) => '<li class="' + (isTicket(c) ? '' : 'is-fog') + reveal(200 + i * 110) + '" data-i="' + i + '" data-od-id="candidate-' + i + '">' +
+          '<span><span class="c-name">' + esc(c.name) + '</span><span class="c-type"></span></span>' +
+          '<span class="seg" role="radiogroup" aria-label="Ticket or fog">' +
+            '<button type="button" role="radio" data-kind="ticket" aria-checked="' + isTicket(c) + '">Ticket</button>' +
+            '<button type="button" role="radio" data-kind="fog" aria-checked="' + !isTicket(c) + '">Fog</button></span></li>').join('') +
+      '</ul></div>' +
+      '<div class="block" data-od-id="create-map"><p class="prose">Creates the map on GitHub with its tickets as child issues, then wires blocking in a second pass. Research tickets start straight away.</p>' +
+        '<div class="act"><button type="button" class="btn btn-primary" id="create" data-od-id="create-map-button">Create the map</button><span class="meta" id="create-hint" aria-live="polite"></span></div></div>';
+  }
+
+  function chartedHtml() {
+    const tickets = CANDS.filter(isTicket), fogs = CANDS.filter((c) => !isTicket(c));
+    const order = { waiting: 0, researching: 1, frontier: 2, blocked: 3 };
+    const listed = tickets.slice().sort((a, b) => order[candState(a)] - order[candState(b)]);
+    const firstHitl = listed.find((c) => candState(c) === 'waiting' || candState(c) === 'frontier');
+    return '<div class="d-head"><span class="kicker">Map #' + MAP_N + ' · wayfinder:map</span><h2 tabindex="-1">' + esc(dest.title) + '</h2>' +
+        '<p class="d-lead">Charted today. Charting resolves nothing, so the session stopped once research was running.</p></div>' +
+      '<div class="block"><span class="kicker">Destination</span><p class="prose serif">' + esc(dest.text) + '</p></div>' +
+      '<div class="block"><span class="kicker">Notes</span><p class="prose">' + esc(NOTES) + '</p></div>' +
+      '<div class="block" data-od-id="new-frontier"><span class="kicker">On the map · ' + tickets.length + ' tickets</span><ul class="frontier">' +
+        listed.map((c) => '<li><span class="st ' + STATE_GLYPH[candState(c)] + '" aria-hidden="true"></span><span><span class="f-name">' + esc(c.name) + '<span class="id">#' + ticketNo(c) + '</span></span><span class="meta">' + STATE_WORD[candState(c)] + ' · ' + TYPE[c.type] + ', ' + c.mode + '</span></span></li>').join('') +
+      '</ul></div>' +
+      '<div class="block"><span class="kicker">Not yet specified · ' + fogs.length + '</span>' + (fogs.length ? fogs.map((c) => '<p class="fog-note">' + esc(c.name) + '</p>').join('') : '<p class="prose">No fog. If the way is already this clear, the idea may not need a map.</p>') + '</div>' +
+      '<div class="block"><span class="kicker">Decisions so far · 0</span><p class="prose">' + (firstHitl ? 'When you’re ready, work through the map. /wayfinder takes the first frontier ticket: ' + esc(firstHitl.name) : 'Research lands on its own. Work through the map once it closes.') + '</p></div>';
+  }
+
+  /* ─── flow ─────────────────────────────────────────────────────── */
+  function paintHead() {
+    const kicker = document.getElementById('c-kicker'), title = document.getElementById('c-title'), lead = document.getElementById('c-lead');
+    const legend = document.getElementById('legend');
+    if (stage === 'empty') return;
+    if (stage === 'charted') {
+      kicker.textContent = '/wayfinder · map #' + MAP_N + ' · charted today';
+      title.textContent = dest.title;
+      lead.hidden = true;
+      legend.hidden = false;
+    } else {
+      kicker.textContent = '/wayfinder · charting a new map';
+      title.textContent = 'From a loose idea';
+      lead.textContent = '“' + idea + '”';
+      lead.classList.add('idea');
+    }
+  }
+
+  function startCharting(text) {
+    idea = text;
+    stage = 'dest';
+    const composer = document.getElementById('composer');
+    composer.classList.add('leaving');
+    setTimeout(() => composer.remove(), wait(360));
+    paintHead();
+    setDestOnChart();
+    setStep('dest', 'active', true);
+    caption('With you: /grilling and /domain-modeling pin down where this map is going.');
+    panel.innerHTML = destinationHtml();
+    bindDestination();
+    focusTitle();
+  }
+
+  function bindDestination() {
+    const choices = panel.querySelectorAll('.choices .choice');
+    choices.forEach((ch) => ch.addEventListener('click', () => {
+      if (ch.getAttribute('tabindex') === '-1') return;
+      choices.forEach((o) => o.setAttribute('aria-checked', String(o === ch)));
+    }));
+    const set = document.getElementById('set-dest');
+    set.addEventListener('click', () => {
+      if (set.getAttribute('aria-disabled') === 'true') return;
+      const own = document.getElementById('dest-own').value.trim();
+      const key = panel.querySelector('.choices .choice[aria-checked="true"]').dataset.dest;
+      dest = own ? { key: 'own', text: own, title: DESTS.spec.title } : { key: key, text: DESTS[key].text, title: DESTS[key].title };
+      set.setAttribute('aria-disabled', 'true');
+      set.classList.replace('btn-primary', 'btn-secondary');
+      set.textContent = 'Destination set';
+      choices.forEach((o) => o.setAttribute('tabindex', '-1'));
+      document.getElementById('dest-own').readOnly = true;
+      setDestOnChart();
+      setStep('dest', 'done');
+      caption('Destination named. Next, a breadth-first pass across the whole idea.');
+      document.getElementById('convo').insertAdjacentHTML('beforeend', msg('AI', '/domain-modeling', 'Written to the map’s Notes: every session consults /domain-modeling for “voice” and “language”. Next I’ll fan out across the whole idea, not deep on any one thread.'));
+      document.getElementById('dest-act').insertAdjacentHTML('afterend', '<div class="act"><button type="button" class="btn btn-primary" id="to-frontier" data-od-id="map-the-frontier">Map the frontier</button></div>');
+      document.getElementById('to-frontier').addEventListener('click', mapFrontier);
+    });
+  }
+
+  function mapFrontier() {
+    stage = 'frontier';
+    setStep('frontier', 'active', true);
+    caption('With you: sort what’s sharp enough to ticket from what is still fog.');
+    recedeFog();
+    placeCandidates(true);
+    panel.innerHTML = sortHtml();
+    paintSort();
+    bindSort();
+    focusTitle();
+  }
+
+  function paintSort() {
+    const t = CANDS.filter(isTicket).length, f = CANDS.length - t;
+    document.getElementById('sort-count').textContent = t + (t === 1 ? ' ticket' : ' tickets') + ' · ' + f + (f === 1 ? ' patch' : ' patches') + ' of fog';
+    panel.querySelectorAll('#sort li').forEach((li) => {
+      const c = CANDS[Number(li.dataset.i)];
+      const b = blockerOf(c);
+      li.classList.toggle('is-fog', !isTicket(c));
+      li.querySelector('.c-type').textContent = isTicket(c) ? TYPE[c.type] + ' · ' + c.mode + (b != null ? ' · blocked' : '') : 'Fog · coarser than a ticket';
+      li.querySelectorAll('.seg button').forEach((btn) => btn.setAttribute('aria-checked', String(btn.dataset.kind === c.kind)));
+    });
+  }
+
+  function bindSort() {
+    panel.querySelectorAll('#sort .seg button').forEach((btn) => btn.addEventListener('click', () => {
+      if (btn.getAttribute('aria-disabled') === 'true') return;
+      const c = CANDS[Number(btn.closest('li').dataset.i)];
+      if (c.kind === btn.dataset.kind) return;
+      c.kind = btn.dataset.kind;
+      paintSort();          // attributes only, so the pressed button keeps focus
+      placeCandidates(false);
+    }));
+    const create = document.getElementById('create');
+    create.addEventListener('click', () => {
+      if (create.getAttribute('aria-disabled') === 'true') return;
+      if (!CANDS.some(isTicket)) {
+        const h = document.getElementById('create-hint');
+        h.textContent = 'With nothing to ticket, the way is already clear. Write a spec instead.';
+        h.style.color = 'var(--fg)';
+        return;
+      }
+      createMap(create);
+    });
+  }
+
+  function createMap(btn) {
+    btn.setAttribute('aria-disabled', 'true');
+    btn.classList.replace('btn-primary', 'btn-secondary');
+    btn.textContent = 'Creating the map';
+    panel.querySelectorAll('#sort .seg button').forEach((b) => { b.setAttribute('aria-disabled', 'true'); b.setAttribute('tabindex', '-1'); });
+    setStep('frontier', 'done');
+    setStep('map', 'active');
+    caption('Creating map #' + MAP_N + ' with its Destination, Notes and Not yet specified.');
+    setTimeout(() => {
+      setStep('map', 'done'); setStep('wire', 'active');
+      document.getElementById('c-kicker').textContent = '/wayfinder · map #' + MAP_N + ' · charted today';
+      document.getElementById('c-title').textContent = dest.title;
+      caption('Tickets created as child issues. Wiring blocking in a second pass.');
+    }, wait(800));
+    setTimeout(() => {
+      stage = 'wired';
+      cels.forEach((el, i) => { if (isTicket(CANDS[i])) el.querySelector('.n-type').textContent = '#' + ticketNo(CANDS[i]) + ' · ' + TYPE[CANDS[i].type] + ' · ' + CANDS[i].mode; });
+      setStep('wire', 'done'); setStep('research', 'active');
+      caption('Firing a /research subagent for each research ticket.');
+    }, wait(1600));
+    setTimeout(() => {
+      stage = 'charted';
+      const research = CANDS.filter((c) => isTicket(c) && c.type === 'research' && blockerOf(c) == null).length;
+      WS.mark('madrigal', 'idea', idea);
+      WS.mark('madrigal', 'dest', dest);
+      WS.mark('madrigal', 'kinds', CANDS.map((c) => c.kind));
+      WS.mark('madrigal', 'research', research);
+      WS.mark('madrigal', 'charted');
+      showCharted(true);
+    }, wait(2500));
+  }
+
+  function showCharted(live) {
+    STEPS.forEach((s) => setStep(s[0], 'done'));
+    caption('Charted. Charting resolves nothing, so it ends here. Research runs on its own.');
+    paintHead();
+    setDestOnChart();
+    placeCandidates(false);
+    panel.innerHTML = chartedHtml();
+    WS.renderTopbar({ page: 'firstrun', repo: 'madrigal' });
+    WS.renderRoute({ page: 'firstrun', effort: 'madrigal' });
+    if (live) focusTitle();
+  }
+
+  /* ─── start ────────────────────────────────────────────────────── */
+  if (stage === 'charted' && dest) {
+    document.getElementById('composer').remove();
+    setFog(FOG_BAND.x, FOG_BAND.w);
+    fogTitle.style.left = '885px';
+    fogTitle.textContent = 'Not yet specified';
+    document.getElementById('course-hint').style.opacity = 0;
+    showCharted(false);
+  } else {
+    stage = 'empty';
+    setFog(FOG_WIDE.x, FOG_WIDE.w);
+    setDestOnChart();
+    caption('Charting is one session’s work. It names the destination, maps the frontier, and stops once research is running.');
+    panel.innerHTML = readinessHtml();
+    const ta = document.getElementById('idea'), hint = document.getElementById('idea-hint');
+    document.getElementById('example').addEventListener('click', () => { ta.value = EXAMPLE; hint.textContent = ''; });
+    document.getElementById('composer').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = ta.value.trim();
+      if (!text) { hint.textContent = 'Write the idea first. A rough sentence is enough.'; hint.style.color = 'var(--fg)'; ta.focus(); return; }
+      startCharting(text);
+    });
+  }
+})();
+</script>
+</body>
+</html>

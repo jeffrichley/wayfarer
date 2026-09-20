@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Build · ACX compliance before delivery · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .build-split { grid-template-columns: 300px minmax(0, 1fr) 330px; }
+
+    /* lanes */
+    .lanes { padding: 18px 0 24px; }
+    .lanes .kicker { display: block; padding: 0 20px 8px; }
+    .lane {
+      display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 4px 11px; width: 100%;
+      padding: 12px 20px 13px; text-align: left; background: none; border: 0; border-top: 1px solid var(--border);
+      cursor: pointer; transition: background-color .15s ease;
+    }
+    .lane:hover { background: var(--hover); }
+    .lane[aria-pressed="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); }
+    .lane:focus-visible { outline-offset: -2px; }
+    .lane .st { margin-top: 3px; }
+    .lane .l-name { font-size: 14px; line-height: 1.35; font-weight: 500; }
+    .lane .l-meta { grid-column: 2; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+    .lane .l-beat { grid-column: 2; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .lane .l-beat.ask { color: var(--fg); font-weight: 500; }
+    .lane .l-ticks { grid-column: 2; display: flex; gap: 2px; margin-top: 3px; }
+    .lane .l-ticks i { flex: 1; max-width: 26px; height: 3px; background: var(--line); }
+    .lane .l-ticks i.on { background: var(--fg); }
+    .lanes-group + .lanes-group { margin-top: 22px; }
+    .other { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 4px 11px; padding: 11px 20px; border-top: 1px solid var(--border); }
+    .other .st { margin-top: 3px; }
+    .other .o-name { font-size: 13.5px; line-height: 1.35; }
+    .other .o-meta { grid-column: 2; font-size: 12px; color: var(--muted); }
+    .other .o-act { grid-column: 2; margin-top: 6px; }
+
+    /* story */
+    .story { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+    .s-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 20px 32px 16px; border-bottom: 1px solid var(--border); }
+    .s-head h1 { font-size: 28px; line-height: 1.15; margin: 6px 0 8px; }
+    .s-head h1 a { text-decoration: none; }
+    .s-head h1 a:hover { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+    .s-state { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2); }
+    .s-controls { display: flex; gap: 6px; flex: none; }
+    .beats-pane { padding: 8px 32px 28px; }
+    .beats { max-width: 760px; }
+    .chap { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; padding: 22px 0 8px; }
+    .chap .c-label { grid-column: 2; font-family: var(--font-display); font-size: 17.5px; line-height: 1.3; }
+    .chap .c-label .kicker { display: block; margin-bottom: 2px; }
+    .beat { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 7px 0; align-items: start; animation: rise .35s ease both; }
+    .beat time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+    .beat .mk { display: grid; place-items: center; height: 21px; }
+    .beat .txt { font-size: 14.5px; line-height: 1.55; }
+    .beat .txt code { font-size: 12.5px; background: var(--wash); border: 1px solid var(--border); padding: 0 4px; border-radius: 2px; }
+    .beat .txt .tname { font-family: var(--font-display); font-size: 15.5px; }
+    .beat.you .txt { font-weight: 500; }
+    .mk-read { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+    .mk-note { width: 9px; height: 1.5px; background: var(--fg); }
+    .mk-refactor { width: 10px; height: 10px; border: 1.5px solid var(--fg); }
+    .mk-you { width: 8px; height: 8px; background: var(--fg); transform: rotate(45deg); }
+    .toggle { background: none; border: 0; padding: 2px 0; margin-top: 2px; cursor: pointer; font-size: 12.5px; color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    .toggle:hover { text-decoration-color: var(--fg); }
+    pre.out { margin: 8px 0 2px; padding: 10px 12px; background: var(--wash); border: 1px solid var(--border); border-radius: 3px; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+    .working { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 9px 0; color: var(--ink-2); font-size: 14px; }
+    .working .mk { display: grid; place-items: center; height: 21px; }
+    .working .num { color: var(--muted); font-size: 12px; margin-left: 6px; }
+    @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .q-wrap { margin: 18px 0 0 64px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); max-width: 640px; }
+    .q-wrap > .kicker { display: block; margin-bottom: 12px; }
+
+    .composer { border-top: 1px solid var(--border); padding: 12px 32px 14px; background: var(--bg); }
+    .composer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; max-width: 760px; }
+    .composer .textarea { min-height: 42px; height: 42px; resize: none; }
+    .composer .meta { margin-top: 6px; }
+
+    /* evidence */
+    .rhythm { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .rhythm .tr { width: 14px; height: 14px; }
+    .files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 6px 0; font-size: 12.5px; }
+    .files .f-path { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+    .files .f-num { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+    .files .f-bar { grid-column: 1 / 3; display: flex; height: 3px; gap: 1px; }
+    .files .f-bar .add { background: var(--fg); }
+    .files .f-bar .del { background: repeating-linear-gradient(90deg, var(--fg) 0 2px, transparent 2px 4px); }
+
+    @media (max-width: 1320px) { .build-split { grid-template-columns: 270px minmax(0, 1fr) 290px; } .beats-pane, .s-head, .composer { padding-inline: 24px; } }
+    @media (max-width: 920px) { .s-head { flex-direction: column; } .q-wrap { margin-left: 0; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+
+  <main class="split build-split" id="content">
+    <aside class="pane side-l lanes" id="lanes" data-od-id="session-lanes"></aside>
+
+    <section class="story" data-od-id="session-story">
+      <div class="s-head" id="s-head"></div>
+      <div class="pane beats-pane" id="beats-pane"><ol class="beats" id="beats" aria-live="polite"></ol></div>
+      <div class="composer" id="composer" data-od-id="nudge-composer">
+        <div class="composer-row">
+          <div>
+            <label class="sr-only" for="note">Note for this session</label>
+            <textarea class="textarea" id="note" placeholder="Leave a note for this session. It reads it before its next step."></textarea>
+          </div>
+          <button type="button" class="btn btn-primary" id="send-note" data-od-id="send-note">Send note</button>
+        </div>
+        <p class="meta" id="note-hint">Notes steer the agent without stopping it. Use Pause to stop it.</p>
+      </div>
+    </section>
+
+    <aside class="side pane" id="evidence" data-od-id="session-evidence"></aside>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { ticket, glyph, esc } = WS;
+  WS.renderTopbar({ page: 'build', effort: 'acx' });
+  WS.renderRoute({ page: 'build', effort: 'acx' });
+
+  const tn = (n) => '<span class="tname">' + esc(ticket(n).name) + '</span>';
+  const SESSIONS = {
+    128: {
+      started: '09:05', minutes: 41,
+      files: [['worker/analysis/pass.ts', 31, 6], ['worker/analysis/limits.ts', 2, 0], ['worker/analysis/checks/noise-floor.ts', 38, 0], ['worker/analysis/checks/noise-floor.test.ts', 64, 0]],
+      beats: [
+        { chap: 'Orient' },
+        { t: '09:05', k: 'read', x: 'Claimed ' + tn(128) + ' and created wt/noise-floor from main.' },
+        { t: '09:06', k: 'read', x: 'Read the ticket, then the spec’s decisions on single-pass analysis and plain-language failures.' },
+        { t: '09:08', k: 'note', x: 'The pass from ' + tn(125) + ' already runs astats, so the noise floor can join that pass instead of adding a second one.' },
+        { chap: 'Measure the noise floor of every chapter', c: 0 },
+        { t: '09:11', k: 'red', x: 'Wrote <code>measures noise floor of the hiss fixture</code>. Fails as expected: the analysis result has no noise floor yet.', out: 'FAIL  checks/noise-floor.test.ts\n  ✗ measures noise floor of the hiss fixture\n    expected analysis.noiseFloorDb to be a number, received undefined\n\nTests: 1 failed, 11 passed' },
+        { t: '09:15', k: 'green', x: 'Read the noise floor from the same astats output. 12 passing.' },
+        { chap: 'Chapters above −60 dB fail the check', c: 1 },
+        { t: '09:19', k: 'red', x: 'Wrote <code>flags the hiss fixture at -54 dB</code>. Fails: there is no noise floor check.' },
+        { t: '09:24', k: 'green', x: 'Added the check beside loudness and peaks. 13 passing.' },
+        { t: '09:26', k: 'refactor', x: 'Moved the −60 dB limit into the shared ACX limits, next to RMS and peak. Still 13 passing.' },
+        { chap: 'Failures explain the value, the limit, and the timestamp', c: 2 },
+        { t: '09:30', k: 'red', x: 'Wrote <code>explains a noise floor failure</code>. Fails: the reason is empty.' },
+        { t: '09:36', k: 'green', x: 'Reused the explanation shape from the loudness check. 14 passing.' },
+        { chap: 'The clean fixture passes', c: 3 },
+        { t: '09:39', k: 'red', x: 'Wrote <code>passes the clean fixture</code>. Fails: the clean fixture measures −58 dB.', out: 'FAIL  checks/noise-floor.test.ts\n  ✗ passes the clean fixture\n    expected status "pass", received "fail"\n    measured -58.0 dB, limit -60 dB, loudest at 41:12.6\n\nTests: 1 failed, 14 passed' },
+        { t: '09:41', k: 'note', x: 'The loudest “noise” is the room tone at the tail. ' + tn(131) + ' checks room tone on its own, so it should not count here.' },
+      ],
+      live: [
+        { k: 'note', x: 'Measuring the noise floor over speech-free stretches only, leaving out the room tone at the head and tail.' },
+        { k: 'green', x: '<code>passes the clean fixture</code> now passes at −63.1 dB, and the hiss fixture still fails at −54 dB. 15 passing.', crit: 3 },
+        { k: 'refactor', x: 'Named the speech-free window so the room tone check can reuse it. Still 15 passing.' },
+        { k: 'read', x: 'All four criteria pass. Running the full worker suite before opening a PR.' },
+      ],
+    },
+    129: {
+      started: '09:28', minutes: 18,
+      files: [['worker/analysis/checks/duration.ts', 22, 0], ['worker/analysis/checks/duration.test.ts', 30, 0], ['app/compliance/format.ts', 4, 1]],
+      beats: [
+        { chap: 'Orient' },
+        { t: '09:28', k: 'read', x: 'Claimed ' + tn(129) + ' and created wt/chapter-duration from main.' },
+        { t: '09:29', k: 'note', x: 'Chapter length is already in the analysis result, so this check needs no new measurement.' },
+        { chap: 'Chapters over 120 minutes fail the check', c: 0 },
+        { t: '09:33', k: 'red', x: 'Wrote <code>flags the 124-minute fixture</code>. Fails: there is no duration check.' },
+        { t: '09:37', k: 'green', x: 'Added the duration check. 12 passing.' },
+        { chap: 'The failure shows the chapter’s length against the limit', c: 1 },
+        { t: '09:40', k: 'read', x: 'Reading how the Compliance page shows a measured value against its limit.' },
+      ],
+      live: [
+        { k: 'red', x: 'Wrote <code>shows length against the limit</code>. Fails: the page prints 7,440 seconds instead of 2 h 4 min.' },
+        { k: 'green', x: 'Formatted durations as hours and minutes. 13 passing.', crit: 1 },
+      ],
+    },
+    130: {
+      started: '08:40', minutes: 38, paused: true,
+      files: [['worker/manuscript/credits.ts', 41, 0], ['worker/manuscript/credits.test.ts', 58, 0]],
+      beats: [
+        { chap: 'Orient' },
+        { t: '08:40', k: 'read', x: 'Claimed ' + tn(130) + ' and created wt/credits from main.' },
+        { t: '08:42', k: 'note', x: 'Credits are manuscript content, not audio, so this check reads the parsed manuscript instead of the analysis pass.' },
+        { chap: 'EPUB books without credits in front or back matter fail', c: 0 },
+        { t: '08:50', k: 'red', x: 'Wrote <code>flags an EPUB with no closing credits</code>. Fails: there is no credits check.' },
+        { t: '08:58', k: 'green', x: 'Front and back matter are now checked for credits. 12 passing.' },
+        { chap: 'The failure names which credit is missing', c: 1 },
+        { t: '09:03', k: 'red', x: 'Wrote <code>names the missing credit</code>. Fails: the reason says “credits missing” without saying which.' },
+        { t: '09:09', k: 'green', x: 'The reason now names the opening or closing credit. 13 passing.' },
+        { chap: 'DOCX books follow the agreed rule', c: 2 },
+        { t: '09:14', k: 'note', x: 'DOCX manuscripts have no front or back matter markers, so there is no reliable place to look for credits.' },
+        { t: '09:18', k: 'ask', x: 'Paused to ask you before writing the test, because either answer changes what the test asserts.' },
+      ],
+      live: [
+        { k: 'read', x: 'Resuming with your answer. Writing the DOCX test to match it.' },
+        { k: 'red', x: 'Wrote <code>DOCX books follow the agreed rule</code>. Fails: DOCX books skip the check.' },
+        { k: 'green', x: 'DOCX books now follow your rule. 14 passing.', crit: 2 },
+      ],
+    },
+    132: {
+      started: 'now', minutes: 0,
+      files: [],
+      beats: [
+        { chap: 'Orient' },
+        { t: 'now', k: 'read', x: 'Claimed ' + tn(132) + ' and created wt/books-status from main.' },
+      ],
+      live: [
+        { k: 'read', x: 'Reading the ticket and the compliance read model the spec agreed on.' },
+        { k: 'note', x: 'My Books already loads every book in one query, so status can come from the read model per book.' },
+      ],
+    },
+  };
+
+  const liveIds = () => [128, 129, 130, 132].filter((n) => ['building', 'asking'].indexOf(ticket(n).state) !== -1);
+  let current = Number(WS.param('session'));
+  if (liveIds().indexOf(current) === -1) current = liveIds()[0] || 128;
+  const played = {};      // how many live beats each session has revealed
+  const critDone = {};    // criteria completed during this view
+  const paused = {};
+
+  /* ─── lanes ────────────────────────────────────────────────────── */
+  const lanesEl = document.getElementById('lanes');
+  function laneBeat(n) {
+    const s = SESSIONS[n], t = ticket(n);
+    if (t.state === 'asking') return { text: 'Asked you: ' + t.question.text.split('. ').slice(-1)[0], ask: true };
+    const p = played[n] || 0;
+    const b = p ? s.live[p - 1] : s.beats[s.beats.length - 1];
+    return { text: b.x.replace(/<[^>]+>/g, ''), ask: false };
+  }
+  function doneCount(n) { const t = ticket(n); return t.criteria.filter((c, i) => c.done === true || (critDone[n] && critDone[n][i])).length; }
+  function renderLanes() {
+    const ids = liveIds();
+    let html = '<div class="lanes-group"><span class="kicker">On the frontier · ' + ids.length + ' sessions</span>';
+    ids.forEach((n) => {
+      const t = ticket(n), s = SESSIONS[n], beat = laneBeat(n), done = doneCount(n);
+      const state = paused[n] ? 'pending' : t.state;
+      html += '<button type="button" class="lane" data-n="' + n + '" aria-pressed="' + (n === current) + '" data-od-id="lane-' + n + '">' +
+        (state === 'pending' ? '<span class="st st-pending" aria-hidden="true"></span>' : glyph(t.state)) +
+        '<span class="l-name">' + esc(t.name) + '</span>' +
+        '<span class="l-meta">wt/' + t.wt + ' · ' + (t.state === 'asking' ? 'paused' : paused[n] ? 'paused by you' : (s.minutes ? s.minutes + ' min' : 'just started')) + '</span>' +
+        '<span class="l-beat' + (beat.ask ? ' ask' : '') + '">' + esc(beat.text) + '</span>' +
+        '<span class="l-ticks" aria-label="' + done + ' of ' + t.criteria.length + ' criteria">' + t.criteria.map((c, i) => '<i class="' + (i < done ? 'on' : '') + '"></i>').join('') + '</span></button>';
+    });
+    html += '</div>';
+
+    const others = [];
+    const t127 = ticket(127);
+    if (t127.state === 'review') others.push('<div class="other">' + glyph('review') + '<a class="nm o-name" href="review-desk.html?item=pr-141">' + esc(t127.name) + '</a><span class="o-meta">Handed to /code-review · PR #141</span></div>');
+    const t132 = ticket(132);
+    if (t132.state === 'takeable') others.push('<div class="other">' + glyph('takeable') + '<span class="o-name">' + esc(t132.name) + '</span><span class="o-meta">Takeable now · nobody on it</span><span class="o-act"><button type="button" class="btn btn-secondary btn-sm" id="start-132" data-od-id="start-agent-132">Start an agent</button></span></div>');
+    others.push('<div class="other">' + glyph('blocked') + '<span class="o-name">' + esc(ticket(131).name) + '</span><span class="o-meta">Starts when ' + esc(ticket(128).short.toLowerCase()) + ' lands</span></div>');
+    html += '<div class="lanes-group"><span class="kicker">Around it</span>' + others.join('') + '</div>';
+
+    if (!lanesEl.childElementCount) {
+      lanesEl.innerHTML = html;
+    } else {
+      // update in place so a clicked lane keeps focus
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const oldLanes = lanesEl.querySelectorAll('.lane');
+      const newLanes = tmp.querySelectorAll('.lane');
+      if (oldLanes.length === newLanes.length) {
+        newLanes.forEach((nl, i) => { oldLanes[i].innerHTML = nl.innerHTML; oldLanes[i].setAttribute('aria-pressed', nl.getAttribute('aria-pressed')); });
+        const og = lanesEl.querySelectorAll('.lanes-group')[1], ng = tmp.querySelectorAll('.lanes-group')[1];
+        if (og.innerHTML !== ng.innerHTML && !og.contains(document.activeElement)) og.innerHTML = ng.innerHTML;
+        lanesEl.querySelector('.lanes-group .kicker').textContent = tmp.querySelector('.lanes-group .kicker').textContent;
+      } else {
+        lanesEl.innerHTML = html;
+      }
+    }
+    bindLanes();
+  }
+  function bindLanes() {
+    lanesEl.querySelectorAll('.lane').forEach((b) => { b.onclick = () => { current = Number(b.dataset.n); history.replaceState(null, '', '?session=' + current); renderSession(); renderLanes(); }; });
+    const start = document.getElementById('start-132');
+    if (start) start.onclick = () => {
+      WS.mark('started', 132);
+      start.setAttribute('aria-disabled', 'true');
+      start.textContent = 'Agent started';
+      SESSIONS[132].minutes = 0;
+      WS.renderTopbar({ page: 'build', effort: 'acx' });
+      WS.renderRoute({ page: 'build', effort: 'acx' });
+      lanesEl.innerHTML = '';
+      current = 132;
+      renderLanes(); renderSession();
+      const lane = lanesEl.querySelector('.lane[data-n="132"]');
+      if (lane) lane.focus();
+    };
+  }
+
+  /* ─── session story ────────────────────────────────────────────── */
+  const beatsEl = document.getElementById('beats');
+  const pane = document.getElementById('beats-pane');
+  const MARK = {
+    read: '<span class="mk-read" aria-label="Read"></span>', note: '<span class="mk-note" aria-label="Note"></span>',
+    red: '<span class="tr tr-red" aria-label="Failing test"></span>', green: '<span class="tr tr-green" aria-label="Passing test"></span>',
+    refactor: '<span class="mk-refactor" aria-label="Refactor"></span>', you: '<span class="mk-you" aria-label="You"></span>',
+    ask: '<span class="st st-ask" aria-label="Question"></span>',
+  };
+  const nowStamp = () => { const d = new Date(2026, 8, 15, 9, 46); const m = d.getMinutes() + Math.floor((Date.now() - loadedAt) / 60000); return '09:' + String(Math.min(59, m)).padStart(2, '0'); };
+  const loadedAt = Date.now();
+
+  function beatHtml(b, t) {
+    if (b.chap) {
+      const crit = b.c != null ? 'Criterion ' + (b.c + 1) + ' of ' + t.criteria.length : 'Before any test';
+      return '<li class="chap"><span class="c-label"><span class="kicker">' + crit + '</span>' + esc(b.chap) + '</span></li>';
+    }
+    return '<li class="beat' + (b.k === 'you' ? ' you' : '') + '"><time>' + (b.t || nowStamp()) + '</time><span class="mk">' + MARK[b.k] + '</span><div class="txt">' + b.x +
+      (b.out ? '<div><button type="button" class="toggle" aria-expanded="false">Show test output</button><pre class="out" hidden>' + esc(b.out) + '</pre></div>' : '') + '</div></li>';
+  }
+
+  function renderHead(t, s) {
+    const asking = t.state === 'asking', isPaused = paused[t.n];
+    const stateLine = asking ? glyph('asking') + '<span>Waiting on you · paused at 09:18</span>'
+      : isPaused ? '<span class="st st-pending" aria-hidden="true"></span><span>Paused by you</span>'
+      : glyph('building') + '<span>Building · started ' + s.started + (s.minutes ? ' · ' + s.minutes + ' min' : '') + '</span>';
+    document.getElementById('s-head').innerHTML =
+      '<div><span class="kicker">/tdd · Claude Code · wt/' + t.wt + ' · issue #' + t.n + '</span>' +
+      '<h1><a href="ticket-graph.html#' + t.n + '">' + esc(t.name) + '</a></h1>' +
+      '<div class="s-state" id="s-state">' + stateLine + '</div></div>' +
+      '<div class="s-controls"><button type="button" class="btn btn-ghost" data-od-id="open-terminal" id="terminal">Open terminal</button>' +
+      (asking ? '' : '<button type="button" class="btn btn-secondary" id="pause" aria-pressed="' + !!isPaused + '" data-od-id="pause-session">' + (isPaused ? 'Resume' : 'Pause') + '</button>') + '</div>';
+    const pause = document.getElementById('pause');
+    if (pause) pause.addEventListener('click', () => {
+      paused[t.n] = !paused[t.n];
+      pause.setAttribute('aria-pressed', String(!!paused[t.n]));
+      pause.textContent = paused[t.n] ? 'Resume' : 'Pause';
+      document.getElementById('s-state').innerHTML = paused[t.n] ? '<span class="st st-pending" aria-hidden="true"></span><span>Paused by you</span>' : glyph('building') + '<span>Building · started ' + s.started + '</span>';
+      setWorking();
+      renderLanes();
+    });
+    const term = document.getElementById('terminal');
+    term.addEventListener('click', () => { term.textContent = 'Terminal opened in wt/' + t.wt; term.setAttribute('aria-disabled', 'true'); });
+  }
+
+  function renderSession() {
+    const t = ticket(current), s = SESSIONS[current];
+    renderHead(t, s);
+    let html = s.beats.map((b) => beatHtml(b, t)).join('');
+    const answered = WS.got('answered', current);
+    if (answered) html += beatHtml({ t: '09:4' + '6', k: 'you', x: 'You answered: ' + esc(answered) }, t);
+    for (let i = 0; i < (played[current] || 0); i++) html += beatHtml(Object.assign({ t: s.live[i].t }, s.live[i]), t);
+    beatsEl.innerHTML = html;
+    bindToggles(beatsEl);
+
+    const composer = document.getElementById('composer');
+    const q = document.getElementById('q-slot');
+    if (q) q.remove();
+    if (t.state === 'asking') {
+      composer.hidden = true;
+      beatsEl.insertAdjacentHTML('afterend', '<div class="q-wrap" id="q-slot"><span class="kicker">Needs your answer to continue</span>' + WS.questionCard(current) + '</div>');
+      WS.bindQuestion(document.getElementById('q-slot'), current, () => {
+        WS.renderTopbar({ page: 'build', effort: 'acx' });
+        WS.renderRoute({ page: 'build', effort: 'acx' });
+        document.getElementById('s-state').innerHTML = glyph('building') + '<span>Building · resumed with your answer</span>';
+        setTimeout(() => {
+          const slot = document.getElementById('q-slot');
+          if (slot) slot.remove();
+          composer.hidden = false;
+          renderSession(); renderLanes();
+          document.getElementById('note').focus();
+        }, 1400);
+      });
+    } else {
+      composer.hidden = false;
+      setWorking();
+    }
+    renderEvidence();
+    pane.scrollTo({ top: pane.scrollHeight });
+  }
+
+  function bindToggles(root) {
+    root.querySelectorAll('.toggle').forEach((b) => {
+      if (b.dataset.bound) return;
+      b.dataset.bound = '1';
+      b.addEventListener('click', () => {
+        const pre = b.nextElementSibling, open = pre.hidden;
+        pre.hidden = !open;
+        b.setAttribute('aria-expanded', String(open));
+        b.textContent = open ? 'Hide test output' : 'Show test output';
+      });
+    });
+  }
+
+  let workingEl = null, workingStart = Date.now();
+  function setWorking() {
+    if (workingEl) { workingEl.remove(); workingEl = null; }
+    const t = ticket(current), s = SESSIONS[current];
+    if (t.state === 'asking' || paused[current]) return;
+    const doneLive = (played[current] || 0) >= s.live.length;
+    workingStart = Date.now();
+    beatsEl.insertAdjacentHTML('beforeend', '<li class="working" id="working"><span></span><span class="mk">' + glyph('building') + '</span><span>' + (doneLive ? 'Running the full worker suite' : 'Working') + '<span class="num" id="working-secs">0s</span></span></li>');
+    workingEl = document.getElementById('working');
+  }
+  setInterval(() => { const el = document.getElementById('working-secs'); if (el) el.textContent = Math.floor((Date.now() - workingStart) / 1000) + 's'; }, 1000);
+
+  /* ─── live simulation: every running session advances ──────────── */
+  setInterval(() => {
+    liveIds().forEach((n) => {
+      const t = ticket(n), s = SESSIONS[n];
+      if (t.state === 'asking' || paused[n]) return;
+      const p = played[n] || 0;
+      if (p >= s.live.length) return;
+      if (Math.random() < (n === current ? 0.9 : 0.35)) {
+        const b = s.live[p];
+        b.t = nowStamp();
+        played[n] = p + 1;
+        if (b.crit != null) { critDone[n] = critDone[n] || {}; critDone[n][b.crit] = true; }
+        if (n === current) {
+          if (workingEl) { workingEl.remove(); workingEl = null; }
+          beatsEl.insertAdjacentHTML('beforeend', beatHtml(b, t));
+          setWorking();
+          renderEvidence();
+          const nearBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 160;
+          if (nearBottom) pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+        }
+      }
+    });
+    renderLanes();
+  }, 5200);
+
+  /* ─── notes ────────────────────────────────────────────────────── */
+  const note = document.getElementById('note'), send = document.getElementById('send-note'), hint = document.getElementById('note-hint');
+  send.addEventListener('click', () => {
+    const text = note.value.trim();
+    if (!text) { hint.textContent = 'Write a note first.'; hint.style.color = 'var(--fg)'; return; }
+    const t = ticket(current);
+    if (workingEl) { workingEl.remove(); workingEl = null; }
+    beatsEl.insertAdjacentHTML('beforeend', beatHtml({ k: 'you', x: 'You: ' + esc(text) }, t));
+    note.value = '';
+    hint.textContent = 'Sent to wt/' + t.wt + '.';
+    hint.style.color = '';
+    setWorking();
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+    setTimeout(() => {
+      if (workingEl) { workingEl.remove(); workingEl = null; }
+      beatsEl.insertAdjacentHTML('beforeend', beatHtml({ k: 'note', x: 'Read your note. I’ll take it into account before the next test.' }, t));
+      setWorking();
+      pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+    }, 1800);
+  });
+  note.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send.click(); });
+
+  /* ─── evidence rail ────────────────────────────────────────────── */
+  const evidence = document.getElementById('evidence');
+  function renderEvidence() {
+    const t = ticket(current), s = SESSIONS[current];
+    const tc = Object.assign({}, t, { criteria: t.criteria.map((c, i) => (critDone[current] && critDone[current][i]) ? Object.assign({}, c, { done: true }) : c) });
+    const runs = s.beats.concat(s.live.slice(0, played[current] || 0)).filter((b) => b.k === 'red' || b.k === 'green');
+    const lastGreen = runs.filter((b) => b.k === 'green').slice(-1)[0];
+    const maxLines = Math.max(1, ...s.files.map((f) => f[1] + f[2]));
+    const done = tc.criteria.filter((c) => c.done === true).length;
+    evidence.innerHTML =
+      '<div class="block"><span class="kicker">Acceptance criteria · ' + done + ' of ' + t.criteria.length + '</span>' + WS.criteriaList(tc) + '</div>' +
+      '<div class="block"><span class="kicker">Test rhythm</span>' +
+        (runs.length ? '<div class="rhythm" aria-label="' + runs.length + ' test runs">' + runs.map((b) => '<span class="tr ' + (b.k === 'red' ? 'tr-red' : 'tr-green') + '"></span>').join('') + '</div><p class="meta">' + runs.length + ' runs, red before every green' + (lastGreen ? ' · last green ' + lastGreen.t : '') + '</p>' : '<p class="meta">No test runs yet.</p>') +
+        '<p class="meta" style="margin-top:8px; display:flex; gap:14px"><span style="display:inline-flex; gap:6px; align-items:center"><i class="tr tr-red"></i>Failing</span><span style="display:inline-flex; gap:6px; align-items:center"><i class="tr tr-green"></i>Passing</span></p></div>' +
+      '<div class="block"><span class="kicker">Changes in wt/' + t.wt + '</span>' +
+        (s.files.length ? '<ul class="files">' + s.files.map((f) => '<li><span class="f-path">' + f[0] + '</span><span class="f-num">+' + f[1] + (f[2] ? ' −' + f[2] : '') + '</span><span class="f-bar"><span class="add" style="width:' + Math.round(f[1] / maxLines * 100) + '%"></span>' + (f[2] ? '<span class="del" style="width:' + Math.max(3, Math.round(f[2] / maxLines * 100)) + '%"></span>' : '') + '</span></li>').join('') + '</ul>' : '<p class="meta">Nothing changed yet.</p>') + '</div>' +
+      '<div class="block"><span class="kicker">Thread</span>' + WS.thread(current) + '</div>';
+  }
+
+  renderLanes();
+  renderSession();
+})();
+</script>
+</body>
+</html>

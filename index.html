@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The line · galley · Waystation</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <style>
+    .page { max-width: 1240px; margin: 0 auto; padding: 44px 40px 72px; }
+
+    .masthead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: end; padding-bottom: 36px; border-bottom: 1px solid var(--rule); }
+    .masthead h1 { font-size: clamp(34px, 3.6vw, 48px); line-height: 1.08; max-width: 21ch; margin-top: 14px; }
+    .masthead .lead { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 60ch; margin-top: 16px; }
+    .masthead .dateline { text-align: right; }
+    .masthead .dateline .big { font-family: var(--font-display); font-size: 17px; }
+
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin: 40px 0 18px; }
+    .section-head h2 { font-size: 24px; }
+    .section-head .meta { margin-left: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+    .legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+    /* the line */
+    .line { border-top: 1px solid var(--border); }
+    .line-row { display: grid; grid-template-columns: 230px repeat(6, minmax(0, 1fr)); align-items: stretch; border-bottom: 1px solid var(--border); }
+    .line-row.head { border-bottom: 0; }
+    .line-row.head .cell { padding: 12px 8px 10px 0; }
+    .line-row.head .skill { display: block; font-size: 11.5px; color: var(--muted); }
+    .line-row.head .s-name { font-family: var(--font-display); font-size: 15px; }
+    .effort { padding: 20px 20px 20px 0; }
+    .effort a.e-name { font-family: var(--font-display); font-size: 18px; line-height: 1.25; text-decoration: none; display: inline; }
+    .effort a.e-name:hover { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    .effort .meta { display: block; margin-top: 4px; }
+    .effort .e-static { font-family: var(--font-display); font-size: 18px; color: var(--ink-2); }
+    .cell { position: relative; min-width: 0; }
+    .track-cell { padding: 34px 6px 16px 0; }
+    /* an active effort's course is drawn in chart magenta; a finished one rests in ink */
+    .track-cell::before { content: ''; position: absolute; left: 0; right: 0; top: 39px; border-top: 2.5px solid var(--accent); transform-origin: left center; }
+    .track-cell.pending::before { top: 40px; border-top: 1.5px dashed var(--line); }
+    .line-row.done-effort .track-cell::before { top: 40px; border-top: 1.5px solid var(--rule); }
+    .line.intro .track-cell::before { animation: ws-draw .5s cubic-bezier(.3,.7,.2,1) both; animation-delay: var(--d, 0ms); }
+    .line.intro .track-cell .cluster, .line.intro .track-cell .cap { animation: ws-arrive .4s ease both; animation-delay: calc(var(--d, 0ms) + 280ms); }
+    @keyframes ws-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes ws-arrive { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .track-cell.first::before { left: 6px; }
+    .track-cell.end::before { right: auto; width: 14px; }
+    .cluster { position: relative; display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 3px; min-height: 14px; padding: 0 6px 0 0; background: var(--bg); text-decoration: none; border-radius: 2px; }
+    .track-cell .cluster { margin-top: -1px; }
+    a.cluster:hover { background: var(--hover); box-shadow: 0 0 0 4px var(--hover); }
+    .cluster .st { width: 10px; height: 10px; }
+    .cluster .st-ask { width: 8px; height: 8px; margin: 1px; }
+    .passed { width: 6px; height: 6px; border-radius: 50%; background: var(--fg); display: inline-block; margin-left: 3px; }
+    .passed.pending { background: var(--bg); border: 1.5px solid var(--line); width: 8px; height: 8px; }
+    .fog { display: inline-block; width: 12px; height: 10px; border-radius: 50%; background-image: radial-gradient(var(--muted) 0.9px, transparent 1.1px); background-size: 3.4px 3.4px; }
+    .cap { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); margin-top: 10px; padding-right: 8px; }
+    .cap strong { color: var(--fg); font-weight: 500; }
+    .line-row.done-effort .effort .meta, .line-row.done-effort .cap { color: var(--muted); }
+
+    /* lower columns */
+    .lower { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 56px; align-items: start; }
+    .day { margin-top: 6px; }
+    .day + .day { margin-top: 26px; }
+    .day > .kicker { display: block; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .entry { display: grid; grid-template-columns: 50px 16px minmax(0, 1fr) 96px; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+    .entry time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .entry .st { transform: translateY(1px); }
+    .entry p { font-size: 14.5px; line-height: 1.55; }
+    .entry .skill { text-align: right; font-size: 11.5px; color: var(--muted); }
+    a.title { font-family: var(--font-display); font-size: 15.5px; }
+
+    .needs-list li { border-top: 1px solid var(--border); }
+    .needs-list li:last-child { border-bottom: 1px solid var(--border); }
+    .need { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 12px; padding: 14px 8px 14px 4px; text-decoration: none; align-items: start; }
+    .need:hover { background: var(--hover); }
+    .need .st { margin-top: 5px; }
+    .need .n-kind { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    .need .n-name { display: block; font-family: var(--font-display); font-size: 16px; line-height: 1.3; margin-top: 2px; }
+    .need .n-ask { display: block; font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+    .need .n-unblocks { font-size: 12px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+    .needs-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+
+    .agents { margin-top: 36px; }
+    .agents li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+    .agents li .st { margin-top: 4px; }
+    .agents .a-name { font-size: 14px; line-height: 1.4; }
+    .agents .meta { display: block; margin-top: 2px; }
+    .empty { padding: 18px 0; color: var(--muted); border-top: 1px solid var(--border); }
+
+    @media (max-width: 1100px) {
+      .line-row { grid-template-columns: 180px repeat(6, minmax(0, 1fr)); }
+    }
+    @media (max-width: 920px) {
+      .page { padding: 28px 18px 56px; }
+      .masthead { grid-template-columns: 1fr; gap: 16px; }
+      .masthead .dateline { text-align: left; }
+      .line { overflow-x: auto; }
+      .line-inner { min-width: 860px; }
+      .lower { grid-template-columns: 1fr; gap: 40px; }
+      .entry { grid-template-columns: 44px 14px minmax(0, 1fr); }
+      .entry .skill { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app no-route">
+  <header id="topbar"></header>
+
+  <main class="pane" id="content">
+    <div class="page">
+      <section class="masthead" data-od-id="masthead">
+        <div>
+          <p class="kicker">galley · the story so far</p>
+          <h1 id="headline">One ticket landed overnight, and an agent has stopped to ask you something.</h1>
+          <p class="lead" id="standfirst">Two agents are still building ACX compliance before delivery. Per-chapter voice casting is waiting on one grilling session before more of its fog can clear.</p>
+        </div>
+        <div class="dateline">
+          <div class="big">Tuesday 15 September</div>
+          <div class="meta num">09:46 · 3 efforts moving</div>
+        </div>
+      </section>
+
+      <section data-od-id="the-line">
+        <div class="section-head">
+          <div><h2 style="display:inline">The line</h2><span class="meta">Every ticket sits at the station it has reached.</span></div>
+          <div class="legend" aria-label="Legend">
+            <span><i class="st st-done" aria-hidden="true"></i>Decided or landed</span>
+            <span><i class="st st-building" aria-hidden="true"></i>Agent working</span>
+            <span><i class="st st-ask" aria-hidden="true"></i>Waiting on you</span>
+            <span><i class="st st-take" aria-hidden="true"></i>Takeable</span>
+            <span><i class="st st-blocked" aria-hidden="true"></i>Blocked</span>
+            <span><i class="fog" aria-hidden="true"></i>Fog</span>
+          </div>
+        </div>
+        <div class="line"><div class="line-inner" id="line"></div></div>
+      </section>
+
+      <div class="lower">
+        <section data-od-id="chronicle">
+          <div class="section-head"><div><h2 style="display:inline">The chronicle</h2><span class="meta">What happened, in order, by name.</span></div></div>
+          <div class="day">
+            <span class="kicker">Today</span>
+            <ol id="today"></ol>
+          </div>
+          <div class="day">
+            <span class="kicker">Yesterday · Monday 14 September</span>
+            <ol id="yesterday"></ol>
+          </div>
+        </section>
+
+        <aside>
+          <section data-od-id="needs-you-panel">
+            <div class="section-head"><div><h2 style="display:inline">Needs you</h2><span class="meta">Most unblocking first</span></div></div>
+            <ul class="needs-list" id="needs"></ul>
+            <div class="needs-foot" id="needs-foot">
+              <span class="meta">Answers post back to the tracker as comments.</span>
+              <a class="btn btn-secondary btn-arrow" href="review-desk.html" data-od-id="open-desk">Open the desk</a>
+            </div>
+          </section>
+
+          <section class="agents" data-od-id="agents-at-work">
+            <div class="section-head" style="margin-top:0"><div><h2 style="display:inline">At work</h2><span class="meta">Running right now</span></div></div>
+            <ul id="agents"></ul>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const { ticket, tickets, glyph, needsYou, esc, counts } = WS;
+  WS.renderTopbar({ page: 'index' });
+
+  const link = (n, cls) => '<a class="nm title" href="ticket-graph.html#' + n + '">' + esc(ticket(n).name) + '</a>';
+  const g = (s) => glyph(s);
+
+  /* ─── the line ─────────────────────────────────────────────────── */
+  const stations = [
+    { skill: '/wayfinder', name: 'Chart the way', key: 'wayfinder' },
+    { skill: '/to-spec', name: 'Write the spec', key: 'spec' },
+    { skill: '/to-tickets', name: 'Slice into tickets', key: 'tickets' },
+    { skill: '/tdd', name: 'Build', key: 'build' },
+    { skill: '/code-review', name: 'Review', key: 'review' },
+    { skill: 'merge', name: 'Landed', key: 'landed' },
+  ];
+  const href = { wayfinder: 'wayfinder-map.html?effort=acx', spec: 'spec-reader.html', tickets: 'ticket-graph.html', build: 'live-build.html', review: 'review-desk.html', landed: 'ticket-graph.html' };
+  const ts = tickets();
+  const at = (states) => ts.filter((t) => states.indexOf(t.state) !== -1);
+  const c = counts();
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+
+  const d = (row, col) => row * 150 + col * 120;
+  function clusterFor(list) { return list.map((t) => g(t.state)).join(''); }
+
+  const acxCells = {
+    wayfinder: { html: new Array(7).fill(g('landed')).join(''), cap: '7 decisions' },
+    spec: { html: g('landed'), cap: '16 stories' },
+    tickets: { html: clusterFor(at(['takeable', 'blocked'])), cap: [c.takeable ? plural(c.takeable, 'takeable', 'takeable') : '', c.blocked ? c.blocked + ' blocked' : ''].filter(Boolean).join(' · ') || 'All claimed' },
+    build: { html: clusterFor(at(['building', 'asking'])), cap: [c.building ? c.building + ' building' : '', c.asking ? '<strong>' + c.asking + ' asking you</strong>' : ''].filter(Boolean).join(' · ') || 'Nothing building' },
+    review: { html: clusterFor(at(['review'])), cap: c.review ? '<strong>PR #141 waiting</strong>' : 'Nothing waiting' },
+    landed: { html: clusterFor(at(['landed'])), cap: c.landed + ' of 9 landed' },
+  };
+
+  let html = '<div class="line-row head"><div class="cell"></div>' + stations.map((s) => '<div class="cell"><span class="skill">' + s.skill + '</span><span class="s-name">' + s.name + '</span></div>').join('') + '</div>';
+
+  // ACX
+  html += '<div class="line-row" data-od-id="line-acx"><div class="effort"><a class="e-name" href="live-build.html">ACX compliance before delivery</a><span class="meta">Map #112 · charted 3 Sep</span></div>' +
+    stations.map((s, i) => {
+      const cell = acxCells[s.key];
+      const inner = cell.html ? '<a class="cluster" href="' + href[s.key] + '" aria-label="' + s.name + ': ' + cell.cap.replace(/<[^>]+>/g, '') + '">' + cell.html + '</a>' : '<span class="cluster"><i class="passed"></i></span>';
+      return '<div class="cell track-cell' + (i === 0 ? ' first' : '') + (i === 5 ? ' end' : '') + '" style="--d:' + d(0, i) + 'ms">' + inner + '<span class="cap">' + cell.cap + '</span></div>';
+    }).join('') + '</div>';
+
+  // Casting
+  const castingCluster = g('landed') + g('landed') + g('landed') + g('building') + (WS.has('grilled', 152) ? g('building') : g('asking')) + g('blocked') + g('blocked') + '<i class="fog"></i><i class="fog"></i><i class="fog"></i>';
+  html += '<div class="line-row" data-od-id="line-casting"><div class="effort"><a class="e-name" href="wayfinder-map.html?effort=casting">Per-chapter voice casting</a><span class="meta">Map #147 · charted 9 Sep</span></div>' +
+    stations.map((s, i) => {
+      if (i === 0) return '<div class="cell track-cell first" style="--d:' + d(1, 0) + 'ms"><a class="cluster" href="wayfinder-map.html?effort=casting" aria-label="Chart the way: 3 decided, 1 researching, 1 waiting on you, 2 blocked, 3 patches of fog">' + castingCluster + '</a><span class="cap">3 decided · ' + (WS.has('grilled', 152) ? '2 researching' : '<strong>1 waiting on you</strong>') + ' · 3 patches of fog</span></div>';
+      return '<div class="cell track-cell pending' + (i === 5 ? ' end' : '') + '" style="--d:' + d(1, i) + 'ms"><span class="cluster"><i class="passed pending"></i></span></div>';
+    }).join('') + '</div>';
+
+  // Retail sample: one decision from a clear way, then on through /to-spec
+  const sStage = WS.sampleStage();
+  const sampleHref = 'wayfinder-map.html?effort=sample';
+  const sampleCells = {
+    last: [{ html: new Array(5).fill(g('landed')).join('') + g('asking') + '<i class="fog"></i>', cap: '5 decided · <strong>1 in session with you</strong> · 1 patch of fog', label: '5 decided, 1 in session with you, 1 patch of fog' }],
+    clear: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decided · way clear', label: '6 decided, the way is clear' }, { html: g('asking'), cap: '<strong>Agree the seam</strong>', label: 'Agree the seam for the spec' }],
+    written: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decisions', label: '6 decisions' }, { html: g('landed'), cap: 'Spec #168', label: 'Spec written' }, { html: g('takeable'), cap: 'Ready to slice', label: 'Ready to slice into tickets', next: true }],
+    slicing: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decisions', label: '6 decisions' }, { html: g('landed'), cap: 'Spec #168', label: 'Spec written' }, { html: g('building'), cap: '/to-tickets drafting', label: 'Slicing into tickets' }],
+  }[sStage];
+  html += '<div class="line-row" data-od-id="line-retail-sample"><div class="effort"><a class="e-name" href="' + sampleHref + '">Choosing the retail sample</a><span class="meta">Map #160 · charted 10 Sep</span></div>' +
+    stations.map((s, i) => {
+      const cell = sampleCells[i];
+      const pos = (i === 0 ? ' first' : '') + (i === 5 ? ' end' : '');
+      if (!cell) return '<div class="cell track-cell pending' + pos + '" style="--d:' + d(2, i) + 'ms"><span class="cluster"><i class="passed pending"></i></span></div>';
+      return '<div class="cell track-cell' + (cell.next ? ' pending' : '') + pos + '" style="--d:' + d(2, i) + 'ms"><a class="cluster" href="' + sampleHref + '" aria-label="' + s.name + ': ' + cell.label + '">' + cell.html + '</a><span class="cap">' + cell.cap + '</span></div>';
+    }).join('') + '</div>';
+
+  // Landed effort
+  html += '<div class="line-row done-effort" data-od-id="line-upload-states"><div class="effort"><span class="e-static">Manuscript upload states</span><span class="meta">Map #88 · landed 2 Sep</span></div>' +
+    stations.map((s, i) => {
+      if (i === 5) return '<div class="cell track-cell end" style="--d:' + d(3, 5) + 'ms"><span class="cluster">' + new Array(6).fill(g('landed')).join('') + '</span><span class="cap">6 of 6 landed</span></div>';
+      return '<div class="cell track-cell' + (i === 0 ? ' first' : '') + '" style="--d:' + d(3, i) + 'ms"><span class="cluster"><i class="passed"></i></span></div>';
+    }).join('') + '</div>';
+
+  document.getElementById('line').innerHTML = html;
+  const sampleClause = { last: 'Choosing the retail sample is one decision from a clear way', clear: 'Choosing the retail sample has a clear way and waits on you to agree its seam', written: 'Choosing the retail sample has its spec written', slicing: 'Choosing the retail sample is being sliced into tickets' }[sStage];
+  document.getElementById('standfirst').textContent = 'Two agents are still building ACX compliance before delivery. ' + sampleClause + ', and per-chapter voice casting is waiting on a grilling session.';
+  let seenLine = true;
+  try { seenLine = !!sessionStorage.getItem('waystation.intro.line'); sessionStorage.setItem('waystation.intro.line', '1'); } catch (e) { /* storage blocked */ }
+  if (!seenLine && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelector('.line').classList.add('intro');
+
+  /* ─── chronicle ────────────────────────────────────────────────── */
+  const sampleLink = (text) => '<a class="nm title" href="wayfinder-map.html?effort=sample">' + text + '</a>';
+  const castingLink = (text) => '<a class="nm title" href="wayfinder-map.html?effort=casting">' + text + '</a>';
+  const today = [
+    ['09:41', 'building', '/tdd', link(128) + ' has three of four criteria passing. The clean fixture still fails on its quiet tail.'],
+    ['09:32', 'asking', '/wayfinder', 'You opened a grilling session on the last open ticket of Choosing the retail sample: ' + sampleLink(WS.EFFORTS.sample.last.name)],
+    ['09:18', 'asking', '/tdd', link(130) + ' paused to ask whether DOCX books without credits should fail or warn.'],
+    ['08:30', 'building', '/wayfinder', 'A research subagent claimed ' + castingLink('Does changing a voice mid-book conflict with ACX’s audio consistency requirements?')],
+    ['08:26', 'landed', '/wayfinder', 'You resolved ' + castingLink('Can Attribution create overrides, or only Cast?') + ' Only Cast. The answer surfaced a new research question.'],
+    ['08:03', 'review', '/code-review', '/code-review read PR #141 for ' + link(127) + ': Standards clean, one gap against the spec.'],
+    ['07:48', 'landed', '/tdd', link(127) + ' finished its session and opened PR #141.'],
+  ];
+  const yesterday = [
+    ['22:14', 'landed', 'merge', link(126) + ' landed. Three tickets reached the frontier, and two agents picked them up.'],
+    ['16:40', 'landed', 'merge', link(125) + ' landed, unblocking two tickets.'],
+    ['15:30', 'landed', '/wayfinder', 'You resolved ' + castingLink('How does an override show up on the Cast page?') + ' A mark on the character’s chapter sparkline. One patch of fog graduated into two tickets.'],
+    ['10:20', 'landed', '/to-tickets', '<a class="nm title" href="spec-reader.html">Pre-delivery compliance checks</a> was sliced into nine tickets. Two user stories have no ticket yet.'],
+  ];
+  if (WS.has('sample', 'closed')) today.unshift(['now', 'landed', '/wayfinder', 'You closed ' + sampleLink(WS.EFFORTS.sample.last.name) + ' The way is clear on Choosing the retail sample.']);
+  if (WS.has('sample', 'written')) today.unshift(['now', 'landed', '/to-spec', '/to-spec wrote ' + sampleLink(WS.EFFORTS.sample.spec.name) + ' from the map, through the seam you agreed.']);
+  if (WS.has('sample', 'sliced')) today.unshift(['now', 'building', '/to-tickets', '/to-tickets is slicing ' + sampleLink(WS.EFFORTS.sample.spec.name) + ' into tickets for you to check.']);
+  if (WS.has('merged', 127)) today.unshift(['now', 'landed', 'merge', link(127) + ' landed. You approved it from the desk.']);
+  if (WS.has('answered', 130)) today.unshift(['now', 'building', '/tdd', 'You answered ' + link(130) + '. The session resumed.']);
+  if (WS.has('grilled', 152)) today.unshift(['now', 'building', '/grilling', 'You opened the grilling session on ' + castingLink(WS.CASTING_GRILL.name)]);
+
+  const row = (e) => '<li class="entry"><time>' + e[0] + '</time>' + g(e[1]) + '<p>' + e[3] + '</p><span class="skill">' + e[2] + '</span></li>';
+  document.getElementById('today').innerHTML = today.map(row).join('');
+  document.getElementById('yesterday').innerHTML = yesterday.map(row).join('');
+
+  /* ─── needs you ────────────────────────────────────────────────── */
+  const items = needsYou().sort((a, b) => b.unblocks - a.unblocks);
+  const needsEl = document.getElementById('needs');
+  if (!items.length) {
+    needsEl.innerHTML = '<li class="empty">Nothing is waiting on you. Agents will stop here when they need a decision.</li>';
+    document.getElementById('needs-foot').style.display = 'none';
+  } else {
+    needsEl.innerHTML = items.map((it) => {
+      const glyphState = it.kind === 'Review' ? 'review' : 'asking';
+      const effort = it.effort === 'acx' ? 'ACX compliance' : it.effort === 'sample' ? 'Retail sample' : 'Voice casting';
+      const unblocks = it.unblocksText || 'Unblocks ' + plural(it.unblocks, 'ticket', 'tickets') + (it.fog ? ' + fog' : '');
+      return '<li><a class="need" href="' + (it.href || 'review-desk.html?item=' + it.key) + '" data-od-id="need-' + it.key + '">' + g(glyphState) +
+        '<span><span class="n-kind">' + it.kind + ' · ' + effort + '</span><span class="n-name">' + esc(it.name) + '</span><span class="n-ask">' + esc(it.ask) + '</span></span>' +
+        '<span class="n-unblocks">' + unblocks + '</span></a></li>';
+    }).join('');
+  }
+
+  /* ─── at work ──────────────────────────────────────────────────── */
+  const agents = ts.filter((t) => t.state === 'building').map((t) => {
+    const done = t.criteria.filter((x) => x.done === true).length;
+    return '<li>' + g('building') + '<div><a class="nm a-name" href="live-build.html?session=' + t.n + '">' + esc(t.name) + '</a><span class="meta">wt/' + t.wt + ' · ' + done + ' of ' + t.criteria.length + ' criteria</span></div></li>';
+  });
+  agents.push('<li>' + g('building') + '<div><a class="nm a-name" href="wayfinder-map.html?effort=casting#151">Does changing a voice mid-book conflict with ACX’s audio consistency requirements?</a><span class="meta">Research subagent · research/voice-consistency</span></div></li>');
+  document.getElementById('agents').innerHTML = agents.join('');
+})();
+</script>
+</body>
+</html>
