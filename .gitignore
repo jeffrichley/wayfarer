@@ -2,3 +2,4 @@
 .od-skills/
 plugin-source/
 *.artifact.json
+.DS_Store
