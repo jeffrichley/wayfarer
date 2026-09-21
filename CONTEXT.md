@@ -1,6 +1,6 @@
 # Wayfarer
 
-Wayfarer follows work as it moves through the mattpocock/skills workflow on one GitHub repo, and lets a person steer the agents doing it. The words below come from the skills themselves wherever the skills already have a word.
+Wayfarer follows work as it moves through the mattpocock/skills workflow on one GitHub repo, and lets a person steer the agents doing it. The words below come from the skills themselves wherever the skills already have a word. Waystation has a glossary of its own, correct for a library that knows nothing of tickets or GitHub, and the two are not unified. Where a Wayfarer word names something Waystation carries out, its entry names Waystation's word too, so a reader can cross between them.
 
 ## The two names
 
@@ -27,7 +27,7 @@ One body of work travelling the skill line, from a loose idea to landed code. It
 _Avoid_: project, epic, initiative
 
 **Repo**:
-One GitHub repository Wayfarer is connected to. A repo holds many efforts.
+One GitHub repository Wayfarer is connected to. A repo holds many efforts. Wayfarer works against a local clone of it, which Waystation calls the host repo.
 _Avoid_: workspace, project
 
 ## Charting (`/wayfinder`)
@@ -113,12 +113,20 @@ _Avoid_: requirement, AC, checklist item
 ## Building and reviewing
 
 **Session**:
-One Claude Code run working one ticket in its own git worktree.
+One Claude Code run working one ticket, with one skill or purpose: a `/tdd` build, a `/code-review`, a resolver session, a retry. A ticket may have several over its life. Waystation calls this a run.
 _Avoid_: job, run, agent instance, worker
 
-**Worktree**:
-The isolated git checkout a session works in, shown as `wt/<name>`.
-_Avoid_: branch, sandbox
+**Outcome**:
+The structured report a session hands back when it ends. It is the only way a session can reach a person, since nothing flows into a running one. Borrowed from Waystation unchanged.
+_Avoid_: result, response, summary
+
+**Resolver session**:
+A session that replays a ticket's preserved commits onto the effort branch, resolving conflicts one commit at a time. Nothing but its purpose sets it apart from any other session. Waystation calls this a resolver run.
+_Avoid_: resolver run, merger, fixer, conflict handler
+
+**Preservation branch**:
+The branch that keeps a session's commits whenever they did not land: the session failed, or its work conflicted. Nothing a session produced is lost. Borrowed from Waystation unchanged.
+_Avoid_: backup branch, conflict branch
 
 **Beat**:
 One meaningful moment in a session: a read, a note, a red test run, a green test run, a refactor, a question, or a note from you.
@@ -145,8 +153,8 @@ One gap `/code-review` reports on an axis.
 _Avoid_: issue, comment, error
 
 **Ticket branch**:
-The branch one ticket's commits are collected on before they land. Named for the ticket, cut from the effort branch.
-_Avoid_: worktree (a different thing), session branch
+The branch one ticket's commits are collected on before they land. Named for the ticket, cut from the effort branch. It is what a person sees of where a session worked; the session's own copy of the repo is never shown, because nothing can be done with it.
+_Avoid_: worktree, workspace (Waystation's word for a run's private copy, which lives and dies inside the sandbox), session branch
 
 **Effort branch**:
 The branch one effort's tickets land on. Dependents branch from it, so an agent builds on what its blockers produced. It meets the trunk once, when the effort ships.
