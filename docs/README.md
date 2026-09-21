@@ -22,7 +22,7 @@ The user chose these when the project started. Treat them as fixed unless the us
 
 ## How to read these docs
 
-1. **Always read first:** [`CONTEXT.md`](CONTEXT.md), the glossary. Every doc uses its words exactly.
+1. **Always read first:** [`CONTEXT.md`](../CONTEXT.md), the glossary. Every doc uses its words exactly.
 2. **Before building any screen:** [`design/principles.md`](design/principles.md), the rules that decide most layout and wording questions, plus the directions that were tried and rejected.
 3. **For the screen you're building:** its writeup in `screens/`, plus the shared docs it points to:
    - [`design/visual-language.md`](design/visual-language.md): tokens, type, what colour means, the status glyphs, motion, dark mode, contrast.

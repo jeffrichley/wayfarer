@@ -1,6 +1,16 @@
-# Waystation
+# Wayfarer
 
-Waystation follows work as it moves through the mattpocock/skills workflow on one GitHub repo, and lets a person steer the agents doing it. The words below come from the skills themselves wherever the skills already have a word.
+Wayfarer follows work as it moves through the mattpocock/skills workflow on one GitHub repo, and lets a person steer the agents doing it. The words below come from the skills themselves wherever the skills already have a word.
+
+## The two names
+
+**Wayfarer**:
+This app: the web UI that follows work along the skill line and steers the agents doing it.
+_Avoid_: Waystation (that is the library), the dashboard, the console
+
+**Waystation**:
+The sister Python library (`jeffrichley/waystation`) that Wayfarer runs on: primitives for orchestrating sandboxed agent runs against a git repo. It speaks only git and knows nothing of GitHub.
+_Avoid_: the backend, the engine, the orchestrator
 
 ## The workflow
 
@@ -17,7 +27,7 @@ One body of work travelling the skill line, from a loose idea to landed code. It
 _Avoid_: project, epic, initiative
 
 **Repo**:
-One GitHub repository Waystation is connected to. A repo holds many efforts.
+One GitHub repository Wayfarer is connected to. A repo holds many efforts.
 _Avoid_: workspace, project
 
 ## Charting (`/wayfinder`)
@@ -134,11 +144,27 @@ _Avoid_: check, lint, review type
 One gap `/code-review` reports on an axis.
 _Avoid_: issue, comment, error
 
-**Landed**:
-A ticket whose PR has merged.
-_Avoid_: done, closed, shipped
+**Ticket branch**:
+The branch one ticket's commits are collected on before they land. Named for the ticket, cut from the effort branch.
+_Avoid_: worktree (a different thing), session branch
 
-## Waystation's own words
+**Effort branch**:
+The branch one effort's tickets land on. Dependents branch from it, so an agent builds on what its blockers produced. It meets the trunk once, when the effort ships.
+_Avoid_: feature branch, integration branch, staging branch
+
+**Merge queue**:
+The ordered line of finished tickets waiting to land on the effort branch. It exists because two tickets that each pass alone can break once both land.
+_Avoid_: merge train, batch, landing queue
+
+**Landed**:
+A ticket whose commits have reached the effort branch. This is what unblocks its dependents.
+_Avoid_: done, closed, merged, shipped
+
+**Shipped**:
+An effort whose branch has merged into the trunk, reviewed by a person once. The only human gate in a cascade.
+_Avoid_: released, delivered, done
+
+## Wayfarer's own words
 
 **Course**:
 The route an effort has actually walked so far. It is the only thing drawn in the accent colour, apart from each screen's one primary action.

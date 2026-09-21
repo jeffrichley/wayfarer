@@ -1,7 +1,7 @@
 
 # Principles
 
-These rules decided most of the prototype. When a design question comes up during the build, the answer is usually here. Words in **bold** are defined in [`../CONTEXT.md`](../CONTEXT.md).
+These rules decided most of the prototype. When a design question comes up during the build, the answer is usually here. Words in **bold** are defined in [`../../CONTEXT.md`](../../CONTEXT.md).
 
 ## 1. A line, not a board
 
@@ -41,7 +41,7 @@ Fog, frontier, destination, seam, tracer bullets, red and green all come from th
 
 *Why:* someone who uses the skills already has this vocabulary. Renaming it would make them translate. Drawing it makes the skill easier to learn for someone new to it.
 
-*In practice:* check [`../CONTEXT.md`](../CONTEXT.md) before naming anything. When the skills have no word, use the chart metaphor (course, thread, chronicle).
+*In practice:* check [`../../CONTEXT.md`](../../CONTEXT.md) before naming anything. When the skills have no word, use the chart metaphor (course, thread, chronicle).
 
 ## 5. Steer in place, and show what will happen first
 
