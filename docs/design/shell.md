@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # The shell and shared pieces
 
 These are the pieces more than one screen uses. In the prototype they're built by `assets/waystation.js` and styled in `assets/waystation.css`. Each screen calls `WS.renderTopbar` and, except home, `WS.renderRoute`.

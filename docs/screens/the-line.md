@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # The line (home)
 
 **Prototype:** `index.html` · **Station:** all of them · **Arrive from:** the wordmark, or opening the app · **Leave to:** any effort's current station, the desk, a running session

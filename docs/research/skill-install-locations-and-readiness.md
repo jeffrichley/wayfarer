@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # Where installed skills live, and what a readiness check can detect
 
 **Ticket:** [#3](https://github.com/jeffrichley/wayfarer/issues/3) · **Map:** [#1](https://github.com/jeffrichley/wayfarer/issues/1) · Researched 2026-09-20 against Claude Code **2.1.278** on macOS 25.6.0.

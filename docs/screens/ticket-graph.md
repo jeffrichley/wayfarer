@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # Ticket graph
 
 **Prototype:** `ticket-graph.html` (9 tickets from spec #124) · **Station:** `/to-tickets` · **Arrive from:** the route band, the spec reader's traces, the thread, `#<n>` links · **Leave to:** live build (watch a session), the desk (answer or review), the spec

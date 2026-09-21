@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # Research: can Claude Code run the skills line inside Waystation's sandbox?
 
 Ticket: [#2](https://github.com/jeffrichley/wayfarer/issues/2) — "Can Claude Code run the skills line inside Waystation's sandbox?"
@@ -23,7 +26,7 @@ Claude Code version under test: **2.1.278**
 
 `headless.md` states it outright, under "Create a commit" → "Command support differs in `-p` mode":
 
-> User-invoked [skills](/docs/en/skills) and custom commands work. Include `/skill-name` in the prompt string and Claude Code expands it before running.
+> User-invoked [skills](https://code.claude.com/docs/en/skills) and custom commands work. Include `/skill-name` in the prompt string and Claude Code expands it before running.
 
 — <https://code.claude.com/docs/en/headless.md>
 

@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Review desk
 
 **Prototype:** `review-desk.html?item=<key>` (`pr-141`, `q-130`, `map-160`, `g-152`) · **Station:** `/code-review` → merge · **Arrive from:** "Needs you" in the top bar, Needs you on home, action blocks in the ticket graph · **Leave to:** the ticket, the session, the map

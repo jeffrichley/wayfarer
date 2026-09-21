@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # Best practice for landing a graph of related changes
 
 **Ticket:** [#17](https://github.com/jeffrichley/wayfarer/issues/17) — "Best practice for landing a graph of related changes" · **Map:** [#1](https://github.com/jeffrichley/wayfarer/issues/1) — Wayfarer's first running slice · Researched 2026-09-21.

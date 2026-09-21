@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Data and commands
 
 This doc covers where everything on screen comes from, and what every steering action has to do in the real build. The prototype fakes both with sample data in `assets/waystation.js`.

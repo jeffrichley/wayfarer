@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Live build
 
 **Prototype:** `live-build.html?session=<n>` · **Station:** `/tdd` · **Arrive from:** "Agents working" in the top bar, At work on home, Watch the session in the ticket graph, the thread · **Leave to:** the desk (review, questions), the ticket graph

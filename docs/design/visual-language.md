@@ -1,3 +1,6 @@
+---
+type: reference
+---
 # Visual language
 
 `assets/waystation.css` holds every value named here, so read the numbers there. This doc explains what each value is *for*, which isn't written in the CSS.

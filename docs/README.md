@@ -1,3 +1,7 @@
+---
+type: playbook
+status: draft
+---
 # Waystation: design writeups
 
 Waystation is a companion app for the [mattpocock/skills](https://github.com/mattpocock/skills) workflow. It reads what `/wayfinder`, `/to-spec`, `/to-tickets`, `/tdd` and `/code-review` leave on GitHub. It shows that work moving, and it lets a person steer the agents doing it.
