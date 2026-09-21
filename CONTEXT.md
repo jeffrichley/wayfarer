@@ -107,7 +107,7 @@ A ticket that reshapes existing code so later tickets become easy. It comes firs
 _Avoid_: refactor ticket, tech debt
 
 **Acceptance criterion**:
-One checkable condition a ticket must meet, each one proven by a named test.
+One checkable condition a ticket must meet.
 _Avoid_: requirement, AC, checklist item
 
 ## Building and reviewing
@@ -129,12 +129,20 @@ The branch that keeps a session's commits whenever they did not land: the sessio
 _Avoid_: backup branch, conflict branch
 
 **Beat**:
-One meaningful moment in a session: a read, a note, a red test run, a green test run, a refactor, a question, or a note from you.
-_Avoid_: log line, event, message
+One meaningful moment in a session, derived from what the agent did: a read, a remark, a red test run, a green test run, a refactor, or the outcome it reported. Several tool calls can make one beat.
+_Avoid_: log line, event, message, step
+
+**Remark**:
+A beat carrying the agent's own narration of what it is doing and why.
+_Avoid_: note (that is a person's message to a session), thought, reasoning
 
 **Red / green**:
 A failing or passing test run. In `/tdd` a red always comes before its green.
 _Avoid_: fail/pass (in the UI), broken/fixed
+
+**Cycle**:
+One red → green turn in a session, with any refactor that follows while the tests stay green. A session's beats are grouped by cycle, after an opening orient.
+_Avoid_: iteration, loop, chapter
 
 **Note**:
 A message a person leaves for a running session. The session reads it before its next step, without stopping.
