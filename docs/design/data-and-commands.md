@@ -19,9 +19,42 @@ Each part is marked as one of three kinds, and they need to stay distinct:
 | GitHub pull requests and checks | PRs, diffs, CI status, merges |
 | The repo itself | Installed skills, `docs/agents/*`, `CONTEXT.md`, ADRs (these give readiness) |
 | Claude Code sessions in git worktrees | Running work: beats, test runs, questions, changed files |
-| Waystation's own store | Only what nothing else holds: per-user "last visit" for the home headline, queued agents, notes waiting to be read. Keep it minimal. |
+| Wayfarer's own store | Only what nothing else holds. See [The store](#the-store-decided). |
 
 **Principle:** GitHub is the record. Waystation derives state and never keeps a second copy of workflow state that could drift from the tracker.
+
+## Freshness *(decided)*
+
+Wayfarer hears from GitHub by **poke-and-re-read** ([ADR-0003](../adr/0003-poke-and-re-read.md)). One signal, *something may have changed*, triggers a re-read, and nothing Wayfarer receives is applied as data.
+
+- **Its own writes** trigger an immediate re-read of what they touched.
+- **A conditional poll** (`issues?since=…&sort=updated` with an `ETag`) runs every 10 s while a cascade is armed or a browser is open, and every 60 s otherwise. A `304` costs no rate limit. It respects `X-Poll-Interval` and backs off on `403`/`429`.
+- **PR checks** don't bump the issue, so each PR the cascade is waiting on is polled for its checks on the same rhythm.
+- **Webhooks** are deferred ([Webhooks as a poke](https://github.com/jeffrichley/wayfarer/issues/18)): a poke through a tunnel the person runs, never data, and never a replacement for the poll.
+
+**One read model** serves the screens and the cascade: a single GraphQL read of the effort's ticket graph per change (about 3 points for 30 tickets).
+
+**When GitHub and a live session disagree, GitHub owns the state.** A live session only annotates the card with its stage, its last beat, or "session ended, waiting for GitHub to confirm". A state never advances on a hook alone ([ADR-0002](../adr/0002-hooks-are-never-the-truth-about-a-ticket.md)). If GitHub shows a ticket landed or closed while a session is still live on it, the card shows GitHub's state and the session is flagged in Needs you. It is not stopped automatically.
+
+## The store *(decided)*
+
+One SQLite file per repo (stdlib `sqlite3`, WAL), outside the checkout, at `~/.local/share/wayfarer/<owner>/<repo>/`, beside the per-run event files. It holds only what a restarted Wayfarer needs and GitHub cannot hold:
+
+- **Sessions Wayfarer started:** run id, ticket, purpose, started, ended, event file, and the Outcome. Recorded at `run_start`, since Waystation generates the run id and nothing in the library writes it down.
+- **Armed cascades:** which effort, its cap, and whether it is paused.
+- **Last visit**, for the home headline.
+- **Settings**, per repo. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you.
+
+Notes and queued agents are gone. Notes had nowhere to go once mid-run steering was cut, and an armed cascade replaces a per-ticket queue.
+
+**Event files.** Wayfarer owns retention, since Waystation's `EventLog` has none. A session's JSONL file is kept until its effort ships, then deleted. The Outcome stays in the store.
+
+**Restart.** Read the store, then GitHub, then Docker containers labelled `waystation.run-id`.
+- A stored session with no end is an **orphan**. It appears in Needs you, naming its ticket, and is offered `DockerSandbox.reap(run_id)`.
+- A labelled container with no store row is shown as unknown and never reaped automatically. The label carries no repo, so it may belong to another repo's Wayfarer.
+- An armed cascade comes back **paused**, so a restart never spends money unasked.
+
+**Questions, later.** A session reaches a person by *ending* with a question, which becomes a GitHub comment and then a follow-up session ([Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19)). Neither the read model nor the store needs anything new for it.
 
 ## The read model
 
@@ -99,7 +132,7 @@ An item appears when any of these is true:
 
 ### Chronicle *(derived)*
 - **Contents:** one sentence per meaningful event, newest first, grouped by day, each naming things by name and tagged with its skill.
-- **Home headline:** summarises events since the person's last visit (stored by Waystation).
+- **Home headline:** summarises events since the person's last visit (in Wayfarer's store).
 - *Open:* whether sentences are templated or written by a model, and how events are merged ("Three tickets reached the frontier, and two agents picked them up").
 
 ## Commands (steering)
@@ -117,7 +150,7 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Slice into tickets / Slice the uncovered stories | `slice-into-tickets`, `slice-uncovered` | Start `/to-tickets` on the spec (or on named stories). The drafts come back to the person before publishing. | Defined by `/to-tickets` |
 | Publish tickets | `publish-drafts` | Publish the approved drafts with blocking edges and `ready-for-agent` | Defined by `/to-tickets` |
 | Start an agent on this ticket | `start-agent`, `start-agent-132` | Claim the ticket, create `wt/<name>` from main, and start a Claude Code session running `/tdd` on it | Transport open |
-| Queue an agent for when it unblocks | `queue-agent` | Waystation remembers the request and starts the session when the last blocker lands | Waystation store |
+| Queue an agent for when it unblocks | `queue-agent` | Superseded by arming a cascade for the effort, which starts every ticket as it becomes takeable | Wayfarer's store (armed cascade) |
 | Pause / Resume | `pause-session` | Pause the session at its next safe point, then resume it | Transport open |
 | Send note | `send-note` | Deliver a note the session reads before its next step, without stopping it | Transport open |
 | Open terminal | `open-terminal` | Open the worktree's session in a real terminal | Open |
@@ -134,4 +167,4 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 3. **Several people:** "Needs you" assumes one person driving. What changes when a team shares a repo? Is "you" the assignee?
 4. **The conventions above:** map → spec pointer, fog → ticket graduation, story → ticket, seam record. Should these be written back into the skills (upstream changes to mattpocock/skills) or kept as Waystation-side inference?
 5. **Several repos:** the repo switcher implies it. Does "Needs you" roll up across repos?
-6. **Freshness:** GitHub webhooks, polling, or both, and how fast sessions have to feel live.
+6. **Freshness:** decided. Poke-and-re-read with a conditional poll, webhooks later. See [Freshness](#freshness-decided).
