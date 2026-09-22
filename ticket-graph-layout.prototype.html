@@ -1,0 +1,606 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Answers wayfarer#23: "The ticket graph's automatic layout, and past 20 tickets".
+  Four layout variants of the ticket graph at 9 / 20 / 40 / 80 tickets, switchable via ?variant=A|B|C|D&n=9|20|40|80.
+  Layout by elkjs (the stack decision, wayfarer#9); variant D uses its own lane layout to test "rows as streams".
+  Open the file in a browser. Needs network for elkjs from jsdelivr.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PROTOTYPE · Ticket graph layout</title>
+  <link rel="stylesheet" href="assets/waystation.css" />
+  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+  <style>
+    .graph-split { grid-template-columns: minmax(0, 1fr) 380px; }
+    .graph-col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+    .graph-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding: 20px 28px 12px; }
+    .graph-head h1 { font-size: 28px; line-height: 1.15; margin-top: 4px; }
+    .graph-head .meta { margin-top: 4px; max-width: 64ch; }
+    .tally { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); max-width: 470px; }
+    .tally span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .tally b { font-family: var(--font-mono); font-weight: 500; color: var(--fg); }
+
+    .viewport { overflow: auto; padding: 0 24px 96px; }
+    .stage-wrap { position: relative; margin: 8px 0 24px; }
+    .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+    .stage svg { position: absolute; inset: 0; overflow: visible; }
+    .wire { fill: none; stroke-width: 1.5; stroke-linejoin: round; transition: opacity .2s ease; }
+    .wire.met { stroke: var(--accent); stroke-width: 2.25; opacity: .9; }
+    .wire.open { stroke: var(--muted); stroke-dasharray: 5 4; }
+    .wire.start { stroke: var(--line); stroke-width: 1.25; }
+    .wire.implied { stroke: var(--muted); stroke-dasharray: 1 4; stroke-width: 1.5; stroke-linecap: round; }
+    .wire.hot { opacity: 1; stroke-width: 3.25; }
+    .wire.hot.open { stroke: var(--fg); stroke-width: 2; }
+    .wire.dim { opacity: .12; }
+
+    .card {
+      position: absolute; padding: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 5px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 3px; text-align: left; cursor: pointer;
+      transition: left .6s ease, top .6s ease, width .6s ease, height .6s ease, opacity .3s ease, background-color .15s ease, border-color .15s ease;
+    }
+    @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+    .card:hover { background: var(--hover); border-color: var(--line); }
+    .card[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+    .card.k-landed { background: var(--wash); }
+    .card.k-blocked { background: var(--bg); border-style: dashed; border-color: var(--line); }
+    .card.k-takeable, .card.k-asked, .card.k-held { border-color: var(--fg); }
+    .card.dim { opacity: .28; }
+    .card .c-top { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+    .card .c-top .id { margin-left: auto; letter-spacing: 0; }
+    .card .c-name { font-family: var(--font-display); font-size: 15.5px; line-height: 1.25; color: var(--fg); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+    .card .c-foot { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card.k-asked .c-foot, .card.k-held .c-foot { color: var(--fg); }
+    /* one-line forms: chips (B, far out) and pills (C, everything) */
+    .card.chip-f, .card.pill-f { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+    .card.pill-f .c-name { font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; text-overflow: ellipsis; display: block; }
+    .card.chip-f { align-items: flex-start; padding: 9px 10px; }
+    .card.chip-f .st { margin-top: 3px; }
+    .card.chip-f .c-name { font-size: 14px; line-height: 1.25; flex: 1; min-width: 0; -webkit-line-clamp: 2; }
+    .card.chip-f .id { margin-top: 2px; }
+    .card.chip-f .id, .card.pill-f .id { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+    /* B: the folded course */
+    .card.sum-f { background: var(--wash); border-left: 3px solid var(--accent); }
+    .card.sum-f .c-name { font-size: 20px; }
+    .card.sum-f { align-content: start; grid-template-rows: auto auto auto; }
+    .card.sum-f.k-blocked { border-left: 1px dashed var(--line); background: var(--bg); }
+    /* Held: a hollow diamond. Asked keeps the solid one. */
+    .st-held { width: 9px; height: 9px; margin: 1.5px; border-radius: 1px; border: 1.5px solid var(--fg); transform: rotate(45deg); }
+
+    .d-head { padding: 20px 22px 16px; }
+    .d-head h2 { font-size: 24px; line-height: 1.2; margin-top: 10px; }
+    .d-head h2:focus { outline: none; }
+    .d-state { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13.5px; }
+    .prose { font-size: 14px; line-height: 1.6; }
+    .edge-list .why { color: var(--muted); font-size: 12.5px; }
+
+    /* the prototype switcher: deliberately not part of the design */
+    .proto-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px; border-radius: 999px; background: #151515; color: #f2f2f2; box-shadow: 0 6px 24px rgba(0,0,0,.35); font: 13px/1 system-ui, sans-serif; white-space: nowrap; }
+    .proto-bar button { background: transparent; color: inherit; border: 0; border-radius: 999px; padding: 7px 10px; cursor: pointer; font: inherit; }
+    .proto-bar button:hover { background: #333; }
+    .proto-bar button[aria-pressed="true"] { background: #f2f2f2; color: #151515; }
+    .proto-bar .lbl { min-width: 190px; text-align: center; font-weight: 600; }
+    .proto-bar .sep { width: 1px; height: 20px; background: #444; margin: 0 4px; }
+    .proto-bar .tag { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .6; padding: 0 6px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+  <nav id="route"></nav>
+  <main class="split graph-split" id="content">
+    <section class="graph-col">
+      <div class="graph-head">
+        <div>
+          <span class="kicker" id="kicker"></span>
+          <h1>Pre-delivery compliance checks, sliced</h1>
+          <p class="meta" id="rule"></p>
+        </div>
+        <div class="tally" id="tally" aria-label="Ticket states"></div>
+      </div>
+      <div class="viewport" id="viewport"><div class="stage-wrap" id="wrap"><div class="stage" id="stage"></div></div></div>
+    </section>
+    <aside class="side pane" id="detail" aria-live="polite"></aside>
+  </main>
+</div>
+
+<div class="proto-bar" role="toolbar" aria-label="Prototype controls">
+  <span class="tag">Prototype</span>
+  <button type="button" id="pv" aria-label="Previous variant">←</button>
+  <span class="lbl" id="plabel"></span>
+  <button type="button" id="nv" aria-label="Next variant">→</button>
+  <span class="sep"></span>
+  <span id="sizes"></span>
+  <span class="sep"></span>
+  <button type="button" id="imp" aria-pressed="false">Implied edges</button>
+  <button type="button" id="reset">From the start</button>
+  <button type="button" id="land">Land next</button>
+</div>
+
+<script src="assets/waystation.js"></script>
+<script>
+(function () {
+  const esc = WS.esc;
+  WS.renderTopbar({ page: 'tickets', effort: 'acx' });
+  WS.renderRoute({ page: 'tickets', effort: 'acx' });
+
+  const VARIANTS = [
+    { k: 'A', name: 'Layered, full cards', rule: 'Columns by earliest start; ELK picks the rows to cut crossings. Every ticket is a full card, and past a screenful the canvas scrolls.' },
+    { k: 'B', name: 'Frontier focus', rule: 'Landed work folds into one course stub on the left, and columns count steps from now. Full cards near the frontier; name-only cards once a ticket waits on a blocked ticket.' },
+    { k: 'C', name: 'Overview pills', rule: 'Every ticket is one line, so the whole effort fits. Selecting a ticket traces what it waits on and what it frees, and dims the rest.' },
+    { k: 'D', name: 'Derived streams', rule: 'Rows are streams: chains derived from the blocking edges alone, packed like transit lines. Columns by earliest start; wires run in the gutters.' },
+  ];
+  const P = new URLSearchParams(location.search);
+  let vi = Math.max(0, VARIANTS.findIndex((v) => v.k === (P.get('variant') || 'A').toUpperCase()));
+  let N = [9, 20, 40, 80].includes(+P.get('n')) ? +P.get('n') : 20;
+  let showImplied = P.get('implied') === 'show';
+
+  /* ─── states in this slice ─────────────────────────────────────── */
+  const ST = {
+    landed:   { g: 'st-done',     w: 'Landed' },
+    landing:  { g: 'st-review',   w: 'Landing' },
+    building: { g: 'st-building', w: 'Building' },
+    asked:    { g: 'st-ask',      w: 'Asked' },
+    held:     { g: 'st-held',     w: 'Held' },
+    takeable: { g: 'st-take',     w: 'Takeable' },
+    blocked:  { g: 'st-blocked',  w: 'Blocked' },
+  };
+  const ST_ORDER = ['landed', 'landing', 'building', 'asked', 'held', 'takeable', 'blocked'];
+  const CAP = 3;
+  const glyph = (s) => '<span class="st ' + ST[s].g + '" aria-hidden="true"></span>';
+
+  /* ─── synthetic /to-tickets output ─────────────────────────────── */
+  const PRE = ['Extract the audio analysis pass from the render worker', 'Move check thresholds into one rules table'];
+  const GATE = 'Block ACX export while any chapter fails a check';
+  const JOINS = ['Run every audio check in one pass', 'Show every check on one book page', "Gate delivery on every platform's rules", "Summarise a book's readiness in one line", 'Check a whole book in one click'];
+  const STREAMS = [
+    ['Flag loudness outside −23 to −18 dB RMS', 'Flag peaks above −3 dB', 'Show loudness per chapter on the waveform', 'Normalise loudness on request', 'Explain a loudness failure in plain words'],
+    ['Flag a noise floor above −60 dB', 'Check room tone at the head and tail of each chapter', 'Suggest a noise-reduction preset', 'Mark breaths louder than the noise floor', 'Detect mouth clicks'],
+    ['Flag chapters longer than 120 minutes', 'Split a long chapter at a silence', 'Require a chapter title for every file', 'Check chapter order against the manifest', 'Renumber chapters after a split'],
+    ['Require opening and closing credits', 'Detect the retail sample', 'Check the sample is under 5 minutes', 'Generate credits from the book record', 'Insert credits on export'],
+    ['Show compliance status on My Books', 'Filter My Books by failing check', 'Show when a book was last checked', 'Link a failing check to its chapter', 'Badge books ready for ACX'],
+    ['Check sample rate is 44.1 kHz', 'Check bit rate is 192 kbps CBR', 'Reject stereo files that are really mono', 'Convert WAV uploads to MP3 on export', 'Check every file is under 170 MB'],
+    ['Build the ACX export bundle', 'Name export files the ACX way', 'Include the cover in the export', 'Resume an interrupted export', 'Keep an export history'],
+    ['Check the cover is 2400 px square', 'Check the cover is RGB', 'Warn on text too close to the cover edge', 'Crop a cover to square', 'Preview the cover at store size'],
+    ['Email the producer when checks finish', 'Notify when a book becomes ready for ACX', 'Digest failing checks daily', 'Mute notifications per book', 'Link a notification to the failing check'],
+    ['Show the narrator which chapters failed', 'Let a narrator re-upload one chapter', 'Keep every take of a chapter', 'Compare two takes side by side', 'Mark a take as final'],
+    ['Download a compliance report as PDF', 'Include waveforms in the report', 'Sign the report with the check versions', 'Share a report by link', 'Expire shared report links'],
+    ['Store check thresholds per platform', 'Add Findaway thresholds', 'Add Spotify thresholds', 'Pick the target platform per book', 'Show which platform a check came from'],
+    ['Re-check every book after a rule change', 'Queue checks so uploads stay fast', 'Show check progress per book', 'Retry a check that timed out', 'Cap concurrent checks per account'],
+    ['Record who overrode a check', 'Require a reason to override a check', 'Show overrides on the report', 'Revoke an override'],
+    ['Detect clipping inside a chapter', 'Suggest where to re-record a clipped line', 'Show clipped spans on the waveform'],
+    ['Import a manuscript chapter list', 'Match audio files to manuscript chapters', 'Flag audio with no matching chapter'],
+  ];
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  function genGraph(n) {
+    if (n === 9) {
+      const map = { review: 'landing', asking: 'asked' };
+      return WS.ORDER.map((id) => { const t = WS.TICKETS[id]; return { id, name: t.name, blockers: t.blockedBy.slice(), prefactor: !!t.prefactor, state: map[t.state] || t.state }; });
+    }
+    const r = rng(n * 7919 + 13), T = [];
+    let id = 200;
+    const add = (name, blockers, extra) => { T.push(Object.assign({ id: id, name, blockers: [...new Set(blockers)] }, extra || {})); return id++; };
+    const pre = [add(PRE[0], [], { prefactor: true })];
+    if (n >= 40) pre.push(add(PRE[1], [], { prefactor: true }));
+    const nj = n >= 40 ? Math.floor(n / 16) : 0;
+    const reserve = 1 + nj;
+    const chains = [];
+    let si = 0;
+    while (T.length < n - reserve) {
+      const s = STREAMS[si % STREAMS.length]; si++;
+      const len = Math.min(2 + Math.floor(r() * 4), n - reserve - T.length, s.length);
+      const chain = [];
+      let prev = pre[Math.floor(r() * pre.length)];
+      for (let i = 0; i < len; i++) {
+        const b = [prev];
+        // /to-tickets often lists a blocker that is already implied: a transitive edge
+        if (i >= 1 && r() < 0.2) b.push(chain.length >= 2 ? chain[chain.length - 2] : pre[0]);
+        // and some tickets genuinely wait on another stream: a diamond
+        if (chains.length && r() < 0.22) { const c = chains[Math.floor(r() * chains.length)]; b.push(c[Math.floor(r() * c.length)]); }
+        prev = add(s[i] + (si > STREAMS.length ? ' (again)' : ''), b);
+        chain.push(prev);
+      }
+      chains.push(chain);
+    }
+    const ends = chains.map((c) => c[c.length - 1]);
+    const joins = [];
+    const per = Math.ceil(ends.length / Math.max(1, nj));
+    for (let j = 0; j < nj; j++) { const g = ends.slice(j * per, (j + 1) * per); if (g.length) joins.push(add(JOINS[j % JOINS.length], g)); }
+    add(GATE, nj ? joins : ends, { gate: true });
+    simulate(T);
+    return T;
+  }
+
+  // a cascade part-way through: the oldest ~38% landed, the frontier busy
+  function simulate(T) {
+    const by = Object.fromEntries(T.map((t) => [t.id, t]));
+    const depth = {};
+    T.forEach((t) => { depth[t.id] = t.blockers.length ? 1 + Math.max(...t.blockers.map((b) => depth[b])) : 0; });
+    const sorted = [...T].sort((a, b) => depth[a.id] - depth[b.id] || a.id - b.id);
+    const target = Math.round(T.length * 0.38);
+    let landed = 0;
+    for (const t of sorted) { if (landed >= target) break; if (t.blockers.every((b) => by[b].state === 'landed')) { t.state = 'landed'; landed++; } }
+    const seq = ['landing', 'building', 'asked', 'building', 'held', 'landing', 'building'];
+    sorted.filter((t) => !t.state && t.blockers.every((b) => by[b].state === 'landed')).forEach((t, i) => { t.state = seq[i] || 'takeable'; });
+    T.forEach((t) => { if (!t.state) t.state = 'blocked'; });
+  }
+
+  /* ─── graph facts every variant shares ─────────────────────────── */
+  let T, G;
+  function analyse() {
+    const by = Object.fromEntries(T.map((t) => [t.id, t]));
+    const depth = {}, anc = {}, kids = {};
+    T.forEach((t) => { kids[t.id] = []; });
+    T.forEach((t) => {
+      depth[t.id] = t.blockers.length ? 1 + Math.max(...t.blockers.map((b) => depth[b])) : 0;
+      const a = new Set();
+      t.blockers.forEach((b) => { a.add(b); anc[b].forEach((x) => a.add(x)); kids[b].push(t.id); });
+      anc[t.id] = a;
+    });
+    // transitive reduction: a blocker is implied when another blocker already waits on it
+    const reduced = {}, implied = {};
+    T.forEach((t) => {
+      reduced[t.id] = []; implied[t.id] = [];
+      t.blockers.forEach((b) => {
+        const via = t.blockers.find((c) => c !== b && anc[c].has(b));
+        if (via) implied[t.id].push({ b, via }); else reduced[t.id].push(b);
+      });
+    });
+    const desc = {};
+    [...T].reverse().forEach((t) => { const d = new Set(); kids[t.id].forEach((k) => { d.add(k); desc[k].forEach((x) => d.add(x)); }); desc[t.id] = d; });
+    G = { by, depth, anc, desc, kids, reduced, implied };
+  }
+  const tk = (id) => G.by[id];
+  const building = () => T.filter((t) => t.state === 'building').length;
+  const shortName = (s) => s.length <= 28 ? s : s.slice(0, s.lastIndexOf(' ', 27)) + '…';
+  const openBlockers = (t) => t.blockers.filter((b) => tk(b).state !== 'landed');
+
+  function foot(t) {
+    switch (t.state) {
+      case 'landed': return 'Landed on the effort branch';
+      case 'landing': return 'In the merge queue';
+      case 'building': return 'Working · ' + (8 + (t.id * 7) % 31) + ' min';
+      case 'asked': return 'Asked you a question';
+      case 'held': return 'Held · a blocking finding';
+      case 'takeable': return building() >= CAP ? 'Starts when a slot frees' : 'Nobody on it yet';
+      default: { const o = openBlockers(t); return 'Waiting on ' + (o.length === 1 ? shortName(tk(o[0]).name) : o.length + ' tickets'); }
+    }
+  }
+
+  /* ─── layouts ──────────────────────────────────────────────────── */
+  const elk = new ELK();
+  const CW = 184, CH = 128;
+
+  async function elkLayout(nodes, edges, opt) {
+    const g = {
+      id: 'root',
+      layoutOptions: {
+        'elk.algorithm': 'layered', 'elk.direction': 'RIGHT',
+        // earliest start: ELK's default layering pushes a ticket as late as it can go
+        'elk.layered.layering.strategy': 'LONGEST_PATH_SOURCE',
+        'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.layered.mergeEdges': 'true',
+        'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+        'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+        'elk.spacing.nodeNode': String(opt.nn),
+        'elk.layered.spacing.nodeNodeBetweenLayers': String(opt.between),
+        'elk.layered.spacing.edgeNodeBetweenLayers': '14',
+        'elk.layered.spacing.edgeEdgeBetweenLayers': '6',
+        'elk.padding': '[top=12,left=4,bottom=12,right=12]',
+      },
+      children: nodes.map((n) => ({ id: String(n.key), width: n.w, height: n.h })),
+      edges: edges.map((e, i) => ({ id: 'e' + i, sources: [String(e.from)], targets: [String(e.to)] })),
+    };
+    const res = await elk.layout(g);
+    const out = { w: res.width, h: res.height, nodes: {}, edges: [] };
+    res.children.forEach((c, i) => { out.nodes[c.id] = Object.assign({}, nodes[i], { x: c.x, y: c.y }); });
+    res.edges.forEach((e, i) => {
+      const pts = [];
+      (e.sections || []).forEach((s) => { pts.push([s.startPoint.x, s.startPoint.y]); (s.bendPoints || []).forEach((b) => pts.push([b.x, b.y])); pts.push([s.endPoint.x, s.endPoint.y]); });
+      out.edges.push(Object.assign({}, edges[i], { pts }));
+    });
+    return out;
+  }
+
+  const reducedEdges = () => T.flatMap((t) => G.reduced[t.id].map((b) => ({ from: b, to: t.id })));
+
+  async function layoutA() {
+    return elkLayout(T.map((t) => ({ key: t.id, id: t.id, w: CW, h: CH, form: 'card' })), reducedEdges(), { nn: 16, between: 60 });
+  }
+
+  async function layoutB() {
+    const landed = T.filter((t) => t.state === 'landed');
+    const live = T.filter((t) => t.state !== 'landed');
+    const far = (t) => t.state === 'blocked' && openBlockers(t).some((b) => tk(b).state === 'blocked');
+    const nodes = [];
+    // the start line: always there, so the first landing moves tickets, never the anchor
+    nodes.push({ key: 'landed', w: CW, h: CH, form: 'sum', count: landed.length });
+    live.forEach((t) => nodes.push({ key: t.id, id: t.id, w: CW, h: far(t) ? 56 : CH, form: far(t) ? 'chip' : 'card' }));
+    const seen = new Set(), edges = [];
+    reducedEdges().forEach((e) => {
+      if (tk(e.to).state === 'landed') return;
+      const from = tk(e.from).state === 'landed' ? 'landed' : e.from;
+      const k = from + '>' + e.to;
+      if (!seen.has(k)) { seen.add(k); edges.push({ from, to: e.to }); }
+    });
+    // tickets that wait on nothing hang off the start line on a thin start-line wire
+    live.filter((t) => !t.blockers.length).forEach((t) => edges.push({ from: 'landed', to: t.id, start: true }));
+    const out = await elkLayout(nodes, edges, { nn: 14, between: 56 });
+    // the start line is a rail the full height of the graph; each wire leaves it level with the ticket it feeds
+    const box = out.nodes.landed, x0 = box.x + box.w;
+    box.y = 12; box.h = out.h - 24;
+    out.edges.filter((e) => e.from === 'landed').forEach((e) => {
+      const p = e.pts;
+      e.pts = p.length <= 2 ? [[x0, p[p.length - 1][1]], p[p.length - 1]] : [[x0, p[2][1]], ...p.slice(2)];
+    });
+    return out;
+  }
+
+  async function layoutC() {
+    return elkLayout(T.map((t) => ({ key: t.id, id: t.id, w: 232, h: 34, form: 'pill' })), reducedEdges(), { nn: 8, between: 44 });
+  }
+
+  function layoutD() {
+    // lanes: walk in topological order; a ticket continues the lane of a blocker nobody has continued yet
+    const lane = {}, cont = {}, lanes = [];
+    T.forEach((t) => {
+      const cands = G.reduced[t.id].filter((b) => !cont[b]).sort((a, b) => G.depth[b] - G.depth[a]);
+      if (cands.length) { lane[t.id] = lane[cands[0]]; cont[cands[0]] = true; lanes[lane[t.id]].ids.push(t.id); }
+      else { lane[t.id] = lanes.length; lanes.push({ ids: [t.id], parent: G.reduced[t.id][0] }); }
+    });
+    // pack lanes into rows like transit lines, starting at the parent's row
+    const rows = [], rowOf = {};
+    lanes.forEach((l, li) => {
+      const a = G.depth[l.ids[0]], b = G.depth[l.ids[l.ids.length - 1]];
+      const pref = l.parent != null ? rowOf[lane[l.parent]] : 0;
+      const free = (r) => !rows[r] || rows[r].every(([x, y]) => b < x - 0 || a > y + 0);
+      let r = pref;
+      while (!free(r)) r++;
+      (rows[r] = rows[r] || []).push([a, b]);
+      rowOf[li] = r;
+    });
+    const COLW = CW + 64, ROWH = CH + 18, PAD = 12;
+    const X = (id) => G.depth[id] * COLW, Y = (id) => PAD + rowOf[lane[id]] * ROWH;
+    const nodes = {};
+    T.forEach((t) => { nodes[t.id] = { key: t.id, id: t.id, w: CW, h: CH, form: 'card', x: X(t.id), y: Y(t.id), lane: lane[t.id] }; });
+    const edges = [];
+    let k = 0;
+    reducedEdges().forEach((e) => {
+      const sx = X(e.from) + CW, sy = Y(e.from) + CH / 2, tx = X(e.to), ty = Y(e.to) + CH / 2;
+      const span = G.depth[e.to] - G.depth[e.from];
+      let pts;
+      if (span === 1 && sy === ty) pts = [[sx, sy], [tx, ty]];
+      else if (span === 1) { const cx = tx - 32 + ((k++ % 3) - 1) * 6; pts = [[sx, sy], [cx, sy], [cx, ty], [tx, ty]]; }
+      else {
+        // down the channel after the blocker, along the gutter above the target's row, into the target
+        const c1 = sx + 32 + ((k % 3) - 1) * 6, c2 = tx - 32 + ((k % 3) - 1) * 6;
+        const gy = Y(e.to) - 9 + ((k++ % 3) - 1) * 3;
+        pts = [[sx, sy], [c1, sy], [c1, gy], [c2, gy], [c2, ty], [tx, ty]];
+      }
+      edges.push({ from: e.from, to: e.to, pts });
+    });
+    const maxD = Math.max(...T.map((t) => G.depth[t.id]));
+    return { w: maxD * COLW + CW + 16, h: PAD * 2 + rows.length * ROWH, nodes, edges, lanes, laneOf: lane };
+  }
+
+  /* ─── drawing ──────────────────────────────────────────────────── */
+  function roundPath(pts, r) {
+    if (pts.length < 2) return '';
+    let d = 'M' + pts[0][0] + ',' + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const inLen = Math.hypot(x - px, y - py) || 1, outLen = Math.hypot(nx - x, ny - y) || 1;
+      const rr = Math.min(r, inLen / 2, outLen / 2);
+      d += ' L' + (x - (x - px) / inLen * rr) + ',' + (y - (y - py) / inLen * rr) + ' Q' + x + ',' + y + ' ' + (x + (nx - x) / outLen * rr) + ',' + (y + (ny - y) / outLen * rr);
+    }
+    const l = pts[pts.length - 1];
+    return d + ' L' + l[0] + ',' + l[1];
+  }
+
+  const stage = document.getElementById('stage'), wrap = document.getElementById('wrap'), viewport = document.getElementById('viewport');
+  const NS = 'http://www.w3.org/2000/svg';
+  let svg, L, cards = {}, sel = null, scale = 1;
+
+  function cardHTML(n) {
+    if (n.form === 'sum' && !n.count) return '<span class="c-top"><span class="st st-pending" aria-hidden="true"></span>The start line</span><span class="c-name">Nothing landed yet</span><span class="c-foot">The course starts here</span>';
+    if (n.form === 'sum') return '<span class="c-top">' + glyph('landed') + 'The course so far</span><span class="c-name">' + n.count + ' ticket' + (n.count === 1 ? '' : 's') + ' landed</span><span class="c-foot">Select to list them</span>';
+    const t = tk(n.id);
+    if (n.form === 'chip') return glyph(t.state) + '<span class="c-name">' + esc(t.name) + ' <span class="id">#' + t.id + '</span></span>';
+    if (n.form === 'pill') return glyph(t.state) + '<span class="c-name">' + esc(t.name) + '</span><span class="id">#' + t.id + '</span>';
+    return '<span class="c-top">' + glyph(t.state) + ST[t.state].w + '<span class="id">#' + t.id + '</span></span><span class="c-name">' + esc(t.name) + '</span><span class="c-foot">' + esc(foot(t)) + '</span>';
+  }
+
+  function render(fresh) {
+    if (fresh) { stage.innerHTML = ''; cards = {}; }
+    if (!svg || fresh) { svg = document.createElementNS(NS, 'svg'); svg.setAttribute('aria-hidden', 'true'); stage.prepend(svg); }
+    stage.style.width = L.w + 'px'; stage.style.height = L.h + 'px';
+    svg.setAttribute('width', L.w); svg.setAttribute('height', L.h); svg.setAttribute('viewBox', '0 0 ' + L.w + ' ' + L.h);
+    const seen = new Set();
+    Object.values(L.nodes).forEach((n) => {
+      const key = String(n.key);
+      let el = cards[key];
+      if (!el) {
+        el = document.createElement('button'); el.type = 'button'; el.dataset.key = key;
+        el.addEventListener('click', () => select(el.dataset.key));
+        stage.appendChild(el); cards[key] = el;
+      }
+      seen.add(key);
+      el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; el.style.width = n.w + 'px'; el.style.height = n.h + 'px';
+      const st = n.form === 'sum' ? (n.count ? 'landed' : 'blocked') : tk(n.id).state;
+      el.className = 'card ' + n.form + '-f k-' + st;
+      el.setAttribute('aria-label', n.form === 'sum' ? (n.count ? n.count + ' tickets landed' : 'The start line, nothing landed yet') : tk(n.id).name + ', ' + ST[st].w);
+      el.innerHTML = cardHTML(n);
+    });
+    Object.keys(cards).forEach((k) => { if (!seen.has(k)) { const el = cards[k]; el.style.opacity = 0; setTimeout(() => el.remove(), 320); delete cards[k]; } });
+
+    svg.innerHTML = '';
+    L.edges.forEach((e) => {
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', roundPath(e.pts, 10));
+      e.met = !e.start && (e.from === 'landed' || tk(e.from).state === 'landed');
+      e.el = p; svg.appendChild(p);
+    });
+    L.implied = [];
+    if (showImplied) {
+      T.forEach((t) => G.implied[t.id].forEach(({ b }) => {
+        const a = L.nodes[b], z = L.nodes[t.id];
+        if (!a || !z) return;
+        const sx = a.x + a.w, sy = a.y + a.h / 2, tx = z.x, ty = z.y + z.h / 2, mx = (sx + tx) / 2;
+        const p = document.createElementNS(NS, 'path');
+        p.setAttribute('d', 'M' + sx + ',' + sy + ' C' + mx + ',' + sy + ' ' + mx + ',' + ty + ' ' + tx + ',' + ty);
+        p.setAttribute('class', 'wire implied'); svg.appendChild(p);
+        L.implied.push({ from: b, to: t.id, el: p });
+      }));
+    }
+    fit();
+    paintSel();
+  }
+
+  function fit() {
+    if (!L) return;
+    const avail = viewport.clientWidth - 48;
+    scale = Math.max(0.7, Math.min(1, avail / L.w));
+    stage.style.transform = 'scale(' + scale + ')';
+    wrap.style.width = Math.round(L.w * scale) + 'px'; wrap.style.height = Math.round(L.h * scale) + 'px';
+  }
+  new ResizeObserver(fit).observe(viewport);
+
+  function keyFor(id) { return VARIANTS[vi].k === 'B' && tk(id) && tk(id).state === 'landed' ? 'landed' : String(id); }
+
+  function paintSel() {
+    Object.entries(cards).forEach(([k, el]) => el.setAttribute('aria-pressed', String(k === sel)));
+    const trace = sel && sel !== 'landed';
+    let on = null;
+    if (trace) { const id = +sel; on = new Set([id, ...G.anc[id], ...G.desc[id]]); if ([...G.anc[id]].some((a) => tk(a).state === 'landed')) on.add('landed'); }
+    Object.entries(cards).forEach(([k, el]) => el.classList.toggle('dim', !!on && !on.has(k === 'landed' ? 'landed' : +k)));
+    L.edges.forEach((e) => {
+      let c = 'wire ' + (e.start ? 'start' : e.met ? 'met' : 'open');
+      if (String(e.from) === sel || String(e.to) === sel) c += ' hot';
+      else if (on && !(on.has(e.from) && on.has(e.to))) c += ' dim';
+      e.el.setAttribute('class', c);
+    });
+    L.edges.filter((e) => String(e.from) === sel || String(e.to) === sel).forEach((e) => svg.appendChild(e.el));
+    renderDetail();
+  }
+
+  /* ─── head, tally, detail ─────────────────────────────────────── */
+  function renderHead() {
+    const v = VARIANTS[vi];
+    document.getElementById('kicker').textContent = '/to-tickets · ' + N + ' tracer bullets from spec #124';
+    document.getElementById('rule').textContent = v.k + ' · ' + v.rule;
+    const c = {};
+    T.forEach((t) => { c[t.state] = (c[t.state] || 0) + 1; });
+    document.getElementById('tally').innerHTML = ST_ORDER.filter((s) => c[s]).map((s) => '<span>' + glyph(s) + '<b>' + c[s] + '</b> ' + ST[s].w.toLowerCase() + '</span>').join('');
+    document.getElementById('plabel').textContent = v.k + ' (' + v.name + ')';
+    document.querySelectorAll('#sizes button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.n === N)));
+    document.getElementById('imp').setAttribute('aria-pressed', String(showImplied));
+  }
+
+  const detail = document.getElementById('detail');
+  function renderDetail() {
+    if (!sel) { detail.innerHTML = '<div class="d-head"><p class="meta">Select a ticket.</p></div>'; return; }
+    const item = (id, why) => '<li>' + glyph(tk(id).state) + '<span><button type="button" class="link" data-go="' + id + '">' + esc(tk(id).name) + '</button>' + (why ? ' <span class="why">' + why + '</span>' : '') + '</span></li>';
+    if (sel === 'landed') {
+      const ls = T.filter((t) => t.state === 'landed');
+      detail.innerHTML = '<div class="d-head"><span class="chip">The course so far</span><h2 tabindex="-1">' + ls.length + ' tickets landed</h2></div>' +
+        '<div class="block"><span class="kicker">Landed, in dependency order</span><ul class="edge-list">' + ls.map((t) => item(t.id)).join('') + '</ul></div>';
+      bindGo(); return;
+    }
+    const t = tk(+sel), v = VARIANTS[vi].k;
+    let where = 'Column ' + (G.depth[t.id] + 1) + ': ' + (G.depth[t.id] ? 'at the earliest, it starts after ' + G.depth[t.id] + ' ticket' + (G.depth[t.id] > 1 ? 's' : '') + ' in a row have landed.' : 'nothing has to land first.');
+    if (v === 'B') { const s = stepsFromNow(t); where = t.state === 'landed' ? 'Folded into the course.' : s === 0 ? 'On the frontier or in flight now.' : s + ' step' + (s > 1 ? 's' : '') + ' from the frontier.'; }
+    if (v === 'D' && L.lanes) { const ln = L.lanes[L.laneOf[t.id]]; where += ' Stream: ' + ln.ids.length + ' ticket' + (ln.ids.length > 1 ? 's' : '') + ', from “' + esc(shortName(tk(ln.ids[0]).name)) + '” to “' + esc(shortName(tk(ln.ids[ln.ids.length - 1]).name)) + '”.'; }
+    const imp = G.implied[t.id];
+    detail.innerHTML =
+      '<div class="d-head"><div style="display:flex; gap:6px; flex-wrap:wrap"><span class="chip">Issue #' + t.id + '</span>' + (t.prefactor ? '<span class="chip">Prefactor</span>' : '') + '</div>' +
+      '<h2 tabindex="-1">' + esc(t.name) + '</h2><div class="d-state">' + glyph(t.state) + '<span>' + ST[t.state].w + ' · ' + esc(foot(t)) + '</span></div></div>' +
+      '<div class="block"><span class="kicker">Where it sits</span><p class="prose">' + where + '</p></div>' +
+      '<div class="block"><span class="kicker">Blocked by</span>' + (t.blockers.length ? '<ul class="edge-list">' + G.reduced[t.id].map((b) => item(b)).join('') + imp.map(({ b, via }) => item(b, 'implied through ' + esc(shortName(tk(via).name)) + ', not drawn')).join('') + '</ul>' : '<p class="meta">Nothing. It could start immediately.</p>') +
+      (G.kids[t.id].length ? '<span class="kicker" style="display:block; margin:16px 0 10px">Unblocks</span><ul class="edge-list">' + G.kids[t.id].map((k) => item(k)).join('') + '</ul>' : '') + '</div>';
+    bindGo();
+  }
+  function bindGo() {
+    detail.querySelectorAll('button[data-go]').forEach((b) => b.addEventListener('click', () => { const k = keyFor(+b.dataset.go); select(k); if (cards[k]) cards[k].focus(); }));
+  }
+  function stepsFromNow(t) {
+    const memo = {};
+    const f = (id) => { if (memo[id] != null) return memo[id]; const o = openBlockers(tk(id)); return (memo[id] = o.length ? 1 + Math.max(...o.map(f)) : 0); };
+    return f(t.id);
+  }
+
+  function select(key) { sel = String(key); paintSel(); }
+
+  /* ─── orchestration ────────────────────────────────────────────── */
+  let busy = Promise.resolve();
+  function relayout(fresh) {
+    busy = busy.then(async () => {
+      const v = VARIANTS[vi].k;
+      L = v === 'A' ? await layoutA() : v === 'B' ? await layoutB() : v === 'C' ? await layoutC() : layoutD();
+      if (sel && sel !== 'landed' && tk(+sel)) sel = keyFor(+sel);
+      if (sel === 'landed' && !L.nodes.landed) sel = null;
+      renderHead();
+      render(fresh);
+      if (fresh && v === 'B') { viewport.scrollLeft = 0; viewport.scrollTop = 0; }
+      else if (fresh) {
+        const live = Object.values(L.nodes).filter((n) => n.form !== 'sum' && tk(n.id).state !== 'landed');
+        const x = live.length ? Math.min(...live.map((n) => n.x)) : 0;
+        viewport.scrollLeft = Math.max(0, x * scale - 60);
+        viewport.scrollTop = 0;
+      }
+    });
+  }
+  function setUrl() {
+    const q = new URLSearchParams({ variant: VARIANTS[vi].k, n: N });
+    if (showImplied) q.set('implied', 'show');
+    history.replaceState(null, '', '?' + q);
+  }
+  function loadGraph() {
+    T = genGraph(N); analyse();
+    const first = T.find((t) => t.state === 'takeable') || T.find((t) => t.state !== 'landed');
+    sel = first ? keyFor(first.id) : null;
+  }
+  function cycle(d) { vi = (vi + d + VARIANTS.length) % VARIANTS.length; setUrl(); relayout(true); }
+
+  // one tick of the cascade: a Landing ticket lands, a session finishes, a slot fills
+  function landNext() {
+    const l = T.find((t) => t.state === 'landing');
+    if (l) { l.state = 'landed'; G.kids[l.id].forEach((k) => { const t = tk(k); if (t.state === 'blocked' && t.blockers.every((b) => tk(b).state === 'landed')) t.state = 'takeable'; }); }
+    const b = T.find((t) => t.state === 'building');
+    if (b) b.state = 'landing';
+    T.filter((t) => t.state === 'takeable').forEach((t) => { if (building() < CAP) t.state = 'building'; });
+    relayout(false);
+  }
+
+  document.getElementById('sizes').innerHTML = [9, 20, 40, 80].map((n) => '<button type="button" data-n="' + n + '" aria-pressed="false">' + n + '</button>').join('');
+  document.querySelectorAll('#sizes button').forEach((b) => b.addEventListener('click', () => { N = +b.dataset.n; setUrl(); loadGraph(); relayout(true); }));
+  document.getElementById('pv').addEventListener('click', () => cycle(-1));
+  document.getElementById('nv').addEventListener('click', () => cycle(1));
+  document.getElementById('imp').addEventListener('click', () => { showImplied = !showImplied; setUrl(); relayout(false); });
+  document.getElementById('land').addEventListener('click', landNext);
+  // rewind the cascade to the moment it was armed: nothing landed, the cap filled from the frontier
+  document.getElementById('reset').addEventListener('click', () => {
+    T.forEach((t) => { t.state = t.blockers.length ? 'blocked' : 'takeable'; });
+    T.filter((t) => t.state === 'takeable').forEach((t) => { if (building() < CAP) t.state = 'building'; });
+    const q = new URLSearchParams(location.search); q.set('start', '1'); history.replaceState(null, '', '?' + q);
+    relayout(false);
+  });
+  // clicking off a ticket, or Esc, clears the selection and its trace
+  viewport.addEventListener('click', (e) => { if (!e.target.closest('.card')) { sel = null; paintSel(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { sel = null; paintSel(); return; }
+    if (e.target.closest('input, textarea, [contenteditable]')) return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  loadGraph();
+  if (P.get('start') === '1') document.getElementById('reset').click();
+  else { setUrl(); relayout(true); }
+})();
+</script>
+</body>
+</html>
