@@ -34,6 +34,10 @@ types:
 types-drift: types
     git diff --exit-code -- web/src/api.gen.ts
 
+# Install the secret-scanning hooks (.pre-commit-config.yaml), once per clone.
+hooks:
+    uv run pre-commit install
+
 # Build the sdist and wheel; the wheel carries the page.
 build:
     uv build
