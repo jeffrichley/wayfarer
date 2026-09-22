@@ -184,6 +184,10 @@ _Avoid_: merge train, batch, landing queue
 A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or drops it.
 _Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
+**Landing**:
+A finished ticket whose work is in the merge queue: waiting its turn, or being re-tested against the latest effort branch. It is moving, not waiting on anyone.
+_Avoid_: queued, merging, pending, in review (that is waiting on a person)
+
 **Landed**:
 A ticket whose commits have reached the effort branch. This is what unblocks its dependents.
 _Avoid_: done, closed, merged, shipped
