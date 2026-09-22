@@ -105,7 +105,7 @@ The map body becomes the handoff:
 
 - **Scripted content:** the conversation, the drafted resolution, the seam proposal, section counts, spec number #168 and the spec summary are all fixed. Choosing "own seam" only changes the recorded wording.
 - **Writing time:** "writing" is a timer, about 320ms per section.
-- **Storage:** stage state is `sessionStorage` keys `sample.closed` (the resolution text), `sample.seam`, `sample.written` and `sample.sliced`.
+- **Storage:** none. The stages (close, seam, write, slice) play through on this page only, so a reload returns to the last open ticket and no other screen sees the handoff.
 - **No spec reader for this spec:** `spec-reader.html` only renders the ACX spec, so the spec card doesn't link anywhere.
 
 ## Open questions

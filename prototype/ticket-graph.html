@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tickets · Pre-delivery compliance checks · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .graph-split { grid-template-columns: minmax(0, 1fr) 400px; }
     .graph-col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
@@ -76,7 +76,7 @@
   <nav id="route"></nav>
 
   <main class="split graph-split" id="content">
-    <section class="graph-col" data-od-id="ticket-graph">
+    <section class="graph-col" data-piece="ticket-graph">
       <div class="graph-head">
         <div>
           <span class="kicker">/to-tickets · 9 tracer bullets from spec #124</span>
@@ -90,11 +90,11 @@
       </div>
     </section>
 
-    <aside class="side pane" id="detail" data-od-id="ticket-detail" aria-live="polite"></aside>
+    <aside class="side pane" id="detail" data-piece="ticket-detail" aria-live="polite"></aside>
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { ticket, tickets, glyph, esc, STATES, blocks } = WS;
@@ -152,7 +152,7 @@
   const cards = {};
   WS.ORDER.forEach((n) => {
     const [c, r] = POS[n];
-    stage.insertAdjacentHTML('beforeend', '<button type="button" class="card" data-n="' + n + '" data-od-id="ticket-card-' + n + '" aria-pressed="false" style="left:' + COL[c] + 'px; top:' + ROW[r] + 'px"></button>');
+    stage.insertAdjacentHTML('beforeend', '<button type="button" class="card" data-n="' + n + '" data-piece="ticket-card-' + n + '" aria-pressed="false" style="left:' + COL[c] + 'px; top:' + ROW[r] + 'px"></button>');
     const el = stage.lastElementChild;
     cards[n] = el;
     el.addEventListener('click', () => select(n));
@@ -231,27 +231,26 @@
 
   function actionBlock(t) {
     if (t.state === 'takeable') {
-      return '<div class="block" data-od-id="start-agent-block"><span class="kicker">On the frontier</span>' +
+      return '<div class="block" data-piece="start-agent-block"><span class="kicker">On the frontier</span>' +
         '<dl class="setup"><dt>Agent</dt><dd>Claude Code</dd><dt>Skill</dt><dd>/tdd</dd><dt>Worktree</dt><dd>wt/' + t.wt + ' from main</dd></dl>' +
-        '<div class="act-row"><button type="button" class="btn btn-primary" id="start" data-od-id="start-agent">Start an agent on this ticket</button></div></div>';
+        '<div class="act-row"><button type="button" class="btn btn-primary" id="start" data-piece="start-agent">Start an agent on this ticket</button></div></div>';
     }
     if (t.state === 'building') {
-      return '<div class="block"><span class="kicker">In a session</span><p class="prose" style="margin-bottom:12px">Claude Code is working in wt/' + t.wt + (WS.has('started', t.n) ? '. Started from here a moment ago.' : ', running /tdd one criterion at a time.') + '</p>' +
-        '<a class="btn btn-secondary btn-arrow" href="live-build.html?session=' + t.n + '" data-od-id="watch-session">Watch the session</a></div>';
+      return '<div class="block"><span class="kicker">In a session</span><p class="prose" style="margin-bottom:12px">Claude Code is working in wt/' + t.wt + ', running /tdd one criterion at a time.</p>' +
+        '<a class="btn btn-secondary btn-arrow" href="live-build.html?session=' + t.n + '" data-piece="watch-session">Watch the session</a></div>';
     }
     if (t.state === 'asking') {
       return '<div class="block"><span class="kicker">Paused for you</span><p class="quote">' + esc(t.question.text) + '</p>' +
-        '<a class="btn btn-secondary btn-arrow" href="review-desk.html?item=q-' + t.n + '" data-od-id="answer-question">Answer on the desk</a></div>';
+        '<a class="btn btn-secondary btn-arrow" href="review-desk.html?item=q-' + t.n + '" data-piece="answer-question">Answer on the desk</a></div>';
     }
     if (t.state === 'review') {
       return '<div class="block"><span class="kicker">Waiting on review</span><p class="prose" style="margin-bottom:12px">/code-review passed Standards and found one gap against the spec.</p>' +
-        '<a class="btn btn-secondary btn-arrow" href="review-desk.html?item=pr-' + t.pr + '" data-od-id="review-pr">Review PR #' + t.pr + '</a></div>';
+        '<a class="btn btn-secondary btn-arrow" href="review-desk.html?item=pr-' + t.pr + '" data-piece="review-pr">Review PR #' + t.pr + '</a></div>';
     }
     if (t.state === 'blocked') {
       const open = t.blockedBy.filter((b) => ticket(b).state !== 'landed');
-      const queued = WS.has('queued', t.n);
       return '<div class="block"><span class="kicker">Not yet</span><p class="prose" style="margin-bottom:12px">Reaches the frontier once ' + open.map((b) => '“' + esc(ticket(b).short) + '”').join(open.length > 2 ? ', ' : ' and ') + (open.length > 1 ? ' land.' : ' lands.') + '</p>' +
-        '<button type="button" class="btn btn-ghost" id="queue" aria-pressed="' + queued + '" data-od-id="queue-agent">' + (queued ? 'Queued · an agent starts when it unblocks' : 'Queue an agent for when it unblocks') + '</button></div>';
+        '<button type="button" class="btn btn-ghost" id="queue" aria-pressed="false" data-piece="queue-agent">Queue an agent for when it unblocks</button></div>';
     }
     return '';
   }
@@ -260,24 +259,12 @@
     const start = document.getElementById('start');
     if (start) start.addEventListener('click', () => {
       if (start.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('started', t.n);
       start.setAttribute('aria-disabled', 'true');
       start.textContent = 'Agent started in wt/' + t.wt;
-      start.insertAdjacentHTML('afterend', '<a class="btn btn-ghost btn-arrow" href="live-build.html?session=' + t.n + '">Watch it work</a>');
-      // repaint the graph around the panel without rebuilding the clicked button
-      const nt = ticket(t.n), el = cards[t.n];
-      el.className = 'card k-' + nt.state;
-      el.innerHTML = '<span class="c-top">' + glyph(nt.state) + STATES[nt.state].word + '<span class="id">#' + nt.n + '</span></span><span class="c-name">' + esc(nt.name) + '</span><span class="c-foot">' + footFor(nt) + '</span>';
-      const c = WS.counts();
-      document.getElementById('tally').innerHTML = ['landed', 'review', 'building', 'asking', 'takeable', 'blocked'].filter((k) => c[k]).map((k) => '<span>' + glyph(k) + '<b>' + c[k] + '</b> ' + STATES[k].word.toLowerCase() + '</span>').join('');
-      detail.querySelector('.d-state').innerHTML = glyph('building') + '<span>Building · 0 of ' + nt.criteria.length + ' criteria</span>';
-      WS.renderTopbar({ page: 'tickets', effort: 'acx' });
-      WS.renderRoute({ page: 'tickets', effort: 'acx' });
     });
     const queue = document.getElementById('queue');
     if (queue) queue.addEventListener('click', () => {
       const on = queue.getAttribute('aria-pressed') !== 'true';
-      WS.mark('queued', t.n, on);
       queue.setAttribute('aria-pressed', String(on));
       queue.textContent = on ? 'Queued · an agent starts when it unblocks' : 'Queue an agent for when it unblocks';
     });

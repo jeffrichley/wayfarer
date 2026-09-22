@@ -95,7 +95,7 @@ When the session is waiting on you, the composer hides and a **question card** a
 - **Glance:** scan the lanes' latest beats and ticks → select the one that looks off → read its current chapter.
 - **Nudge:** type a note → Send → the agent acknowledges and carries on.
 - **Unblock:** a lane shows "Asked you: …" → select it → answer in the card → the session resumes.
-- **Start the next one:** Around it → Start an agent → a new lane appears and takes focus.
+- **Start the next one:** Around it → Start an agent → the button reads "Agent started". The prototype adds no lane.
 
 ## Why it looks this way
 
@@ -105,10 +105,10 @@ When the session is waiting on you, the composer hides and a **question card** a
 
 ## Prototype shortcuts
 
-- **Scripted sessions:** four sessions (#128, #129, #130, #132) with pre-written beats and a "live" queue revealed on a timer, about every 5s at random. The clock is faked from 09:46.
+- **Scripted sessions:** three sessions (#128, #129, #130) with pre-written beats and a "live" queue revealed on a timer, about every 5s at random. The clock is faked from 09:46.
 - **No-ops:** Open terminal only changes its label. Pause stops the scripted beats. Notes get a canned acknowledgement.
 - **Criteria progress** updates from `crit` markers on the scripted beats.
-- **Shared answers:** answering #130 here or on the desk uses the same `sessionStorage` key.
+- **Answers aren't kept:** answering #130 here or on the desk marks the card as sent, and the session doesn't resume. Neither screen sees the other's answer.
 - **Not responsive:** no mobile layout; the three columns only narrow.
 
 ## Open questions

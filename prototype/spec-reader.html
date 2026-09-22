@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pre-delivery compliance checks · Spec · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .spec-split { grid-template-columns: 250px minmax(0, 1fr); }
     .toc { padding: 24px 18px 24px 24px; }
@@ -79,7 +79,7 @@
   <nav id="route"></nav>
 
   <main class="split spec-split" id="content">
-    <aside class="pane side-l toc" data-od-id="spec-outline">
+    <aside class="pane side-l toc" data-piece="spec-outline">
       <span class="kicker">Spec #124</span>
       <ol id="toc">
         <li><a href="#problem" data-sec="problem">Problem statement</a></li>
@@ -95,14 +95,14 @@
     </aside>
 
     <div class="pane doc" id="doc">
-      <article class="doc-inner" data-od-id="spec-document">
-        <header class="r doc-head" data-od-id="spec-header">
+      <article class="doc-inner" data-piece="spec-document">
+        <header class="r doc-head" data-piece="spec-header">
           <div>
             <span class="kicker">/to-spec · issue #124 · ready-for-agent</span>
             <h1>Pre-delivery compliance checks</h1>
             <p class="byline">Written from the map <a class="nm" href="wayfinder-map.html?effort=acx">ACX compliance before delivery</a> and its seven decisions. Published 12 Sep; sliced into nine tickets on 14 Sep.</p>
           </div>
-          <div class="coverage" data-od-id="story-coverage">
+          <div class="coverage" data-piece="story-coverage">
             <span class="kicker">Story coverage</span>
             <div class="figure" id="cov-figure"></div>
             <div class="bar" id="cov-bar" aria-hidden="true"></div>
@@ -110,7 +110,7 @@
           </div>
         </header>
 
-        <section class="sec" id="problem" data-od-id="spec-problem">
+        <section class="sec" id="problem" data-piece="spec-problem">
           <div class="r sec-head"><h2>Problem statement</h2></div>
           <div class="r"><div>
             <p class="prose">Authors finish a Galley audiobook, upload it to ACX, and wait days to learn a chapter was rejected for loudness, peaks, or missing room tone. Every rejection means another render, another upload, and another wait in the review queue.</p>
@@ -118,7 +118,7 @@
           </div></div>
         </section>
 
-        <section class="sec" id="solution" data-od-id="spec-solution">
+        <section class="sec" id="solution" data-piece="spec-solution">
           <div class="r sec-head"><h2>Solution</h2></div>
           <div class="r"><div>
             <p class="prose">Galley checks every rendered chapter against ACX’s audio submission requirements as part of rendering. The Compliance page lists each check per chapter in plain language, with the measured value beside the limit and a jump to the moment that fails.</p>
@@ -126,28 +126,28 @@
           </div></div>
         </section>
 
-        <section class="sec" id="stories" data-od-id="spec-stories">
+        <section class="sec" id="stories" data-piece="spec-stories">
           <div class="r sec-head"><h2>User stories</h2><span class="kicker">Delivered by</span></div>
           <ol class="items" id="story-list"></ol>
           <div class="r"><div id="draft-slot"></div></div>
         </section>
 
-        <section class="sec" id="implementation" data-od-id="spec-implementation">
+        <section class="sec" id="implementation" data-piece="spec-implementation">
           <div class="r sec-head"><h2>Implementation decisions</h2><span class="kicker">Decided on the map</span></div>
           <ol class="items" id="impl-list"></ol>
         </section>
 
-        <section class="sec" id="testing" data-od-id="spec-testing">
+        <section class="sec" id="testing" data-piece="spec-testing">
           <div class="r sec-head"><h2>Testing decisions</h2><span class="kicker">Came from</span></div>
           <ol class="items" id="test-list"></ol>
         </section>
 
-        <section class="sec" id="out" data-od-id="spec-out-of-scope">
+        <section class="sec" id="out" data-piece="spec-out-of-scope">
           <div class="r sec-head"><h2>Out of scope</h2><span class="kicker">Ruled out</span></div>
           <ol class="items" id="out-list"></ol>
         </section>
 
-        <section class="sec" id="notes" data-od-id="spec-notes">
+        <section class="sec" id="notes" data-piece="spec-notes">
           <div class="r sec-head"><h2>Further notes</h2></div>
           <div class="r"><div>
             <p class="prose">ACX’s requirements, as researched on the map: every file between −23 and −18 dB RMS, peaks no higher than −3 dB, a noise floor no higher than −60 dB RMS, 0.5–1 second of room tone at the head and 1–5 seconds at the tail, no file longer than 120 minutes, and opening and closing credits.</p>
@@ -158,7 +158,7 @@
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { ticket, glyph, esc, STATES } = WS;
@@ -225,7 +225,7 @@
   const storyList = document.getElementById('story-list');
   storyList.innerHTML = STORIES.map((text, i) => {
     const s = i + 1;
-    return '<li class="r" id="story-' + s + '" data-od-id="story-' + s + '" data-tickets="' + (byStory[s] || []).join(' ') + '"><div class="text"><span class="n">' + String(s).padStart(2, '0') + '</span><span>' + text + '</span></div><div class="trace">' + traceFor(s) + '</div></li>';
+    return '<li class="r" id="story-' + s + '" data-piece="story-' + s + '" data-tickets="' + (byStory[s] || []).join(' ') + '"><div class="text"><span class="n">' + String(s).padStart(2, '0') + '</span><span>' + text + '</span></div><div class="trace">' + traceFor(s) + '</div></li>';
   }).join('');
 
   // hovering a ticket lights every story it delivers
@@ -241,12 +241,12 @@
 
   // the two uncovered stories can be sliced from here
   const slot = document.getElementById('draft-slot');
-  slot.innerHTML = '<div style="display:flex; gap:12px; align-items:center; margin-top:18px"><button type="button" class="btn btn-secondary" id="slice" aria-expanded="false" aria-controls="draft" data-od-id="slice-uncovered">Slice the 2 uncovered stories</button><span class="meta">Runs /to-tickets on stories 14 and 16 only.</span></div>' +
-    '<div class="draft" id="draft" hidden data-od-id="draft-tickets">' +
+  slot.innerHTML = '<div style="display:flex; gap:12px; align-items:center; margin-top:18px"><button type="button" class="btn btn-secondary" id="slice" aria-expanded="false" aria-controls="draft" data-piece="slice-uncovered">Slice the 2 uncovered stories</button><span class="meta">Runs /to-tickets on stories 14 and 16 only.</span></div>' +
+    '<div class="draft" id="draft" hidden data-piece="draft-tickets">' +
       '<span class="kicker">Drafted by /to-tickets · not published</span><h3>Two tickets for the uncovered stories</h3><p class="meta">Check the granularity and blocking edges before publishing.</p>' +
       '<div class="draft-ticket" style="margin-top:12px"><span class="st st-take" aria-hidden="true" style="margin-top:5px"></span><div><div class="t-title">Warn when no retail sample is chosen</div><div class="t-meta">Delivers story 14 · Blocked by nothing: the compliance read model already exists</div></div></div>' +
       '<div class="draft-ticket"><span class="st st-take" aria-hidden="true" style="margin-top:5px"></span><div><div class="t-title">Download a book’s compliance results</div><div class="t-meta">Delivers story 16 · Blocked by nothing: reads the same model</div></div></div>' +
-      '<div class="draft-actions"><button type="button" class="btn btn-primary" id="publish" data-od-id="publish-drafts">Publish 2 tickets</button><span class="meta" id="publish-note">Labels them ready-for-agent on GitHub.</span></div>' +
+      '<div class="draft-actions"><button type="button" class="btn btn-primary" id="publish" data-piece="publish-drafts">Publish 2 tickets</button><span class="meta" id="publish-note">Labels them ready-for-agent on GitHub.</span></div>' +
     '</div>';
   const slice = document.getElementById('slice'), draft = document.getElementById('draft');
   slice.addEventListener('click', () => {
@@ -270,7 +270,7 @@
 
   const decision = (n) => '<div class="tr-line">' + glyph('landed') + '<span><a class="nm" href="wayfinder-map.html?effort=acx#' + n + '">' + esc(WS.ACX_DECISIONS[n]) + '</a><span class="id">#' + n + '</span></span></div>';
   const note = (text) => '<div class="tr-line"><span class="st st-pending" aria-hidden="true"></span><span>' + text + '</span></div>';
-  const rows = (id, items) => { document.getElementById(id).innerHTML = items.map((it, i) => '<li class="r" data-od-id="' + id.replace('-list', '') + '-' + (i + 1) + '"><div class="text"><span class="n">' + String(i + 1).padStart(2, '0') + '</span><span>' + it[0] + '</span></div><div class="trace">' + it[1] + '</div></li>').join(''); };
+  const rows = (id, items) => { document.getElementById(id).innerHTML = items.map((it, i) => '<li class="r" data-piece="' + id.replace('-list', '') + '-' + (i + 1) + '"><div class="text"><span class="n">' + String(i + 1).padStart(2, '0') + '</span><span>' + it[0] + '</span></div><div class="trace">' + it[1] + '</div></li>').join(''); };
 
   rows('impl-list', [
     ['Analysis runs in the render worker as a single pass that measures RMS level, peak level, and noise floor together.', decision(114)],

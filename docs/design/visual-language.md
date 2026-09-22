@@ -3,7 +3,7 @@ type: reference
 ---
 # Visual language
 
-`assets/waystation.css` holds every value named here, so read the numbers there. This doc explains what each value is *for*, which isn't written in the CSS.
+`assets/wayfarer.css` holds every value named here, so read the numbers there. This doc explains what each value is *for*, which isn't written in the CSS.
 
 ## Direction
 
@@ -71,7 +71,7 @@ Rules:
 
 ## Status glyphs
 
-This is one vocabulary on every screen. The classes live in `waystation.css` under "status glyphs". The same shape means the same kind of state, whatever the object.
+This is one vocabulary on every screen. The classes live in `wayfarer.css` under "status glyphs". The same shape means the same kind of state, whatever the object.
 
 | Glyph | Class | Ticket (build) | Map ticket | Elsewhere |
 |---|---|---|---|---|
@@ -118,8 +118,8 @@ The map, the ticket graph and the first-run chart follow the same conventions:
 | Motion | Where | Rule |
 |---|---|---|
 | Spinning ring | `st-building` | The only continuous animation. It means work is happening now. |
-| Line draws in | Home, the line | Once per browser session (`waystation.intro.line`) |
-| Map replays its story | Wayfinder map | Once per session per map (`waystation.intro.<effort>`). About 1.1s per step. Any click or key outside the replay bar skips to now. |
+| Line draws in | Home, the line | Once per browser session (`wayfarer.intro.line`) |
+| Map replays its story | Wayfinder map | Once per session per map (`wayfarer.intro.<effort>`). About 1.1s per step. Any click or key outside the replay bar skips to now. |
 | Fog lifts, course draws, destination pulses | The way is clear | Plays once, on the close that clears the way. Takes about 2.5s. |
 | Fog recedes to a band | First run, after mapping the frontier | About 1.5s |
 | Nodes move between ticket and fog | First run, Ticket or Fog sort | About 0.7s, following the click |
@@ -131,7 +131,7 @@ Everything above collapses to an instant state change under `prefers-reduced-mot
 
 ## Themes
 
-- **Toggle:** the sun/moon button in the top bar. It follows the system setting until the user picks a theme, then remembers the choice (`localStorage` key `waystation.theme`).
+- **Toggle:** the sun/moon button in the top bar. It follows the system setting until the user picks a theme, then remembers the choice (`localStorage` key `wayfarer.theme`).
 - **No flash on load:** each page's `<head>` applies the saved theme before first paint.
 - **What changes at night:** the six tokens, plus larger hover steps, quieter heavy rules, and dimmer fog stipple. Nothing else, and no screen needs theme-specific markup.
 

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Build · ACX compliance before delivery · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .build-split { grid-template-columns: 300px minmax(0, 1fr) 330px; }
 
@@ -94,28 +94,28 @@
   <nav id="route"></nav>
 
   <main class="split build-split" id="content">
-    <aside class="pane side-l lanes" id="lanes" data-od-id="session-lanes"></aside>
+    <aside class="pane side-l lanes" id="lanes" data-piece="session-lanes"></aside>
 
-    <section class="story" data-od-id="session-story">
+    <section class="story" data-piece="session-story">
       <div class="s-head" id="s-head"></div>
       <div class="pane beats-pane" id="beats-pane"><ol class="beats" id="beats" aria-live="polite"></ol></div>
-      <div class="composer" id="composer" data-od-id="nudge-composer">
+      <div class="composer" id="composer" data-piece="nudge-composer">
         <div class="composer-row">
           <div>
             <label class="sr-only" for="note">Note for this session</label>
             <textarea class="textarea" id="note" placeholder="Leave a note for this session. It reads it before its next step."></textarea>
           </div>
-          <button type="button" class="btn btn-primary" id="send-note" data-od-id="send-note">Send note</button>
+          <button type="button" class="btn btn-primary" id="send-note" data-piece="send-note">Send note</button>
         </div>
         <p class="meta" id="note-hint">Notes steer the agent without stopping it. Use Pause to stop it.</p>
       </div>
     </section>
 
-    <aside class="side pane" id="evidence" data-od-id="session-evidence"></aside>
+    <aside class="side pane" id="evidence" data-piece="session-evidence"></aside>
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { ticket, glyph, esc } = WS;
@@ -194,21 +194,9 @@
         { k: 'green', x: 'DOCX books now follow your rule. 14 passing.', crit: 2 },
       ],
     },
-    132: {
-      started: 'now', minutes: 0,
-      files: [],
-      beats: [
-        { chap: 'Orient' },
-        { t: 'now', k: 'read', x: 'Claimed ' + tn(132) + ' and created wt/books-status from main.' },
-      ],
-      live: [
-        { k: 'read', x: 'Reading the ticket and the compliance read model the spec agreed on.' },
-        { k: 'note', x: 'My Books already loads every book in one query, so status can come from the read model per book.' },
-      ],
-    },
   };
 
-  const liveIds = () => [128, 129, 130, 132].filter((n) => ['building', 'asking'].indexOf(ticket(n).state) !== -1);
+  const liveIds = () => [128, 129, 130].filter((n) => ['building', 'asking'].indexOf(ticket(n).state) !== -1);
   let current = Number(WS.param('session'));
   if (liveIds().indexOf(current) === -1) current = liveIds()[0] || 128;
   const played = {};      // how many live beats each session has revealed
@@ -231,7 +219,7 @@
     ids.forEach((n) => {
       const t = ticket(n), s = SESSIONS[n], beat = laneBeat(n), done = doneCount(n);
       const state = paused[n] ? 'pending' : t.state;
-      html += '<button type="button" class="lane" data-n="' + n + '" aria-pressed="' + (n === current) + '" data-od-id="lane-' + n + '">' +
+      html += '<button type="button" class="lane" data-n="' + n + '" aria-pressed="' + (n === current) + '" data-piece="lane-' + n + '">' +
         (state === 'pending' ? '<span class="st st-pending" aria-hidden="true"></span>' : glyph(t.state)) +
         '<span class="l-name">' + esc(t.name) + '</span>' +
         '<span class="l-meta">wt/' + t.wt + ' · ' + (t.state === 'asking' ? 'paused' : paused[n] ? 'paused by you' : (s.minutes ? s.minutes + ' min' : 'just started')) + '</span>' +
@@ -244,7 +232,7 @@
     const t127 = ticket(127);
     if (t127.state === 'review') others.push('<div class="other">' + glyph('review') + '<a class="nm o-name" href="review-desk.html?item=pr-141">' + esc(t127.name) + '</a><span class="o-meta">Handed to /code-review · PR #141</span></div>');
     const t132 = ticket(132);
-    if (t132.state === 'takeable') others.push('<div class="other">' + glyph('takeable') + '<span class="o-name">' + esc(t132.name) + '</span><span class="o-meta">Takeable now · nobody on it</span><span class="o-act"><button type="button" class="btn btn-secondary btn-sm" id="start-132" data-od-id="start-agent-132">Start an agent</button></span></div>');
+    if (t132.state === 'takeable') others.push('<div class="other">' + glyph('takeable') + '<span class="o-name">' + esc(t132.name) + '</span><span class="o-meta">Takeable now · nobody on it</span><span class="o-act"><button type="button" class="btn btn-secondary btn-sm" id="start-132" data-piece="start-agent-132">Start an agent</button></span></div>');
     others.push('<div class="other">' + glyph('blocked') + '<span class="o-name">' + esc(ticket(131).name) + '</span><span class="o-meta">Starts when ' + esc(ticket(128).short.toLowerCase()) + ' lands</span></div>');
     html += '<div class="lanes-group"><span class="kicker">Around it</span>' + others.join('') + '</div>';
 
@@ -271,17 +259,8 @@
     lanesEl.querySelectorAll('.lane').forEach((b) => { b.onclick = () => { current = Number(b.dataset.n); history.replaceState(null, '', '?session=' + current); renderSession(); renderLanes(); }; });
     const start = document.getElementById('start-132');
     if (start) start.onclick = () => {
-      WS.mark('started', 132);
       start.setAttribute('aria-disabled', 'true');
       start.textContent = 'Agent started';
-      SESSIONS[132].minutes = 0;
-      WS.renderTopbar({ page: 'build', effort: 'acx' });
-      WS.renderRoute({ page: 'build', effort: 'acx' });
-      lanesEl.innerHTML = '';
-      current = 132;
-      renderLanes(); renderSession();
-      const lane = lanesEl.querySelector('.lane[data-n="132"]');
-      if (lane) lane.focus();
     };
   }
 
@@ -315,8 +294,8 @@
       '<div><span class="kicker">/tdd · Claude Code · wt/' + t.wt + ' · issue #' + t.n + '</span>' +
       '<h1><a href="ticket-graph.html#' + t.n + '">' + esc(t.name) + '</a></h1>' +
       '<div class="s-state" id="s-state">' + stateLine + '</div></div>' +
-      '<div class="s-controls"><button type="button" class="btn btn-ghost" data-od-id="open-terminal" id="terminal">Open terminal</button>' +
-      (asking ? '' : '<button type="button" class="btn btn-secondary" id="pause" aria-pressed="' + !!isPaused + '" data-od-id="pause-session">' + (isPaused ? 'Resume' : 'Pause') + '</button>') + '</div>';
+      '<div class="s-controls"><button type="button" class="btn btn-ghost" data-piece="open-terminal" id="terminal">Open terminal</button>' +
+      (asking ? '' : '<button type="button" class="btn btn-secondary" id="pause" aria-pressed="' + !!isPaused + '" data-piece="pause-session">' + (isPaused ? 'Resume' : 'Pause') + '</button>') + '</div>';
     const pause = document.getElementById('pause');
     if (pause) pause.addEventListener('click', () => {
       paused[t.n] = !paused[t.n];
@@ -334,8 +313,6 @@
     const t = ticket(current), s = SESSIONS[current];
     renderHead(t, s);
     let html = s.beats.map((b) => beatHtml(b, t)).join('');
-    const answered = WS.got('answered', current);
-    if (answered) html += beatHtml({ t: '09:4' + '6', k: 'you', x: 'You answered: ' + esc(answered) }, t);
     for (let i = 0; i < (played[current] || 0); i++) html += beatHtml(Object.assign({ t: s.live[i].t }, s.live[i]), t);
     beatsEl.innerHTML = html;
     bindToggles(beatsEl);
@@ -346,18 +323,7 @@
     if (t.state === 'asking') {
       composer.hidden = true;
       beatsEl.insertAdjacentHTML('afterend', '<div class="q-wrap" id="q-slot"><span class="kicker">Needs your answer to continue</span>' + WS.questionCard(current) + '</div>');
-      WS.bindQuestion(document.getElementById('q-slot'), current, () => {
-        WS.renderTopbar({ page: 'build', effort: 'acx' });
-        WS.renderRoute({ page: 'build', effort: 'acx' });
-        document.getElementById('s-state').innerHTML = glyph('building') + '<span>Building · resumed with your answer</span>';
-        setTimeout(() => {
-          const slot = document.getElementById('q-slot');
-          if (slot) slot.remove();
-          composer.hidden = false;
-          renderSession(); renderLanes();
-          document.getElementById('note').focus();
-        }, 1400);
-      });
+      WS.bindQuestion(document.getElementById('q-slot'), current);
     } else {
       composer.hidden = false;
       setWorking();

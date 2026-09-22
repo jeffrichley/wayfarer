@@ -1,17 +1,9 @@
-/* Waystation · shared data and shell
+/* Wayfarer · shared data and shell
    Sample content: the Galley repo, with two efforts on the line.
-   Demo actions (merge, answer, start) persist in sessionStorage so they
-   carry across screens and reset when the tab closes. */
+   Frozen reference: every screen renders one fixed moment, and nothing
+   a click does is remembered. */
 (function () {
   'use strict';
-
-  /* ─── demo state ─────────────────────────────────────────────────── */
-  const KEY = 'waystation.demo.v1';
-  function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
-  function save(s) { try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* private mode */ } }
-  function mark(bucket, id, value) { const s = load(); s[bucket] = s[bucket] || {}; s[bucket][id] = value === undefined ? true : value; save(s); }
-  function has(bucket, id) { const s = load(); return !!(s[bucket] && s[bucket][id]); }
-  function got(bucket, id) { const s = load(); return s[bucket] ? s[bucket][id] : undefined; }
 
   const esc = (str) => String(str).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -33,18 +25,6 @@
       last: { n: 166, name: 'Does the sample follow later edits to its chapter?' },
     },
   };
-
-  /* The retail sample map is one ticket from a clear way. Its stage moves
-     forward as you close that ticket, agree the seam and slice the spec. */
-  function sampleStage() {
-    if (has('sample', 'sliced')) return 'slicing';
-    if (has('sample', 'written')) return 'written';
-    if (has('sample', 'closed')) return 'clear';
-    return 'last';
-  }
-
-  /* A second repo, connected today with nothing charted. */
-  function madrigalStage() { return has('madrigal', 'charted') ? 'charted' : 'empty'; }
 
   /* Map decisions for ACX, referenced by name from the spec and tickets. */
   const ACX_DECISIONS = {
@@ -180,14 +160,10 @@
     blocked:  { glyph: 'st-blocked',  word: 'Blocked' },
   };
 
-  /* Ticket with demo actions applied. */
   function ticket(n) {
     const base = TICKETS[n];
     if (!base) return null;
     const t = Object.assign({ n: n }, base);
-    if (has('merged', n)) t.state = 'landed';
-    else if (has('answered', n) && t.state === 'asking') t.state = 'building';
-    else if (has('started', n) && (t.state === 'takeable' || t.state === 'blocked')) t.state = 'building';
     if (t.state === 'blocked' && t.blockedBy.every((b) => ticket(b).state === 'landed')) t.state = 'takeable';
     return t;
   }
@@ -208,13 +184,14 @@
     followUp: "That settles re-rendering for chapters Eliot speaks in. What about chapters where he only appears inside the narrator's lines — do those count as changed?",
   };
 
-  function needsYou() {
+  function needsYou(opts) {
+    opts = opts || {};
     const items = [];
     const t127 = ticket(127), t130 = ticket(130);
     if (t127.state === 'review') items.push({ key: 'pr-141', kind: 'Review', effort: 'acx', ticket: 127, name: t127.name, ask: '/code-review found one gap against the spec', unblocks: 1 });
     if (t130.state === 'asking') items.push({ key: 'q-130', kind: 'Question', effort: 'acx', ticket: 130, name: t130.name, ask: 'Should DOCX books without credits fail or warn?', unblocks: 1 });
-    if (!has('grilled', 152)) items.push({ key: 'g-152', kind: 'Grilling', effort: 'casting', ticket: 152, name: CASTING_GRILL.name, ask: 'HITL grilling ticket at the frontier', unblocks: 2, fog: true });
-    const stage = sampleStage();
+    if (!opts.grilled) items.push({ key: 'g-152', kind: 'Grilling', effort: 'casting', ticket: 152, name: CASTING_GRILL.name, ask: 'HITL grilling ticket at the frontier', unblocks: 2, fog: true });
+    const stage = opts.sampleStage || 'last';
     if (stage === 'last') items.push({ key: 'w-166', kind: 'Grilling', effort: 'sample', ticket: 166, name: EFFORTS.sample.last.name, ask: 'In session with you. The last open ticket on its map', unblocks: 1.5, unblocksText: 'Clears the way', href: 'wayfinder-map.html?effort=sample#166' });
     if (stage === 'clear') items.push({ key: 's-seam', kind: 'Seam', effort: 'sample', name: EFFORTS.sample.name, ask: '/to-spec needs you to agree the seam before it writes', unblocks: 1.5, unblocksText: 'Unblocks the spec', href: 'wayfinder-map.html?effort=sample' });
     return items;
@@ -223,7 +200,7 @@
   /* ─── theme: light chart or night chart ──────────────────────────────
      Follows the system until the reader picks one, then remembers it.
      The <head> of every page applies the saved choice before first paint. */
-  const THEME_KEY = 'waystation.theme';
+  const THEME_KEY = 'wayfarer.theme';
   const systemDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
   let onSystemTheme = null;
   function savedTheme() { try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; } }
@@ -257,32 +234,34 @@
     return 'live-build.html';
   }
 
+  /* The retail sample map is one ticket from a clear way. Its page moves it
+     forward as you close that ticket, agree the seam and slice the spec, and
+     passes the stage it reached as opts.sampleStage. */
   function renderTopbar(opts) {
     const el = document.getElementById('topbar');
     if (!el) return;
     const effort = opts.effort ? EFFORTS[opts.effort] : null;
     const c = counts();
-    const needs = needsYou().length;
+    const needs = needsYou(opts).length;
     const working = c.building + 1; /* + the research subagent on the casting map */
     const acxMeta = c.landed + ' of 9 landed · ' + c.building + ' building';
     const repo = opts.repo || 'galley';
-    const sStage = sampleStage();
     const sampleMenu = {
       last: ['asking', 'Charting the way · one ticket left, in session with you'],
       clear: ['asking', 'The way is clear · /to-spec waiting on you'],
       written: ['landed', 'Spec written · ready to slice into tickets'],
       slicing: ['building', 'Slicing into tickets'],
-    }[sStage];
+    }[opts.sampleStage || 'last'];
     let html = '<a class="wordmark" href="index.html">' + MARK + 'Waystation</a>' +
       '<span class="crumb-sep" aria-hidden="true">/</span>' +
-      '<div class="switch"><button class="repo-btn" type="button" aria-haspopup="true" aria-expanded="false" data-od-id="repo-switcher"><span>' + repo + '</span>' + CARET + '</button>' +
+      '<div class="switch"><button class="repo-btn" type="button" aria-haspopup="true" aria-expanded="false" data-piece="repo-switcher"><span>' + repo + '</span>' + CARET + '</button>' +
       '<div class="menu" role="menu">' +
       '<a role="menuitem" href="index.html"' + (repo === 'galley' ? ' aria-current="true"' : '') + '><span class="m-mark mono">g</span><span class="m-name">galley</span><span class="m-meta">3 efforts on the line</span></a>' +
-      '<a role="menuitem" href="first-run.html"' + (repo === 'madrigal' ? ' aria-current="true"' : '') + '><span class="m-mark mono">m</span><span class="m-name">madrigal</span><span class="m-meta">' + (madrigalStage() === 'charted' ? 'Connected today · 1 map charted' : 'Connected today · no maps yet') + '</span></a>' +
+      '<a role="menuitem" href="first-run.html"' + (repo === 'madrigal' ? ' aria-current="true"' : '') + '><span class="m-mark mono">m</span><span class="m-name">madrigal</span><span class="m-meta">' + (opts.charted ? 'Connected today · 1 map charted' : 'Connected today · no maps yet') + '</span></a>' +
       '</div></div>';
     if (effort) {
       html += '<span class="crumb-sep" aria-hidden="true">/</span>' +
-        '<div class="switch effort-switch"><button class="effort-btn" type="button" aria-haspopup="true" aria-expanded="false" data-od-id="effort-switcher"><span>' + esc(effort.name) + '</span>' + CARET + '</button>' +
+        '<div class="switch effort-switch"><button class="effort-btn" type="button" aria-haspopup="true" aria-expanded="false" data-piece="effort-switcher"><span>' + esc(effort.name) + '</span>' + CARET + '</button>' +
         '<div class="menu" role="menu">' +
         '<a role="menuitem" href="' + effortHref('acx', opts.page) + '"' + (effort.id === 'acx' ? ' aria-current="true"' : '') + '>' + glyph('building') + '<span class="m-name">ACX compliance before delivery</span><span class="m-meta">Building · ' + acxMeta + '</span></a>' +
         '<a role="menuitem" href="' + effortHref('casting', opts.page) + '"' + (effort.id === 'casting' ? ' aria-current="true"' : '') + '>' + glyph('building') + '<span class="m-name">Per-chapter voice casting</span><span class="m-meta">Charting the way · 3 decided, 3 patches of fog</span></a>' +
@@ -292,12 +271,12 @@
         '</div></div>';
     }
     html += '<div class="topbar-right">' +
-      '<a class="live" href="live-build.html" data-od-id="agents-working">' + glyph('building') + '<span class="label">' + working + ' agents working</span></a>' +
-      '<a class="needs" href="review-desk.html" data-od-id="needs-you">Needs you <span class="count' + (needs ? '' : ' zero') + '">' + needs + '</span></a>' +
-      '<button type="button" class="theme-btn" id="theme-btn" data-od-id="theme-toggle"></button>' +
+      '<a class="live" href="live-build.html" data-piece="agents-working">' + glyph('building') + '<span class="label">' + working + ' agents working</span></a>' +
+      '<a class="needs" href="review-desk.html" data-piece="needs-you">Needs you <span class="count' + (needs ? '' : ' zero') + '">' + needs + '</span></a>' +
+      '<button type="button" class="theme-btn" id="theme-btn" data-piece="theme-toggle"></button>' +
       '</div>';
     el.className = 'topbar' + (effort ? ' has-effort' : '');
-    el.setAttribute('data-od-id', 'topbar');
+    el.setAttribute('data-piece', 'topbar');
     el.innerHTML = html;
 
     const themeBtn = el.querySelector('#theme-btn');
@@ -348,8 +327,8 @@
     const off = (out) => ({ state: 'pending', out: out || '—' });
     if (opts.effort === 'madrigal') {
       /* first run: nothing walked yet, so each station reports whether its skill is installed */
-      const charted = madrigalStage() === 'charted';
-      const research = charted ? (got('madrigal', 'research') || 0) : 0;
+      const charted = !!opts.charted;
+      const research = opts.research || 0;
       plan = {
         wayfinder: charted ? { state: 'active', glyph: research ? 'building' : 'asking', out: 'Map #38' + (research ? ' · ' + research + ' researching' : ' charted') } : { state: 'pending', out: 'Installed' },
         spec: off('Installed'),
@@ -359,7 +338,7 @@
         landed: off('GitHub · main'),
       };
     } else if (opts.effort === 'sample') {
-      const st = sampleStage();
+      const st = opts.sampleStage || 'last';
       plan = {
         wayfinder: st === 'last' ? { state: 'active', glyph: 'building', out: '5 decided · 1 in session' } : { state: 'done', out: '6 decisions · way clear' },
         spec: st === 'last' ? off('After the way is clear') : st === 'clear' ? { state: 'active', glyph: 'asking', out: 'Agree the seam' } : { state: 'done', out: 'Spec #168 · 12 stories' },
@@ -408,26 +387,26 @@
         '<span class="s-node">' + node + '<span class="s-track' + (trackPending ? ' pending' : '') + '"></span></span>' +
         '<span class="s-name">' + s.name + '</span><span class="s-out">' + out + '</span>';
       const current = opts.page === s.key ? ' aria-current="page"' : '';
-      const odid = ' data-od-id="station-' + s.key + '"';
-      if (!s.href) html += '<div class="station' + (p.state === 'missing' ? ' missing' : '') + '"' + odid + '>' + inner + '</div>';
+      const piece = ' data-piece="station-' + s.key + '"';
+      if (!s.href) html += '<div class="station' + (p.state === 'missing' ? ' missing' : '') + '"' + piece + '>' + inner + '</div>';
       else if (disabled || opts.effort === 'madrigal') {
         const why = opts.effort === 'madrigal' ? (p.state === 'missing' ? 'Add /code-review from mattpocock/skills and agents review PRs before you do' : '') :
           opts.effort === 'sample' ? 'This effort is followed from its map' : 'Opens once the map\'s way is clear';
-        html += '<div class="station' + (p.state === 'missing' ? ' missing' : '') + '"' + (opts.effort === 'madrigal' && s.key === 'wayfinder' ? ' aria-current="page"' : ' aria-disabled="true"') + odid + (why ? ' title="' + why + '"' : '') + '>' + inner + '</div>';
+        html += '<div class="station' + (p.state === 'missing' ? ' missing' : '') + '"' + (opts.effort === 'madrigal' && s.key === 'wayfinder' ? ' aria-current="page"' : ' aria-disabled="true"') + piece + (why ? ' title="' + why + '"' : '') + '>' + inner + '</div>';
       } else {
         const href = s.key === 'wayfinder' ? s.href + '?effort=' + (opts.effort || 'acx') : s.href;
-        html += '<a class="station" href="' + href + '"' + current + odid + '>' + inner + '</a>';
+        html += '<a class="station" href="' + href + '"' + current + piece + '>' + inner + '</a>';
       }
     });
     el.className = 'route';
-    el.setAttribute('data-od-id', 'route');
+    el.setAttribute('data-piece', 'route');
     el.setAttribute('aria-label', opts.effort === 'madrigal' ? 'The skill line, and which skills madrigal has installed' : 'Where this effort is on the skill line');
     el.innerHTML = html;
   }
 
   /* Draw one station's track in, as the course moves past it. */
   function drawTrack(key, delay) {
-    const track = document.querySelector('#route [data-od-id="station-' + key + '"] .s-track');
+    const track = document.querySelector('#route [data-piece="station-' + key + '"] .s-track');
     if (!track || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     track.style.animationDelay = (delay || 0) + 'ms';
     track.classList.add('draw');
@@ -465,16 +444,16 @@
   function questionCard(n) {
     const t = ticket(n);
     const q = t.question;
-    return '<div class="qcard" data-od-id="question-' + n + '">' +
+    return '<div class="qcard" data-piece="question-' + n + '">' +
       '<div class="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">Claude Code · wt/' + t.wt + ' · ' + q.asked + '</span>' + esc(q.text) + '</div></div></div>' +
       '<div role="radiogroup" aria-label="Your answer" style="margin: 16px 0 10px 36px;">' +
       q.options.map((o) => '<button type="button" class="choice" role="radio" aria-checked="false" data-value="' + o.value + '"><span class="radio"></span><span><span class="c-title">' + esc(o.title) + '</span><span class="c-sub" style="display:block">' + esc(o.sub) + '</span></span></button>').join('') +
       '<label class="field-label" for="q-note-' + n + '" style="margin-top:12px">Anything the agent should know</label>' +
       '<textarea class="textarea" id="q-note-' + n + '" placeholder="Optional. The agent reads this before it resumes."></textarea>' +
-      '<div style="display:flex; gap:8px; align-items:center; margin-top:10px;"><button type="button" class="btn btn-primary q-send" data-od-id="send-answer-' + n + '">Send answer and resume</button><span class="meta q-hint">Pick an option or write your own answer.</span></div>' +
+      '<div style="display:flex; gap:8px; align-items:center; margin-top:10px;"><button type="button" class="btn btn-primary q-send" data-piece="send-answer-' + n + '">Send answer and resume</button><span class="meta q-hint">Pick an option or write your own answer.</span></div>' +
       '</div></div>';
   }
-  function bindQuestion(root, n, onSent) {
+  function bindQuestion(root, n) {
     const choices = root.querySelectorAll('.choice');
     const send = root.querySelector('.q-send');
     const note = root.querySelector('textarea');
@@ -488,16 +467,12 @@
       if (send.getAttribute('aria-disabled') === 'true') return;
       const text = note.value.trim();
       if (!picked && !text) { hint.textContent = 'Choose an option, or write an answer first.'; hint.style.color = 'var(--fg)'; return; }
-      const chosen = picked ? ticket(n).question.options.find((o) => o.value === picked).title : '';
-      const answer = [chosen, text].filter(Boolean).join('. ');
-      mark('answered', n, answer);
       send.setAttribute('aria-disabled', 'true');
       send.textContent = 'Answer sent';
       hint.textContent = 'Posted to #' + n + '. The session resumes.';
       hint.style.color = 'var(--fg)';
       choices.forEach((o) => o.setAttribute('tabindex', '-1'));
       note.readOnly = true;
-      if (onSent) onSent(answer);
     });
   }
 
@@ -520,8 +495,7 @@
   window.WS = {
     EFFORTS, ACX_DECISIONS, TICKETS, ORDER, STATES, CASTING_GRILL,
     ticket, tickets, blocks, counts, glyph, needsYou, thread, criteriaList,
-    sampleStage, madrigalStage,
     questionCard, bindQuestion, renderTopbar, renderRoute, drawTrack, fitCanvas,
-    mark, has, got, esc, param,
+    esc, param,
   };
 })();

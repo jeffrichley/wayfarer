@@ -4,7 +4,7 @@ status: draft
 ---
 # Data and commands
 
-This doc covers where everything on screen comes from, and what every steering action has to do in the real build. The prototype fakes both with sample data in `assets/waystation.js`.
+This doc covers where everything on screen comes from, and what every steering action has to do in the real build. The prototype fakes both with sample data in `assets/wayfarer.js`.
 
 Each part is marked as one of three kinds, and they need to stay distinct:
 - **Defined by the skills:** the skill's `SKILL.md` already says how this is stored. Read it and follow it.
@@ -174,7 +174,7 @@ Decided in [The chronicle](https://github.com/jeffrichley/wayfarer/issues/22).
 
 ## Commands (steering)
 
-Each command lives in the prototype at the `data-od-id` shown. "Must do" is the real effect. Every command also updates the read model, so every screen reflects it.
+Each command lives in the prototype at the `data-piece` shown. "Must do" is the real effect. Every command also updates the read model, so every screen reflects it.
 
 | Command | Where | Must do | Status |
 |---|---|---|---|

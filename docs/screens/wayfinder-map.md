@@ -109,7 +109,7 @@ Its sections mirror the map issue:
 - **Hand-placed nodes:** every node has x/y coordinates, and out-of-scope nodes have a tray position.
 - **Invented history:** the replay steps are sample events, each with a hand-written caption and the step at which each node was created, claimed, closed or ruled out.
 - **Canned grilling:** the conversation has a fixed opener and follow-up whatever you type.
-- **Demo state:** the "Start grilling session" state lives in `sessionStorage` and shows up on home and the desk too.
+- **No demo state:** "Start grilling session" updates this map and its top bar only. Home and the desk don't see it, and a reload undoes it.
 - **Three sample maps** live in one page's data, switched by `?effort=`. Selecting a ticket writes `#<n>` to the URL.
 
 ## Open questions
