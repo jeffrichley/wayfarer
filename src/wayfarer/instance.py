@@ -11,11 +11,10 @@ leaves a clone locked. A clean exit also removes the file.
 
 from __future__ import annotations
 
-import contextlib
+import fcntl
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 from types import TracebackType
 from typing import IO, Self
@@ -23,9 +22,6 @@ from typing import IO, Self
 __all__ = ["AlreadyRunning", "InstanceLock", "NotAClone", "find_clone"]
 
 _LOCK_NAME = "wayfarer.lock"
-# The lock is taken on one byte far past the file's content, so a refused second
-# instance can still read who holds it; Windows forbids reading a locked range.
-_LOCK_OFFSET = 1 << 30
 
 
 class NotAClone(Exception):
@@ -98,17 +94,12 @@ class InstanceLock:
         tb: TracebackType | None,
     ) -> None:
         assert self._file is not None
-        if sys.platform != "win32":
-            # Removed while still locked, so no other instance can be mid-way through
-            # taking it. Windows cannot remove an open file; it goes after closing.
-            self._path.unlink(missing_ok=True)
+        # Removed while still locked, so no other instance can be mid-way through
+        # taking it.
+        self._path.unlink(missing_ok=True)
         _unlock(self._file)
         self._file.close()
         self._file = None
-        if sys.platform == "win32":
-            # A new instance may already have it open, and owns it now.
-            with contextlib.suppress(PermissionError):
-                self._path.unlink(missing_ok=True)
 
 
 def _describe(content: str) -> str:
@@ -130,30 +121,13 @@ def _same_file(file: IO[str], path: Path) -> bool:
     return (held.st_dev, held.st_ino) == (on_disk.st_dev, on_disk.st_ino)
 
 
-if sys.platform == "win32":
-    import msvcrt
+def _try_lock(file: IO[str]) -> bool:
+    try:
+        fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
 
-    def _try_lock(file: IO[str]) -> bool:
-        os.lseek(file.fileno(), _LOCK_OFFSET, os.SEEK_SET)
-        try:
-            msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
 
-    def _unlock(file: IO[str]) -> None:
-        os.lseek(file.fileno(), _LOCK_OFFSET, os.SEEK_SET)
-        msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
-
-else:
-    import fcntl
-
-    def _try_lock(file: IO[str]) -> bool:
-        try:
-            fcntl.lockf(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB, 1, _LOCK_OFFSET)
-        except OSError:
-            return False
-        return True
-
-    def _unlock(file: IO[str]) -> None:
-        fcntl.lockf(file.fileno(), fcntl.LOCK_UN, 1, _LOCK_OFFSET)
+def _unlock(file: IO[str]) -> None:
+    fcntl.flock(file.fileno(), fcntl.LOCK_UN)

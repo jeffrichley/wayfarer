@@ -24,11 +24,9 @@ _DEFAULT_PORT = 7431
 def _bind() -> socket.socket:
     """A socket on the default port, or on any free one when that is taken."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    if sys.platform != "win32":
-        # So a restart can take the default port back while the last run's
-        # connections linger in TIME_WAIT. On Windows the option lets a socket
-        # steal a port that is in use, so it stays off there.
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # So a restart can take the default port back while the last run's
+    # connections linger in TIME_WAIT.
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         sock.bind((_HOST, _DEFAULT_PORT))
     except OSError:
