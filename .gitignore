@@ -2,3 +2,19 @@
 .od-skills/
 plugin-source/
 *.artifact.json
+
+# Credentials: Wayfarer reads them from the environment it was launched in, never a file it owns.
+.env
+
+# Python
+__pycache__/
+.venv/
+dist/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+
+# Built by the hatch build hook and `pnpm build`; the wheel carries it, git does not.
+src/wayfarer/static/

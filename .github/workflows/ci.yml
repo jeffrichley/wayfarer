@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  # Branch pushes are covered by the PR run; `main` gets a run of its own.
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The same scan the local hooks run (.gitleaks.toml), for commits made
+  # without them. Whole history, so a secret in any commit of a PR fails it.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: extractions/setup-just@v2
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: just check
+        run: just check
+
+  # The browser's types are generated from the Python models and checked in
+  # (ADR-0004). A model changed without regenerating them fails here.
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install the web toolchain
+        run: corepack pnpm --dir web install --frozen-lockfile
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+      - name: Types match the Python models
+        run: just types-drift
+
+  # A user installs the wheel and needs no Node: build it, install it where no
+  # Node is on PATH, and see it serve the page.
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build
+        run: uv build
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+      - name: Install into a bare venv
+        run: |
+          uv venv /tmp/wheel-venv
+          uv pip install --python /tmp/wheel-venv/bin/python dist/*.whl
+
+      - name: Serves the page with no Node on PATH
+        run: |
+          # A PATH holding git, and `true` as the browser, and nothing else, so
+          # Node cannot be found.
+          bin=$(mktemp -d)
+          ln -s "$(command -v git)" "$bin/git"
+          ln -s "$(command -v true)" "$bin/true"
+          clone=$(mktemp -d)
+          git -C "$clone" init --quiet
+          cd "$clone"
+          env -i HOME="$HOME" PATH="$bin" BROWSER=true /tmp/wheel-venv/bin/wayfarer &
+          for _ in $(seq 50); do
+            curl -sf http://127.0.0.1:7431/ > page.html && break
+            sleep 0.2
+          done
+          grep -q '<div id="root">' page.html
+          kill -INT %1
+          wait %1

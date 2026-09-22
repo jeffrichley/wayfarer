@@ -4,11 +4,39 @@ A clickable web-UI prototype for driving agent work along the
 [mattpocock/skills](https://github.com/mattpocock/skills) line:
 `/wayfinder` → `/to-spec` → `/to-tickets` → `/tdd` → `/code-review` → merge.
 
-**This repository is the prototype, not the codebase.** The screens are static
-HTML with no backend. They exist to settle what the thing should look like and
-how it should behave before any of it is built.
+The repository holds two things: the **app** being built (`src/wayfarer`, the
+Python process, and `web/`, its React page), and the **prototype** it is built
+from — static HTML screens with no backend, which settled what the thing should
+look like and how it should behave.
 
-## Screens
+## Running it
+
+Inside a clone of the repo Wayfarer should work on:
+
+```bash
+wayfarer
+```
+
+It serves on `127.0.0.1` (port 7431, or a free one if that is taken) and opens
+your browser. One instance per clone: a second refuses, naming the first.
+Ctrl-C stops it.
+
+## Developing
+
+Needs [uv](https://docs.astral.sh/uv/), Node 24 (pnpm comes through corepack),
+and [just](https://just.systems/).
+
+| command | what it does |
+|---|---|
+| `just check` | lint, type-check and build the page, then lint, type-check and test the process — what CI runs |
+| `just types` | regenerate `web/src/api.gen.ts` from the Python models; CI fails if it drifts |
+| `just build` | build the sdist and wheel; the wheel carries the built page, so users need no Node |
+| `corepack pnpm --dir web dev` | the Vite dev server, proxying `/api` to a running `wayfarer` |
+
+Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`.
+Change one, run `just types`, and commit both.
+
+## Prototype screens
 
 | file | what it shows |
 |---|---|
