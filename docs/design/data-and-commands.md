@@ -43,7 +43,7 @@ One SQLite file per repo (stdlib `sqlite3`, WAL), outside the checkout, at `~/.l
 - **Sessions Wayfarer started:** run id, ticket, purpose, started, ended, event file, and the Outcome. Recorded at `run_start`, since Waystation generates the run id and nothing in the library writes it down.
 - **Armed cascades:** which effort, and whether it is paused.
 - **Last visit**, for the home headline.
-- **Settings**, per repo. The concurrency cap, default 3, is one number shared by every armed cascade. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you. Session time caps default to 20 min of silence and 2 h of wall time, with no cap on turns or dollars.
+- **Settings**, per repo. The concurrency cap, default 3, is one number shared by every armed cascade. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you. Session time caps default to 20 min of silence and 2 h of wall time, with no cap on turns or dollars. The merge queue's re-test is capped at 30 min of wall time, with no silence cap; hitting it counts as a failed re-test.
 
 Notes and queued agents are gone. Notes had nowhere to go once mid-run steering was cut, and an armed cascade replaces a per-ticket queue.
 
@@ -103,10 +103,11 @@ Notes and queued agents are gone. Notes had nowhere to go once mid-run steering 
   1. PR merged or issue closed as completed → **landed**
   2. labelled `wayfarer:asked` → **asked**
   3. labelled `wayfarer:held` → **held** (a draft PR when the session left commits, a comment when it left none)
-  4. PR open → **in review**
-  5. a session running → **building**
-  6. every blocker landed and nobody on it → **takeable**
-  7. otherwise → **blocked**
+  4. PR ready (not draft), checks green or absent, and approved when auto-merge is off → **landing**. Wayfarer enqueues every such ticket it is not already landing, so a restart rebuilds the merge queue from GitHub in PR-ready order
+  5. PR open → **in review**
+  6. a session running → **building**
+  7. every blocker landed and nobody on it → **takeable**
+  8. otherwise → **blocked**
 
 ### Session *(open: this is the biggest unknown)*
 A Claude Code run on one ticket in `wt/<name>`. The screens need:
@@ -128,8 +129,8 @@ An item appears when any of these is true:
 |---|---|
 | Review | A ticket's PR is open with `/code-review` done and awaiting a human |
 | Question | A ticket is Asked: labelled `wayfarer:asked` |
-| Held | A ticket is labelled `wayfarer:held`: a blocking finding, or a failed attempt, said in plain words |
-| Environment | A session failed for a reason that was not its own. The ticket went back on the frontier, and the cascade paused |
+| Held | A ticket is labelled `wayfarer:held`: a blocking finding, a failed attempt, or work that could not land (a red re-test on the latest effort branch, or a conflict a resolver session couldn't clear), said in plain words |
+| Environment | A session failed for a reason that was not its own, and the cascade paused. A ticket that had not reached Landing went back on the frontier; a Landing ticket keeps its place in the merge queue. One item also covers an effort branch whose own tests are red |
 | Grilling / prototype | A HITL decision ticket is on the frontier, or claimed by you and in session |
 | Seam | `/to-spec` is waiting for seam agreement |
 | Drafts | `/to-tickets` drafts are waiting for the person to check them (its "quiz the user" step) |
@@ -159,7 +160,7 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Arm a cascade | none yet | Confirm in one line ("4 tickets are takeable now, up to 3 at a time"), then start each takeable ticket: assign it, then submit its flow | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
 | Pause / Resume the cascade | none yet | Stop submitting; running sessions finish. Resume submits again | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
 | Stop a ticket | none yet | Cancel its session with salvage. The ticket stays claimed and is Held | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
-| Retry a Held ticket | none yet | Clear `wayfarer:held` and start a session. **Continue** (the default when there are commits) resumes the transcript on the preservation branch. **Start over** runs on the effort branch's head and closes the draft PR | [The unhappy path of a session](https://github.com/jeffrichley/wayfarer/issues/20) |
+| Retry a Held ticket | none yet | Clear `wayfarer:held` and start a session. **Continue** (the default when there are commits) resumes the transcript on the preservation branch. **Start over** runs on the effort branch's head and closes the draft PR. It is the default for a ticket Held by a red re-test, since continuing would build on the version that broke | [The unhappy path of a session](https://github.com/jeffrichley/wayfarer/issues/20) |
 | Queue an agent for when it unblocks | `queue-agent` | Superseded by arming a cascade for the effort, which starts every ticket as it becomes takeable | Wayfarer's store (armed cascade) |
 | Pause / Resume a session | `pause-session` | Pause the session at its next safe point, then resume it | Cut: nothing flows into a running session |
 | Send note | `send-note` | Deliver a note the session reads before its next step, without stopping it | Transport open |
@@ -168,7 +169,8 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Send finding to the agent | `send-finding` | Reopen the ticket's session with the finding as its task | Transport open |
 | Comment on a diff line | `pr-diff` rows | Post a PR review comment *and* deliver it to the worktree session | Transport open |
 | Request changes | `request-changes` | Post a changes-requested review and reopen the session with the request | Transport open |
-| Approve and merge | `approve-merge` | Approve and merge the PR; the ticket lands, and dependents may reach the frontier | GitHub |
+| Let it land | none yet | For a Held ticket with a PR: mark the PR ready and remove `wayfarer:held`, so it joins the merge queue. Marking it ready by hand on GitHub does the same, and Wayfarer clears the label | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
+| Land it | `approve-merge` | With auto-merge off, approve a clean PR so it joins the merge queue. An approving review on GitHub does the same. Merging by hand on GitHub skips the queue and is accepted as landed, untested | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
 
 ## Global open questions
 

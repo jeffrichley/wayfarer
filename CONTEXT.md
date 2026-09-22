@@ -181,7 +181,7 @@ The ordered line of finished tickets waiting to land on the effort branch. It ex
 _Avoid_: merge train, batch, landing queue
 
 **Held**:
-A ticket kept back until a person decides, because its session left a blocking finding, or its own attempt failed: it crashed, ran out of time, or was stopped. The person lets it land, fixes it, retries it, or closes it. A retry either continues from where the session stopped or starts over. A failure that was the environment's fault, not the attempt's, never holds a ticket: the ticket goes back on the frontier.
+A ticket kept back until a person decides, because its session left a blocking finding, its own attempt failed (it crashed, ran out of time, or was stopped), or its work could not land (it broke the effort branch's tests once combined with what had landed since, or a conflict outlasted a resolver session). The person lets it land, fixes it, retries it, or closes it. A retry either continues from where the session stopped or starts over. A failure that was the environment's fault, not the attempt's, never holds a ticket: the ticket goes back on the frontier.
 _Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
 **Asked**:
@@ -189,7 +189,7 @@ An unfinished ticket whose session ended to ask a question. It stays claimed and
 _Avoid_: paused (nothing is running), held (that is a finished ticket), blocked, waiting
 
 **Landing**:
-A finished ticket whose work is in the merge queue: waiting its turn, or being re-tested against the latest effort branch. It is moving, not waiting on anyone.
+A finished ticket whose work is in the merge queue: waiting its turn, being re-tested against the latest effort branch, or having a conflict worked through by a resolver session. It is moving, not waiting on anyone.
 _Avoid_: queued, merging, pending, in review (that is waiting on a person)
 
 **Landed**:
