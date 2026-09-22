@@ -53,7 +53,7 @@ The assignee on an open ticket, which marks it as taken by a session.
 _Avoid_: lock, owner
 
 **Frontier**:
-The open, unblocked, unclaimed tickets on a map, or on an effort's ticket graph: the edge of what is known. A ticket on it is **takeable**. A ticket is unblocked once every ticket blocking it is closed, whether or not that ticket landed. An Asked ticket is never on it.
+The open, unblocked, unclaimed tickets on a map, or on an effort's ticket graph: the edge of what is known. A ticket on it is **takeable**. A ticket is unblocked once every ticket blocking it is closed, whether or not that ticket landed. An Asked or Held ticket is never on it.
 _Avoid_: ready queue, backlog, todo
 
 **Fog**:
@@ -117,7 +117,7 @@ One Claude Code run working one ticket, with one skill or purpose: an `/implemen
 _Avoid_: job, run, agent instance, worker
 
 **Image**:
-The container every session runs in: Wayfarer's base, holding the skills and the agent, plus the repo's own layer, holding its toolchain. A repo without a layer cannot start sessions.
+The container every session runs in: Wayfarer's base, holding the skills, the agent and the standing rules every session follows, plus the repo's own layer, holding its toolchain. A repo without a layer cannot start sessions.
 _Avoid_: sandbox (Waystation's word for the running container), environment, box
 
 **Start gate**:
@@ -125,7 +125,7 @@ What must hold before any session starts: an image that is current and has passe
 _Avoid_: readiness (that is about a repo's skills and tracker), preflight (Waystation's per-run check), health check
 
 **Outcome**:
-The structured report a session hands back when it ends. It is the only way a session can reach a person, since nothing flows into a running one. Borrowed from Waystation unchanged.
+The structured report a session hands back when it ends: whether it finished, a summary, the findings it left, and the assumptions it made. Nothing flows into a running session, so the Outcome and a question it ends to ask are the only ways a session reaches a person. Borrowed from Waystation unchanged.
 _Avoid_: result, response, summary
 
 **Resolver session**:
@@ -181,7 +181,7 @@ The ordered line of finished tickets waiting to land on the effort branch. It ex
 _Avoid_: merge train, batch, landing queue
 
 **Held**:
-A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or closes it.
+A ticket kept back until a person decides, because its session left a blocking finding, or its own attempt failed: it crashed, ran out of time, or was stopped. The person lets it land, fixes it, retries it, or closes it. A retry either continues from where the session stopped or starts over. A failure that was the environment's fault, not the attempt's, never holds a ticket: the ticket goes back on the frontier.
 _Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
 **Asked**:
