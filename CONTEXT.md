@@ -113,7 +113,7 @@ _Avoid_: requirement, AC, checklist item
 ## Building and reviewing
 
 **Session**:
-One Claude Code run working one ticket, with one skill or purpose: a `/tdd` build, a `/code-review`, a resolver session, a retry. A ticket may have several over its life. Waystation calls this a run.
+One Claude Code run working one ticket, with one skill or purpose: an `/implement` build (which runs `/tdd` and `/code-review` itself), a resolver session, a retry. A ticket may have several over its life. Waystation calls this a run.
 _Avoid_: job, run, agent instance, worker
 
 **Image**:
@@ -121,7 +121,7 @@ The container every session runs in: Wayfarer's base, holding the skills and the
 _Avoid_: sandbox (Waystation's word for the running container), environment, box
 
 **Start gate**:
-What must hold before any session starts: an image that is current and has passed its probe, a credential, and a git identity. Failing it pauses the cascade and raises one item in Needs you.
+What must hold before any session starts: an image that is current and has passed its probe, a credential for the agent, a read-only GitHub token so a session can read its own ticket, and a git identity. Failing it pauses the cascade and raises one item in Needs you.
 _Avoid_: readiness (that is about a repo's skills and tracker), preflight (Waystation's per-run check), health check
 
 **Outcome**:
@@ -153,11 +153,11 @@ One red → green turn in a session, with any refactor that follows while the te
 _Avoid_: iteration, loop, chapter
 
 **Note**:
-A message a person leaves for a running session. The session reads it before its next step, without stopping.
+A message a person leaves for a running session. The session reads it before its next step, without stopping. Not in the first slice: nothing can flow into a running session.
 _Avoid_: comment, prompt, chat
 
 **Question**:
-A session pausing to ask a person something only they can decide.
+Something a session ended to ask a person, because only they can decide it. A blocking finding the session left unfixed is one. A session never pauses to ask.
 _Avoid_: blocker, alert, escalation
 
 **Axis**:
@@ -165,8 +165,8 @@ One of the two things `/code-review` checks a change against in parallel: **Stan
 _Avoid_: check, lint, review type
 
 **Finding**:
-One gap `/code-review` reports on an axis.
-_Avoid_: issue, comment, error
+One gap `/code-review` reports on an axis. A finding is **blocking** (anything on Spec, or a breach of a standard the repo documents) or a **judgement call** (a heuristic, such as a suspected smell). A blocking finding the session leaves unfixed holds its ticket from landing until a person decides. It is a question the session asks by ending.
+_Avoid_: issue, comment, error, nit
 
 **Ticket branch**:
 The branch one ticket's commits are collected on before they land. Named for the ticket, cut from the effort branch. It is what a person sees of where a session worked; the session's own copy of the repo is never shown, because nothing can be done with it.
@@ -179,6 +179,10 @@ _Avoid_: feature branch, integration branch, staging branch
 **Merge queue**:
 The ordered line of finished tickets waiting to land on the effort branch. It exists because two tickets that each pass alone can break once both land.
 _Avoid_: merge train, batch, landing queue
+
+**Held**:
+A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or drops it.
+_Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
 **Landed**:
 A ticket whose commits have reached the effort branch. This is what unblocks its dependents.
