@@ -2,3 +2,14 @@
 .od-skills/
 plugin-source/
 *.artifact.json
+
+# Python
+__pycache__/
+.venv/
+dist/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Built by the hatch build hook and `pnpm build`; the wheel carries it, git does not.
+src/wayfarer/static/
