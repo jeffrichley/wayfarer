@@ -59,7 +59,7 @@ Buttons say what happens ("Post resolution and close", "Approve and merge", "Sen
 
 ## 6. Most unblocking first
 
-**Needs you** is ordered by how much each item unblocks, and each item says what it unblocks ("Unblocks 2 tickets and clears fog").
+**Needs you** is ordered by how much each item holds up, and each item says so ("Holds up 4 tickets · 1 starts the moment it lands"). An item holds up every open ticket downstream of it, because with a cascade armed, all of them would be worked the moment they could be.
 
 *Why:* when agents run in parallel, the person is the bottleneck. Their attention should go where it frees the most work.
 

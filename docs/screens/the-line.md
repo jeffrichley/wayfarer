@@ -59,13 +59,13 @@ The page is a single column that scrolls, capped at about 1240px:
 - **Demo actions:** merges, answers, closes and similar actions add "now" entries at the top.
 
 ### Needs you (`needs-you-panel`)
-- **Order:** most unblocking first.
+- **Order:** by what each item holds up, live ([ordering rules](../design/data-and-commands.md#needs-you-derived)).
 - **Each item** (`need-<key>`):
   - a glyph (half ring for a review, diamond for anything waiting on an answer)
   - kind · effort in mono uppercase
   - the item's name in serif
   - what's being asked
-  - what it unblocks, on the right ("Unblocks 2 tickets + fog", "Clears the way")
+  - what it holds up, on the right ("Holds up 4 tickets")
 - **Where items go:** each item links to its desk item, or to the map for map work.
 - **Foot:** "Answers post back to the tracker as comments." with a secondary **Open the desk** (`open-desk`).
 - **Empty state:** "Nothing is waiting on you. Agents will stop here when they need a decision." The foot hides.

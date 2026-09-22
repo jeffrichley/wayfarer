@@ -127,15 +127,39 @@ An item appears when any of these is true:
 
 | Kind | Condition |
 |---|---|
-| Review | A ticket's PR is open with `/code-review` done and awaiting a human |
+| In review | Auto-merge is off and a clean, green PR is waiting for approval |
 | Question | A ticket is Asked: labelled `wayfarer:asked` |
 | Held | A ticket is labelled `wayfarer:held`: a blocking finding, a failed attempt, or work that could not land (a red re-test on the latest effort branch, or a conflict a resolver session couldn't clear), said in plain words |
 | Environment | A session failed for a reason that was not its own, and the cascade paused. A ticket that had not reached Landing went back on the frontier; a Landing ticket keeps its place in the merge queue. One item also covers an effort branch whose own tests are red |
-| Grilling / prototype | A HITL decision ticket is on the frontier, or claimed by you and in session |
-| Seam | `/to-spec` is waiting for seam agreement |
 | Drafts | `/to-tickets` drafts are waiting for the person to check them (its "quiz the user" step) |
+| Ship the effort | Every ticket in an effort is closed and the cascade has disarmed |
+| Orphan container | A container labelled with a run id outlived its session, and is offered for `reap` |
+| Closed with a live session | GitHub closed a ticket whose session is still running |
 
-**Ordering:** by how much the item unblocks. Count the tickets whose *last* open blocker is this item, and add weight when resolving it would clear fog or clear the way. Each item states that effect in words.
+Grilling and prototype tickets and seams are not in this slice: those stations are out of scope.
+
+**Ordering.** Decided in [What "most unblocking first" computes in Needs you](https://github.com/jeffrichley/wayfarer/issues/24).
+- **One list** across every effort in the repo, each item naming its effort on the right.
+- **Environment** is pinned above everything, unscored. It pauses every cascade, and there is only ever one.
+- **Everything else that concerns a ticket** ranks by what it **holds up**: the item's ticket plus every open ticket downstream of it, since a cascade would work all of them the moment it could. A ticket stalled by two items counts in both; nothing ever adds the counts up. A draft counts every ticket in it.
+- **Items that hold up no ticket** come last: Ship the effort, then orphan containers, then closed tickets with a live session.
+- **Ties** go to whatever has waited longest.
+- **On the desk the order freezes** while you work. Counts and sentences update live, new items join at the bottom marked new, and it re-ranks when you come back. Home always shows the live order.
+- **Sentences** are templated, with the reason or question first:
+
+  | Kind | Sentence |
+  |---|---|
+  | Environment | "Every cascade is paused · ⟨plain-words reason⟩" |
+  | Question | "⟨question's gist⟩ · Holds up N tickets" |
+  | Held | "⟨plain-words Held reason⟩ · Holds up N tickets · M start when it lands" |
+  | In review | "Clean and green, waiting on your approval · Holds up N tickets" |
+  | Drafts | "N tickets drafted from ⟨spec⟩, waiting on your check" |
+  | Ship the effort | "Every ticket landed · one review to ship ⟨effort⟩" |
+  | Orphan container | "A container from ⟨ticket⟩ outlived its session" |
+  | Closed with a live session | "⟨ticket⟩ was closed on GitHub while its session runs" |
+
+  "M start" counts the tickets that become takeable the moment it resolves. When that is none, the clause is dropped.
+- **The words.** "Holds up", never "unblocks": resolving a Held ticket may start nothing yet while still freeing everything behind it.
 
 ### Chronicle *(derived)*
 Decided in [The chronicle](https://github.com/jeffrichley/wayfarer/issues/22).

@@ -223,7 +223,7 @@ The running account of tickets moving across the repo's efforts, written as sent
 _Avoid_: activity feed, log, notifications
 
 **Needs you**:
-Everything waiting on a person, ordered by how much it unblocks: reviews, questions, HITL tickets, seams, drafts to check.
+Everything waiting on a person, in one list across efforts, ordered by how much each item holds up: every open ticket downstream of it. An environment failure sits above everything; items that hold up no ticket, such as shipping an effort, sit below.
 _Avoid_: inbox, notifications, to-do, alerts
 
 **Desk**:
