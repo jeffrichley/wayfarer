@@ -53,7 +53,7 @@ The assignee on an open ticket, which marks it as taken by a session.
 _Avoid_: lock, owner
 
 **Frontier**:
-The open, unblocked, unclaimed tickets on a map: the edge of what is known.
+The open, unblocked, unclaimed tickets on a map, or on an effort's ticket graph: the edge of what is known. A ticket on it is **takeable**. A ticket is unblocked once every ticket blocking it is closed, whether or not that ticket landed.
 _Avoid_: ready queue, backlog, todo
 
 **Fog**:
@@ -181,7 +181,7 @@ The ordered line of finished tickets waiting to land on the effort branch. It ex
 _Avoid_: merge train, batch, landing queue
 
 **Held**:
-A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or drops it.
+A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or closes it.
 _Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
 **Landing**:
@@ -189,8 +189,12 @@ A finished ticket whose work is in the merge queue: waiting its turn, or being r
 _Avoid_: queued, merging, pending, in review (that is waiting on a person)
 
 **Landed**:
-A ticket whose commits have reached the effort branch. This is what unblocks its dependents.
+A ticket whose commits have reached the effort branch. Landing closes the ticket, and the close is what unblocks its dependents.
 _Avoid_: done, closed, merged, shipped
+
+**Cascade**:
+An effort's tickets starting themselves as they reach the frontier, once a person arms it. **Armed** means it starts each takeable ticket, up to the repo's cap. **Paused** means it starts nothing new while running sessions finish. It disarms itself when every ticket in the effort is closed.
+_Avoid_: autopilot, auto-run, queue (that is the merge queue)
 
 **Shipped**:
 An effort whose branch has merged into the trunk, reviewed by a person once. The only human gate in a cascade.

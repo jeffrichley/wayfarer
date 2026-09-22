@@ -41,9 +41,9 @@ Wayfarer hears from GitHub by **poke-and-re-read** ([ADR-0003](../adr/0003-poke-
 One SQLite file per repo (stdlib `sqlite3`, WAL), outside the checkout, at `~/.local/share/wayfarer/<owner>/<repo>/`, beside the per-run event files. It holds only what a restarted Wayfarer needs and GitHub cannot hold:
 
 - **Sessions Wayfarer started:** run id, ticket, purpose, started, ended, event file, and the Outcome. Recorded at `run_start`, since Waystation generates the run id and nothing in the library writes it down.
-- **Armed cascades:** which effort, its cap, and whether it is paused.
+- **Armed cascades:** which effort, and whether it is paused.
 - **Last visit**, for the home headline.
-- **Settings**, per repo. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you.
+- **Settings**, per repo. The concurrency cap, default 3, is one number shared by every armed cascade. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you.
 
 Notes and queued agents are gone. Notes had nowhere to go once mid-run steering was cut, and an armed cascade replaces a per-ticket queue.
 
@@ -149,9 +149,12 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Agree seam and write the spec | `agree-seam` | Answer `/to-spec`'s seam check. `/to-spec` publishes the spec with `ready-for-agent`, and the map gets a pointer and closes. | Pointer convention proposed |
 | Slice into tickets / Slice the uncovered stories | `slice-into-tickets`, `slice-uncovered` | Start `/to-tickets` on the spec (or on named stories). The drafts come back to the person before publishing. | Defined by `/to-tickets` |
 | Publish tickets | `publish-drafts` | Publish the approved drafts with blocking edges and `ready-for-agent` | Defined by `/to-tickets` |
-| Start an agent on this ticket | `start-agent`, `start-agent-132` | Claim the ticket, create `wt/<name>` from main, and start a Claude Code session running `/tdd` on it | Transport open |
+| Start an agent on this ticket | `start-agent`, `start-agent-132` | Superseded: arming a cascade is the only way a session starts | Cut ([The cascade](https://github.com/jeffrichley/wayfarer/issues/14)) |
+| Arm a cascade | none yet | Confirm in one line ("4 tickets are takeable now, up to 3 at a time"), then start each takeable ticket: assign it, then submit its flow | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
+| Pause / Resume the cascade | none yet | Stop submitting; running sessions finish. Resume submits again | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
+| Stop a ticket | none yet | Cancel its session with salvage. The ticket stays claimed and is Held | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
 | Queue an agent for when it unblocks | `queue-agent` | Superseded by arming a cascade for the effort, which starts every ticket as it becomes takeable | Wayfarer's store (armed cascade) |
-| Pause / Resume | `pause-session` | Pause the session at its next safe point, then resume it | Transport open |
+| Pause / Resume a session | `pause-session` | Pause the session at its next safe point, then resume it | Cut: nothing flows into a running session |
 | Send note | `send-note` | Deliver a note the session reads before its next step, without stopping it | Transport open |
 | Open terminal | `open-terminal` | Open the worktree's session in a real terminal | Open |
 | Send answer and resume | `send-answer-<n>` | Deliver the answer to the paused session, post it to the ticket as a comment, and resume | Transport open |
