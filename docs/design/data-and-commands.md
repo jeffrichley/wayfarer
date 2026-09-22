@@ -54,7 +54,10 @@ Notes and queued agents are gone. Notes had nowhere to go once mid-run steering 
 - A labelled container with no store row is shown as unknown and never reaped automatically. The label carries no repo, so it may belong to another repo's Wayfarer.
 - An armed cascade comes back **paused**, so a restart never spends money unasked.
 
-**Questions, later.** A session reaches a person by *ending* with a question, which becomes a GitHub comment and then a follow-up session ([Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19)). Neither the read model nor the store needs anything new for it.
+**Questions.** A session asks with `AskUserQuestion`, and a hook in the image defers the call, which ends the session ([Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19)).
+- **On GitHub:** a question comment on the ticket, carrying a hidden marker naming the session, plus the `wayfarer:asked` label. That is the whole state.
+- **Answering:** removing the label is the signal, whether the person answered in the desk or on GitHub.
+- **Locally:** the session's transcript is a file beside its event files, with the same retention. If it is lost, the resume starts cold with the question and answer in its prompt.
 
 ## The read model
 
@@ -99,7 +102,7 @@ Notes and queued agents are gone. Notes had nowhere to go once mid-run steering 
 - **State:**
   1. PR merged or issue closed as completed → **landed**
   2. PR open → **in review**
-  3. its session paused on a question → **waiting on you**
+  3. labelled `wayfarer:asked` → **asked**
   4. a session running → **building**
   5. every blocker landed and nobody on it → **takeable**
   6. otherwise → **blocked**
@@ -123,7 +126,7 @@ An item appears when any of these is true:
 | Kind | Condition |
 |---|---|
 | Review | A ticket's PR is open with `/code-review` done and awaiting a human |
-| Question | A session is paused on a question |
+| Question | A ticket is Asked: labelled `wayfarer:asked` |
 | Grilling / prototype | A HITL decision ticket is on the frontier, or claimed by you and in session |
 | Seam | `/to-spec` is waiting for seam agreement |
 | Drafts | `/to-tickets` drafts are waiting for the person to check them (its "quiz the user" step) |
@@ -157,7 +160,7 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Pause / Resume a session | `pause-session` | Pause the session at its next safe point, then resume it | Cut: nothing flows into a running session |
 | Send note | `send-note` | Deliver a note the session reads before its next step, without stopping it | Transport open |
 | Open terminal | `open-terminal` | Open the worktree's session in a real terminal | Open |
-| Send answer and resume | `send-answer-<n>` | Deliver the answer to the paused session, post it to the ticket as a comment, and resume | Transport open |
+| Send answer and resume | `send-answer-<n>` | Post an answer comment on the ticket, remove `wayfarer:asked`, and queue a resume: a fresh container on the preservation branch runs `--resume` with the stored transcript, and the hook hands the answer to the deferred `AskUserQuestion` call | [Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19) |
 | Send finding to the agent | `send-finding` | Reopen the ticket's session with the finding as its task | Transport open |
 | Comment on a diff line | `pr-diff` rows | Post a PR review comment *and* deliver it to the worktree session | Transport open |
 | Request changes | `request-changes` | Post a changes-requested review and reopen the session with the request | Transport open |

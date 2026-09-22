@@ -53,7 +53,7 @@ The assignee on an open ticket, which marks it as taken by a session.
 _Avoid_: lock, owner
 
 **Frontier**:
-The open, unblocked, unclaimed tickets on a map, or on an effort's ticket graph: the edge of what is known. A ticket on it is **takeable**. A ticket is unblocked once every ticket blocking it is closed, whether or not that ticket landed.
+The open, unblocked, unclaimed tickets on a map, or on an effort's ticket graph: the edge of what is known. A ticket on it is **takeable**. A ticket is unblocked once every ticket blocking it is closed, whether or not that ticket landed. An Asked ticket is never on it.
 _Avoid_: ready queue, backlog, todo
 
 **Fog**:
@@ -157,7 +157,7 @@ A message a person leaves for a running session. The session reads it before its
 _Avoid_: comment, prompt, chat
 
 **Question**:
-Something a session ended to ask a person, because only they can decide it. A blocking finding the session left unfixed is one. A session never pauses to ask.
+Something a session ended to ask a person, because only they can decide it. It lives on the ticket, and answering it resumes the session where it stopped. A blocking finding the session left unfixed is one too, though answering a finding does not yet resume anything. A session never waits to be answered.
 _Avoid_: blocker, alert, escalation
 
 **Axis**:
@@ -184,6 +184,10 @@ _Avoid_: merge train, batch, landing queue
 A finished ticket kept back from landing until a person decides, because its session left a blocking finding or did not finish. The person lets it land, fixes it, or closes it.
 _Avoid_: draft (that is a `/to-tickets` draft), blocked (that is a ticket waiting on another), stuck, failed
 
+**Asked**:
+An unfinished ticket whose session ended to ask a question. It stays claimed and waits on a person. Answering resumes the same session in a fresh container, as a continuation rather than a new start.
+_Avoid_: paused (nothing is running), held (that is a finished ticket), blocked, waiting
+
 **Landing**:
 A finished ticket whose work is in the merge queue: waiting its turn, or being re-tested against the latest effort branch. It is moving, not waiting on anyone.
 _Avoid_: queued, merging, pending, in review (that is waiting on a person)
@@ -193,7 +197,7 @@ A ticket whose commits have reached the effort branch. Landing closes the ticket
 _Avoid_: done, closed, merged, shipped
 
 **Cascade**:
-An effort's tickets starting themselves as they reach the frontier, once a person arms it. **Armed** means it starts each takeable ticket, up to the repo's cap. **Paused** means it starts nothing new while running sessions finish. It disarms itself when every ticket in the effort is closed.
+An effort's tickets starting themselves as they reach the frontier, once a person arms it. **Armed** means it starts each takeable ticket, up to the repo's cap, and resumes each Asked ticket once answered. A resume is not a start. **Paused** means it starts nothing new while running sessions finish. It disarms itself when every ticket in the effort is closed.
 _Avoid_: autopilot, auto-run, queue (that is the merge queue)
 
 **Shipped**:
