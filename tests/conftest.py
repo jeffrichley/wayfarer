@@ -97,10 +97,15 @@ class Launcher:
         return instance
 
     def close(self) -> None:
+        # Ctrl-C, as a person stops it, so the process exits cleanly and coverage
+        # gets to record what it ran; a kill only if that fails.
         for instance in self._instances:
             if instance.process.poll() is None:
-                instance.process.kill()
-                instance.process.wait(timeout=15)
+                try:
+                    instance.interrupt()
+                except subprocess.TimeoutExpired:
+                    instance.process.kill()
+                    instance.process.wait(timeout=15)
 
 
 def _git(cwd: Path, *args: str) -> None:

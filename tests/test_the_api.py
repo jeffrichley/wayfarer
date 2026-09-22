@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from importlib.metadata import version
 
+import pytest
+
 from conftest import Launcher, get
+
+pytestmark = pytest.mark.git
 
 
 def test_health_names_the_running_version(wayfarer: Launcher) -> None:

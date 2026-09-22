@@ -11,6 +11,8 @@ import pytest
 
 from conftest import DEFAULT_PORT, Launcher, get
 
+pytestmark = pytest.mark.git
+
 
 def test_running_inside_a_clone_serves_a_page_on_localhost_and_opens_a_browser(
     wayfarer: Launcher,
