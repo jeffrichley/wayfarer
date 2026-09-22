@@ -116,6 +116,14 @@ _Avoid_: requirement, AC, checklist item
 One Claude Code run working one ticket, with one skill or purpose: a `/tdd` build, a `/code-review`, a resolver session, a retry. A ticket may have several over its life. Waystation calls this a run.
 _Avoid_: job, run, agent instance, worker
 
+**Image**:
+The container every session runs in: Wayfarer's base, holding the skills and the agent, plus the repo's own layer, holding its toolchain. A repo without a layer cannot start sessions.
+_Avoid_: sandbox (Waystation's word for the running container), environment, box
+
+**Start gate**:
+What must hold before any session starts: an image that is current and has passed its probe, a credential, and a git identity. Failing it pauses the cascade and raises one item in Needs you.
+_Avoid_: readiness (that is about a repo's skills and tracker), preflight (Waystation's per-run check), health check
+
 **Outcome**:
 The structured report a session hands back when it ends. It is the only way a session can reach a person, since nothing flows into a running one. Borrowed from Waystation unchanged.
 _Avoid_: result, response, summary
