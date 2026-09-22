@@ -20,16 +20,29 @@ From the frontier, they can start an agent.
 - **Top bar** and **route band**, with `/to-tickets` current.
 - **Graph column** (`ticket-graph`):
   - head: kicker "/to-tickets · 9 tracer bullets from spec #124", title "Pre-delivery compliance checks, sliced", the reading instruction "Read left to right. A ticket reaches the frontier when every ticket feeding into it has landed.", and a **tally** of states ("2 landed · 1 in review · 2 building · 1 waiting on you · 1 takeable now · 2 blocked")
-  - the canvas (1160 × 740, scaled)
+  - the canvas, sized by the layout and scaled (see [Layout](#layout-rules))
 - **Detail panel** (`ticket-detail`), on the right: the selected ticket.
 
 ## Pieces
 
+### Layout rules
+
+Decided in [The ticket graph's automatic layout, and past 20 tickets](https://github.com/jeffrichley/wayfarer/issues/23). elkjs lays the graph out ([The stack](https://github.com/jeffrichley/wayfarer/issues/9)); these are the rules it is given.
+
+- **The start line.** The first column is always a rail the full height of the graph. Before anything lands it is dashed and reads "Nothing landed yet · The course starts here". Every **Landed** ticket folds into it, and it then reads "N tickets landed" on the wash with a magenta edge: it is the course. Selecting it lists the landed tickets in the panel. Only Landed folds; a Landing ticket is still moving and keeps its card.
+- **Columns count steps from now.** A ticket's column is how many tickets that have not landed stand between it and a session. The frontier is always the column beside the start line. In ELK this is layering strategy `LONGEST_PATH_SOURCE` over the tickets that have not landed: the default strategies push a ticket as *late* as it can go, which breaks the rule.
+- **Rows are ELK's.** Crossing minimisation picks them. There are no streams: `/to-tickets` records only a title, blockers and a parent, and a stream derived from the edges alone runs across unrelated work.
+- **Wires leave the start line level with the ticket they feed**, so the rail has no trunk and never moves.
+- **Implied edges are hidden** by transitive reduction and listed in the panel under Blocked by.
+- **Two card sizes.** A full card when a ticket is in flight (Building, Landing), waiting on you (Asked, Held), Takeable, or one step out (every open blocker is on the frontier or in flight). A name-only card, about half the height, further out. Nothing clips a name.
+- **Motion.** When a ticket lands, its card slides into the start line, its dependents slide left, and name-only cards grow into full cards as they come within a step. Nothing else moves the layout.
+- **Past 20 tickets** nothing else changes. The fold keeps the graph the size of the work left, and the canvas scrolls under the 0.7 scale floor rather than shrinking text below 11px.
+
+The prototype that settled this is kept on the `prototype/ticket-graph-layout` branch.
+
 ### Cards (`ticket-card-<n>`)
-- **Placement:**
-  - **column** = when the ticket can start: its depth in the dependency chain
-  - **row** = the **stream** it belongs to, for example the loudness → peaks line of work
-- **Size:** fixed at 184 × 128.
+- **Placement:** by the [layout rules](#layout-rules).
+- **Size:** 184 wide. A full card is 128 tall; a name-only card is 56.
 - **Card anatomy:**
   - **Top line** (mono, uppercase): glyph, state word, and the id on the right.
   - **Name:** serif, clamped to three lines.
@@ -37,24 +50,27 @@ From the frontier, they can start an agent.
 
     | State | Foot |
     |---|---|
-    | Landed | "PR #136 · landed yest. 22:14" |
-    | In review | "PR #141 · 1 spec finding" |
-    | Building | A row of criterion ticks, then "3 of 4 · wt/noise-floor" |
-    | Waiting on you | "Asked you a question" (in ink) |
-    | Takeable | "Nobody on it yet" |
+    | Landing | "In the merge queue" |
+    | Building | "Working · 12 min" |
+    | Asked | "Asked you a question" (in ink) |
+    | Held | "Held · a blocking finding" (in ink) |
+    | Takeable | "Nobody on it yet", or "Starts when a slot frees" at the cap |
     | Blocked | "Waiting on Flag noise floor" or "Waiting on 5 tickets" |
+
+    Landed tickets have no card: they fold into the start line.
 
 - **State styling, by shape and tone, never hue:**
   - landed: a washed background (finished, resting)
   - blocked: a dashed border on the page colour (not yet real)
-  - takeable: an ink border (ready and asking to be picked up)
+  - takeable, Asked and Held: an ink border (ready to pick up, or waiting on you)
 - **Selecting:** clicking a card sets `aria-pressed` and opens it in the panel. Focus stays on the card.
+- **Trace:** a selected ticket lights what it waits on, back to the start line, and everything it frees; the rest dims. Clicking empty canvas or pressing Esc clears the selection and the trace.
 
 ### Wires
 - **Shape:** orthogonal with rounded corners, from a blocker's right edge to the blocked card's left edge.
-- **Met vs open:** **magenta** when the blocker has landed (the course walked), dashed grey while it's open.
+- **Met vs open:** **magenta** when the blocker has landed (the course walked), dashed grey while it's open. A ticket with no blockers hangs off the start line on a thin `--line` start-line wire.
 - **Selection:** the selected card's wires turn hot (thicker) and are redrawn on top.
-- **Implied edges** are not drawn. *Flag noise floor* → *Block ACX export* is already implied through *Check room tone*, so it's drawn only once, through room tone. The panel still lists it under Blocked by.
+- **Implied edges** are not drawn. *Flag noise floor* → *Block ACX export* is already implied through *Check room tone*, so it's drawn only once, through room tone. The panel still lists it under Blocked by, marked "implied through Check room tone".
 - **Gate note:** beside the last card, "Every check feeds the export gate. It is the last ticket to reach the frontier."
 
 ### Detail panel (`ticket-detail`)
@@ -86,8 +102,8 @@ From the frontier, they can start an agent.
 
 ## Why it looks this way
 
-- **Columns by when a ticket can start:** reading left to right *is* the build order, so a person never has to work out a topological sort in their head.
-- **Rows as streams:** related tickets stay on one horizontal line, which keeps the wires short and legible.
+- **Columns by when a ticket can start, counted from now:** reading left to right *is* the build order, so a person never has to work out a topological sort in their head. Counting from now keeps the frontier beside the start line at every size.
+- **Done work folds into the start line:** the graph is the size of the work left, not the work done, and the course stays drawn as the one magenta thing on the left.
 - **The foot changes by state:** each card surfaces the one fact that matters for its state, and a card never carries every field at once.
 - **Magenta wires only where a blocker landed:** the course, again. The landed part of the graph reads as a route already travelled.
 - **"Queue an agent" is a ghost toggle, not a primary:** the only primary on this screen belongs to starting work that can start *now*.
@@ -100,10 +116,7 @@ From the frontier, they can start an agent.
 
 ## Open questions
 
-- **Automatic layout:**
-  - a layered DAG layout (for example ELK or dagre) with stream grouping and orthogonal routing
-  - how implied (transitive) edges are detected and hidden
-  - behaviour past about 20 tickets, or several specs at once
+- **Several specs at once** in one effort's graph.
 - **Where "Queue an agent" lives,** and what it does if the blocker is abandoned.
 - **Starting an agent with other settings** (another skill, model or base branch): is the setup list editable?
 - **Tickets from more than one spec:** separate graphs, or one graph grouped by spec?

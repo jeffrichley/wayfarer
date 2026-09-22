@@ -210,6 +210,10 @@ _Avoid_: released, delivered, done
 The route an effort has actually walked so far. It is the only thing drawn in the accent colour, apart from each screen's one primary action.
 _Avoid_: progress bar, path, timeline
 
+**Start line**:
+The first column of an effort's ticket graph: where the course begins. Every landed ticket folds into it, so it is empty until the first landing and holds the course after.
+_Avoid_: backlog, done column, archive
+
 **Thread**:
 One ticket's lineage traced from the map decision it came from, through its spec story, its session and its PR, to landed.
 _Avoid_: history, breadcrumb, audit trail

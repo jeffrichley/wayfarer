@@ -76,9 +76,10 @@ This is one vocabulary on every screen. The classes live in `waystation.css` und
 | Glyph | Class | Ticket (build) | Map ticket | Elsewhere |
 |---|---|---|---|---|
 | Filled circle | `st-done` | Landed | Decided (closed) | A station that's done; a check that passed |
-| Half-filled ring | `st-review` | In review (PR open) | — | A station with a PR waiting |
+| Half-filled ring | `st-review` | Landing (in the merge queue) | — | A station with a PR waiting |
 | Spinning ring | `st-building` | Building (session running) | Claimed | Agents working; a step in progress |
-| Solid diamond | `st-ask` | Waiting on you (session paused on a question) | HITL ticket on the frontier, waiting on you | Anything in Needs you that needs an answer |
+| Solid diamond | `st-ask` | Asked (a session ended to ask a question) | HITL ticket on the frontier, waiting on you | Anything in Needs you that needs an answer |
+| Hollow diamond | `st-held` | Held (finished work waiting on your decision) | — | — |
 | Bold ring | `st-take` | Takeable now (on the frontier, unclaimed) | AFK frontier ticket | "Ready to slice" and other next moves |
 | Dashed ring | `st-blocked` | Blocked | Blocked | A skill that isn't installed (first run) |
 | Thin ring | `st-pending` | — | Not yet on the map | A step not reached yet |
