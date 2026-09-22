@@ -215,7 +215,7 @@ One ticket's lineage traced from the map decision it came from, through its spec
 _Avoid_: history, breadcrumb, audit trail
 
 **Chronicle**:
-The running account of what happened across the repo, written as sentences and naming things by name.
+The running account of tickets moving across the repo's efforts, written as sentences and naming things by name. Each line is one thing that moved a ticket (a landing, an answer, a hold) together with what it directly caused. It tells which tickets moved, never which skill a session was running.
 _Avoid_: activity feed, log, notifications
 
 **Needs you**:

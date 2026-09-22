@@ -54,7 +54,7 @@ The page is a single column that scrolls, capped at about 1240px:
 
 ### The chronicle (`chronicle`)
 - **Grouping:** entries grouped by day ("Today", "Yesterday · Monday 14 September"), newest first.
-- **Each entry:** the time in mono, a status glyph, one sentence that names things by name (ticket and map names are links), and the skill that acted, in mono, on the right.
+- **Each entry:** the time in mono, a status glyph, one sentence that names things by name (ticket and map names are links), and the effort's name on the right. Not the skill that acted: tickets moving, not stages ([The chronicle](https://github.com/jeffrichley/wayfarer/issues/22)).
 - **Summaries:** entries summarise rather than log ("*Flag loudness* landed. Three tickets reached the frontier, and two agents picked them up.").
 - **Demo actions:** merges, answers, closes and similar actions add "now" entries at the top.
 
@@ -94,8 +94,6 @@ The page is a single column that scrolls, capped at about 1240px:
 
 ## Open questions
 
-- How the headline and standfirst are written: templates or a model, and what "since your last visit" means across devices.
 - How the line scales past about 6 efforts: grouping, collapsing landed efforts, or ageing them off after some days.
 - How a cluster reads when a station holds 30 tickets: aggregate glyphs, or show counts past a threshold?
-- How far back the chronicle goes, and how it pages.
 - A real mobile layout. Today it's a sideways-scrolling table.

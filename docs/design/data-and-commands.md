@@ -42,7 +42,7 @@ One SQLite file per repo (stdlib `sqlite3`, WAL), outside the checkout, at `~/.l
 
 - **Sessions Wayfarer started:** run id, ticket, purpose, started, ended, event file, and the Outcome. Recorded at `run_start`, since Waystation generates the run id and nothing in the library writes it down.
 - **Armed cascades:** which effort, and whether it is paused.
-- **Last visit**, for the home headline.
+- **Last visit**, for the home headline. Updated on leaving home, so a refresh keeps the headline.
 - **Settings**, per repo. The concurrency cap, default 3, is one number shared by every armed cascade. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you. Session time caps default to 20 min of silence and 2 h of wall time, with no cap on turns or dollars. The merge queue's re-test is capped at 30 min of wall time, with no silence cap; hitting it counts as a failed re-test.
 
 Notes and queued agents are gone. Notes had nowhere to go once mid-run steering was cut, and an armed cascade replaces a per-ticket queue.
@@ -138,9 +138,15 @@ An item appears when any of these is true:
 **Ordering:** by how much the item unblocks. Count the tickets whose *last* open blocker is this item, and add weight when resolving it would clear fog or clear the way. Each item states that effect in words.
 
 ### Chronicle *(derived)*
-- **Contents:** one sentence per meaningful event, newest first, grouped by day, each naming things by name and tagged with its skill.
-- **Home headline:** summarises events since the person's last visit (in Wayfarer's store).
-- *Open:* whether sentences are templated or written by a model, and how events are merged ("Three tickets reached the frontier, and two agents picked them up").
+Decided in [The chronicle](https://github.com/jeffrichley/wayfarer/issues/22).
+- **Source:** a pure function of the effort's GitHub issue and PR timelines, plus the session rows already in the store. Nothing new is stored, so a rebuild gives the same chronicle. Facts that live only in Wayfarer, such as a paused cascade, appear in Needs you while live and never in the chronicle.
+- **Sentences:** templated, one template per event kind. Where a line needs prose it quotes text that already exists: the question's gist, the plain-words Held reason, the first sentence of the Outcome summary. No model writes lines.
+- **What earns a line:** a ticket taken, Asked (with the question's gist), answered and resumed, Held (with the reason), retried (Continue or Start over), landed (with what it unblocked), closed without landing; a cascade armed; an effort ready to ship, and shipped; tickets published by `/to-tickets`. **Never:** beats, which skill is running, a PR opening, entering the queue, re-testing, a resolver session (these show on the card while Landing, and reach the chronicle only as the Held or Landed they end in), CI runs, label noise.
+- **Folding, by cause:** a line is one landing, answer, arming or publish plus what it *directly* caused: the tickets it made takeable and the sessions the cascade started on them. A ticket assigned after its last blocker closed folds into that blocker's line. Unrelated events are never folded by time. A line is at most two sentences; any overflow gets its own line.
+- **Who acted:** by kind of event, not by the timeline's actor, since Wayfarer writes with the person's token. Automatic kinds (taken, landed, Held) read passively; a person's kinds (answered, let it land, retried, closed without landing, armed) read "You". An assignment with no session row in the store is a person taking the ticket. Wayfarer closes a landed ticket with a comment ("Landed on ⟨effort branch⟩ at ⟨sha⟩") carrying a hidden marker, so a close without one is a person's. Any other login is named.
+- **Each line** shows the time, a status glyph, the sentence, and the effort's name on the right. Not the skill.
+- **Paging:** Today and Yesterday on home, then Earlier one day at a time. A shipped effort's lines stay, ending with "⟨effort⟩ shipped". Nothing is cached beyond memory.
+- **Home headline and standfirst:** templated, separately from the chronicle, from the same events since the last visit. The headline is under 14 words and leads with the top Needs you item, then landings. The standfirst is one sentence per active effort, from its counts. The last visit is local to this machine and is updated on leaving home, not on arriving.
 
 ## Commands (steering)
 
