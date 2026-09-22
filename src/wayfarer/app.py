@@ -27,15 +27,18 @@ or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Wayfarer", version=version("wayfarer"))
+    running = version("wayfarer")
+    app = FastAPI(title="Wayfarer", version=running)
 
+    # Handlers are async so they run on the loop every agent run shares (ADR-0001),
+    # not in a thread pool beside it.
     @app.get("/api/health")
-    def health() -> Health:
-        return Health(version=version("wayfarer"))
+    async def health() -> Health:
+        return Health(version=running)
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)
-    def no_such_api(path: str) -> None:
+    async def no_such_api(path: str) -> None:
         raise HTTPException(status_code=404)
 
     index = _STATIC / "index.html"
@@ -44,7 +47,7 @@ def create_app() -> FastAPI:
 
     # Every path that is not the API is the single-page app, which routes itself.
     @app.get("/{path:path}", include_in_schema=False, response_model=None)
-    def page(path: str) -> FileResponse | HTMLResponse:
+    async def page(path: str) -> FileResponse | HTMLResponse:
         if index.is_file():
             return FileResponse(index)
         return HTMLResponse(_NOT_BUILT)

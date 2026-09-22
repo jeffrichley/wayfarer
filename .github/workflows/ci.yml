@@ -86,9 +86,11 @@ jobs:
 
       - name: Serves the page with no Node on PATH
         run: |
-          # A PATH holding git and nothing else, so Node cannot be found.
+          # A PATH holding git, and `true` as the browser, and nothing else, so
+          # Node cannot be found.
           bin=$(mktemp -d)
           ln -s "$(command -v git)" "$bin/git"
+          ln -s "$(command -v true)" "$bin/true"
           clone=$(mktemp -d)
           git -C "$clone" init --quiet
           cd "$clone"
