@@ -70,6 +70,8 @@ class PullRequest(BaseModel):
     """The pull request carrying a ticket's work, from the ticket's own branch."""
 
     number: int
+    branch: str
+    """Its head: the ticket branch, `ticket/<n>-…`."""
     draft: bool
     merged: bool
     checks: Checks | None

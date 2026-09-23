@@ -27,10 +27,25 @@ class Settings:
     budget allows; 100 would cost 4 (ADR-0003)."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
+    poll_active: float = 10.0
+    """Seconds between polls of GitHub while a cascade is armed or a page is open (ADR-0003)."""
+    poll_idle: float = 60.0
+    """Seconds between polls of GitHub when nothing is watching (ADR-0003)."""
+    rate_limit_backoff: float = 60.0
+    """Seconds the poll waits after GitHub refuses it without saying how long, doubled on
+    each refusal in a row. GitHub asks for at least a minute before retrying."""
+    rate_limit_backoff_max: float = 900.0
+    """The longest that doubling may grow to, so a poll refused for a long spell still
+    notices within a quarter of an hour once GitHub answers again."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
         return cls(
             github_api=env.get("WAYFARER_GITHUB_API", cls.github_api),
             github_token=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN") or None,
+            poll_active=float(env.get("WAYFARER_POLL_ACTIVE", cls.poll_active)),
+            poll_idle=float(env.get("WAYFARER_POLL_IDLE", cls.poll_idle)),
+            rate_limit_backoff=float(
+                env.get("WAYFARER_RATE_LIMIT_BACKOFF", cls.rate_limit_backoff)
+            ),
         )
