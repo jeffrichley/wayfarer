@@ -65,6 +65,9 @@ class Settings:
     long test run prints nothing."""
     session_wall: float = 2 * 60 * 60.0
     """Seconds a session's agent may run in all before it is stopped."""
+    landing_check_wall: float = 30 * 60.0
+    """Seconds the merge queue's re-test of a candidate may run in all, with no cap on its
+    silence. Reaching it counts as a failed re-test."""
     stage_timeout: float = 10 * 60.0
     """Seconds each of a session's workspace, sandbox, collect and integrate stages may
     take, which only a hang would reach. Every Waystation bound is unbounded unless set."""

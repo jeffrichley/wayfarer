@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
-import { type Glyph, State, TestRun } from "../State";
+import { Button, type ButtonProps } from "../Button";
+import { Criteria } from "../Criteria";
+import { Diff, type FileDiff, type Line } from "../Diff";
+import { Frame, Pane, Split } from "../Frame";
+import { type Glyph, State, TestRun, TestRuns } from "../State";
+import { type Step, Thread } from "../Thread";
+import { Chip, Kicker, Meta, Named, Rule } from "../Type";
 import styles from "./Gallery.module.css";
 
 // Every primitive in every state, on one page. A ticket that lands a widget adds
@@ -19,6 +25,172 @@ const GLYPHS: [Glyph, string][] = [
   ["pending", "Not reached yet"],
   ["out", "Out of scope"],
 ];
+
+// Each button variant with the words it carries in the prototype.
+const VARIANTS: [ButtonProps["variant"], string][] = [
+  ["primary", "Arm the cascade"],
+  ["secondary", "Review PR #141"],
+  ["ghost", "Queue an agent"],
+];
+const SIZES = [
+  ["", {}],
+  ["-small", { small: true }],
+  ["-arrow", { arrow: true }],
+] as const;
+
+// #128's thread as the ticket graph's panel draws it, mid-build.
+const THREAD: Step[] = [
+  {
+    skill: "/wayfinder",
+    name: <a className="nm" href="#112">ACX compliance before delivery</a>,
+    meta: "What does ACX reject? · How should a failing chapter explain itself?",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/to-spec",
+    name: <a className="nm" href="#124">Pre-delivery compliance checks</a>,
+    meta: "Story 5",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/to-tickets",
+    name: <Named name="Flag a noise floor above −60 dB" id={128} href="#128" />,
+    meta: "After Flag loudness",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/tdd",
+    name: <a className="nm" href="#wt">wt/noise-floor</a>,
+    meta: "Claude Code · running now",
+    glyph: "building",
+    word: "Building",
+  },
+  { skill: "/code-review", name: "No PR yet", glyph: "pending", word: "Not reached yet" },
+  { skill: "merge", name: "Not landed", glyph: "pending", word: "Not reached yet" },
+];
+
+const CRITERIA = [
+  "Measure the noise floor of every chapter",
+  "Chapters above −60 dB fail the check",
+  "Failures explain the value, the limit, and the timestamp",
+  "The clean fixture passes",
+];
+
+// A file the change adds whole: every line new, numbered from 1.
+function added(code: string[]): Line[] {
+  return code.map((line, i) => ({ old: null, new: i + 1, code: line }));
+}
+
+// PR #141 as the review desk draws it (prototype/review-desk.html's FILES).
+const LIMITS: FileDiff = {
+  path: "worker/analysis/limits.ts",
+  lines: [
+    { old: 3, new: 3, code: "export const ACX_LIMITS = {" },
+    { old: 4, new: 4, code: "  rms: { min: -23, max: -18 }," },
+    { old: null, new: 5, code: "  peak: { max: -3 }," },
+    { old: 5, new: 6, code: "} as const;" },
+  ],
+};
+const PEAK: FileDiff = {
+  path: "worker/analysis/checks/peak.ts",
+  lines: added([
+    "import { ACX_LIMITS } from '../limits';",
+    "import { explain } from '../explain';",
+    "import type { ChapterAnalysis, CheckResult } from '../types';",
+    "",
+    "export function checkPeak(chapter: ChapterAnalysis): CheckResult {",
+    "  const { peakDb, peakAt } = chapter;",
+    "  const limit = ACX_LIMITS.peak.max;",
+    "",
+    "  if (peakDb <= limit) {",
+    "    return { check: 'peak', status: 'pass', measured: peakDb, limit };",
+    "  }",
+    "",
+    "  return {",
+    "    check: 'peak',",
+    "    status: 'fail',",
+    "    measured: peakDb,",
+    "    limit,",
+    "    at: peakAt,",
+    "    reason: explain.peak({ measured: peakDb, limit, at: peakAt }),",
+    "  };",
+    "}",
+  ]),
+};
+const PEAK_TEST: FileDiff = {
+  path: "worker/analysis/checks/peak.test.ts",
+  lines: added([
+    "import { describe, expect, it } from 'vitest';",
+    "import { analyseFixture } from '../../test/fixtures';",
+    "import { checkPeak } from './peak';",
+    "",
+    "describe('checkPeak', () => {",
+    "  it('passes the clean fixture', async () => {",
+    "    const result = checkPeak(await analyseFixture('clean'));",
+    "    expect(result.status).toBe('pass');",
+    "  });",
+    "",
+    "  it('flags the clipped fixture above -3 dB', async () => {",
+    "    const result = checkPeak(await analyseFixture('clipped'));",
+    "    expect(result.status).toBe('fail');",
+    "    expect(result.measured).toBeGreaterThan(-3);",
+    "  });",
+    "",
+    "  it('reports when the loudest peak happens', async () => {",
+    "    const result = checkPeak(await analyseFixture('clipped'));",
+    "    expect(result.at).toBeDefined();",
+    "  });",
+    "});",
+  ]).map((line) =>
+    line.new === 19
+      ? {
+          ...line,
+          finding: {
+            by: "/code-review · Spec axis",
+            body: (
+              <>
+                Only checks that <code>at</code> exists. Assert the clipped fixture’s known peak time so
+                story 4 is actually proven.
+              </>
+            ),
+          },
+        }
+      : line,
+  ),
+};
+const CHECK_LABEL: FileDiff = {
+  path: "app/compliance/check-label.ts",
+  lines: [
+    { old: 1, new: null, code: "export type CheckName = 'loudness';" },
+    { old: null, new: 1, code: "export type CheckName = 'loudness' | 'peak';" },
+    { old: 2, new: 2, code: "" },
+    { old: 3, new: 3, code: "export const CHECK_LABELS: Record<CheckName, string> = {" },
+    { old: 4, new: 4, code: "  loudness: 'Loudness'," },
+    { old: null, new: 5, code: "  peak: 'Peaks'," },
+    { old: 5, new: 6, code: "};" },
+  ],
+};
+// A line longer than its column, so it can be seen to wrap.
+const EXPLAIN: FileDiff = {
+  path: "worker/analysis/explain.ts",
+  lines: [
+    { old: 11, new: 11, code: "export const explain = {" },
+    {
+      old: 12,
+      new: null,
+      code: "  peak: ({ measured, limit }: Failure) => `Peaks reach ${measured} dB, above the ${limit} dB ACX allows.`,",
+    },
+    {
+      old: null,
+      new: 12,
+      code: "  peak: ({ measured, limit, at }: Failure) => `Peaks reach ${measured} dB at ${timestamp(at)}, above the ${limit} dB ceiling ACX allows for any chapter.`,",
+    },
+    { old: 13, new: 13, code: "};" },
+  ],
+};
 
 const TOKENS = [
   "--bg",
@@ -41,6 +213,24 @@ function Specimen({ name, children }: { name: string; children: ReactNode }) {
     <div className={styles.specimen} data-specimen={name}>
       {children}
     </div>
+  );
+}
+
+// Enough lines that a region overflows, so it can be seen to scroll on its own.
+function Filler({ what }: { what: string }) {
+  return Array.from({ length: 15 }, (_, i) => (
+    <p key={i} style={{ padding: "4px 20px" }}>
+      {`Line ${i + 1} of ${what}.`}
+    </p>
+  ));
+}
+
+// Stand-ins for the top bar and the route band, which are their own widgets.
+function StandIn({ children }: { children: string }) {
+  return (
+    <p className="meta" style={{ padding: "12px 24px", borderBottom: "1px solid var(--border)" }}>
+      {children}
+    </p>
   );
 }
 
@@ -119,7 +309,7 @@ export function Gallery() {
       <Section title="Type">
         <div className={styles.row}>
           <Specimen name="type-kicker">
-            <span className="kicker">/to-tickets · 9 tracer bullets</span>
+            <Kicker>/to-tickets · 9 tracer bullets</Kicker>
           </Specimen>
           <Specimen name="type-display">
             <h2>Pre-delivery compliance checks</h2>
@@ -128,57 +318,161 @@ export function Gallery() {
             <p>A ticket reaches the frontier when every ticket feeding into it has landed.</p>
           </Specimen>
           <Specimen name="type-meta">
-            <span className="meta">Holds up 4 tickets · 1 starts the moment it lands</span>
+            <Meta>Holds up 4 tickets · 1 starts the moment it lands</Meta>
           </Specimen>
           <Specimen name="type-name">
-            <a className="nm" href="#127">
-              Warn when no retail sample is chosen
-            </a>
-            <span className="id">#127</span>
+            <Named name="Warn when no retail sample is chosen" id={127} href="#127" />
           </Specimen>
           <Specimen name="type-skill">
             <span className="skill">/code-review</span>
           </Specimen>
           <Specimen name="type-chip">
-            <span className="chip">AFK</span>
+            <Chip>AFK</Chip>
           </Specimen>
           <Specimen name="type-num">
             <span className="num">10:20</span>
+          </Specimen>
+          <Specimen name="type-rule">
+            <div style={{ width: 200 }}>
+              <Rule />
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Names">
+        <div className={styles.row}>
+          <Specimen name="name-plain">
+            <Named name="Warn when no retail sample is chosen" id={127} />
+          </Specimen>
+          <Specimen name="name-row">
+            <span style={{ fontSize: "13.5px" }}>
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" />
+            </span>
+          </Specimen>
+          <Specimen name="name-line">
+            <p>
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" /> finished its session and
+              opened PR #141.
+            </p>
+          </Specimen>
+          <Specimen name="name-head">
+            <h2>
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" />
+            </h2>
           </Specimen>
         </div>
       </Section>
 
       <Section title="Buttons">
+        {VARIANTS.map(([variant, label]) => (
+          <div key={variant} className={styles.row}>
+            {SIZES.flatMap(([size, props]) =>
+              [false, true].map((disabled) => (
+                <Specimen
+                  key={`${size}${disabled}`}
+                  name={`button-${variant}${size}${disabled ? "-disabled" : ""}`}
+                >
+                  <Button variant={variant} {...props} disabled={disabled}>
+                    {label}
+                  </Button>
+                </Specimen>
+              )),
+            )}
+          </div>
+        ))}
         <div className={styles.row}>
-          <Specimen name="button-primary">
-            <button type="button" className="btn btn-primary">
-              Arm the cascade
-            </button>
+          <Specimen name="button-link">
+            <Button variant="secondary" arrow href="#desk">
+              Open the desk
+            </Button>
           </Specimen>
-          <Specimen name="button-primary-disabled">
-            <button type="button" className="btn btn-primary" aria-disabled="true">
-              Arm the cascade
-            </button>
+          <Specimen name="button-link-disabled">
+            <Button variant="secondary" arrow href="#desk" disabled>
+              Open the desk
+            </Button>
           </Specimen>
-          <Specimen name="button-secondary">
-            <button type="button" className="btn btn-secondary">
-              Review PR #141
-            </button>
+        </div>
+      </Section>
+
+      <Section title="Frames">
+        <div className={styles.row}>
+          <Specimen name="frame">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Pane>
+                  <Filler what="the page" />
+                </Pane>
+              </Frame>
+            </div>
           </Specimen>
-          <Specimen name="button-secondary-arrow">
-            <button type="button" className="btn btn-secondary btn-arrow">
-              Watch the session
-            </button>
+          <Specimen name="frame-no-route">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>}>
+                <Pane>
+                  <Filler what="the page" />
+                </Pane>
+              </Frame>
+            </div>
           </Specimen>
-          <Specimen name="button-secondary-small">
-            <button type="button" className="btn btn-secondary btn-sm">
-              Start an agent
-            </button>
+          <Specimen name="split-left">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Split left={{ label: "The queue", width: 240, children: <Filler what="the side" /> }}>
+                  <Filler what="the page" />
+                </Split>
+              </Frame>
+            </div>
           </Specimen>
-          <Specimen name="button-ghost">
-            <button type="button" className="btn btn-ghost">
-              Queue an agent for when it unblocks
-            </button>
+          <Specimen name="split-right">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Split right={{ label: "The detail", width: 260, children: <Filler what="the side" /> }}>
+                  <Filler what="the page" />
+                </Split>
+              </Frame>
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Test runs">
+        <Specimen name="runs">
+          <TestRuns runs={["red", "green", "red", "red", "green"]} />
+        </Specimen>
+      </Section>
+
+      <Section title="Thread">
+        <Specimen name="thread">
+          <div style={{ width: 340 }}>
+            <Thread steps={THREAD} />
+          </div>
+        </Specimen>
+      </Section>
+
+      <Section title="Acceptance criteria">
+        <Specimen name="criteria">
+          <div style={{ width: 340 }}>
+            <Criteria criteria={CRITERIA} />
+          </div>
+        </Specimen>
+      </Section>
+      <Section title="Diff">
+        <div className={styles.row}>
+          <Specimen name="diff">
+            <div style={{ width: 720 }}>
+              <Diff files={[LIMITS, PEAK, PEAK_TEST, CHECK_LABEL]} />
+            </div>
+          </Specimen>
+          <Specimen name="diff-changed">
+            <div style={{ width: 720 }}>
+              <Diff files={[CHECK_LABEL, LIMITS]} />
+            </div>
+          </Specimen>
+          <Specimen name="diff-long-line">
+            <div style={{ width: 420 }}>
+              <Diff files={[EXPLAIN]} />
+            </div>
           </Specimen>
         </div>
       </Section>

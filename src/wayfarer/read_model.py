@@ -47,6 +47,7 @@ HELD = "wayfarer:held"
 _EFFORT = """
 query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
+    defaultBranchRef { name }
     issue(number: $effort) {
       number
       title
@@ -68,10 +69,13 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
                   ... on PullRequest {
                     number
                     headRefName
+                    headRefOid
+                    baseRefName
                     isDraft
                     state
                     reviewDecision
                     statusCheckRollup { state }
+                    mergeCommit { oid }
                   }
                 }
               }
@@ -97,10 +101,19 @@ class Efforts:
     """The efforts a page has asked to read, each read into the stream on request and
     read again whenever something may have changed (ADR-0003)."""
 
-    def __init__(self, github: GitHub, store: Store, settings: Settings) -> None:
+    def __init__(
+        self,
+        github: GitHub,
+        store: Store,
+        settings: Settings,
+        line: Callable[[Effort, list[Ticket]], Awaitable[list[Ticket]]],
+    ) -> None:
+        """`line` is the merge queue's: handed each read, it gives each Landing ticket
+        its place in line."""
         self._github = github
         self._store = store
         self._settings = settings
+        self._line = line
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
@@ -173,7 +186,7 @@ class Efforts:
             )
         else:
             # Tickets before the effort, so it never names one the page lacks.
-            for ticket in tickets:
+            for ticket in await self._line(effort, tickets):
                 self._store.upsert(ticket)
             self._store.upsert(effort)
         named = {
@@ -214,6 +227,7 @@ async def read_effort(
         id=f"effort:{number}",
         number=issue["number"],
         title=issue["title"],
+        trunk=repository["defaultBranchRef"]["name"],
         tickets=[ticket.id for ticket in tickets],
     )
     return effort, tickets
@@ -225,13 +239,14 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
+    is_open = node["state"] == "OPEN"
     return Ticket(
         kind="ticket",
         id=f"ticket:{number}",
         number=number,
         title=node["title"],
         state=derive_state(
-            open=node["state"] == "OPEN",
+            open=is_open,
             completed=node["stateReason"] in ("COMPLETED", None),
             labels=labels,
             assignees=assignees,
@@ -240,11 +255,14 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
             building=number in building,
             auto_merge=auto_merge,
         ),
+        open=is_open,
         labels=labels,
         assignees=assignees,
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],
         open_blockers=open_blockers,
         pull_request=pull_request,
+        # The merge queue's to say, from an order this read does not ask for.
+        place_in_line=None,
     )
 
 
@@ -265,8 +283,11 @@ def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | 
     return PullRequest(
         number=chosen["number"],
         branch=chosen["headRefName"],
+        base=chosen["baseRefName"],
+        head_commit=chosen["headRefOid"],
         draft=chosen["isDraft"],
         merged=chosen["state"] == "MERGED",
+        merge_commit=(chosen["mergeCommit"] or {}).get("oid"),
         checks=_CHECKS[rollup["state"]] if rollup else None,
         approved=chosen["reviewDecision"] == "APPROVED",
     )

@@ -29,10 +29,11 @@ import httpx
 import pytest
 import uvicorn
 from fastapi import FastAPI
-from playwright.sync_api import Browser, sync_playwright
+from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
+from specimens import REFERENCE, VIEWPORT
 from wayfarer.stream import Store
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
@@ -182,6 +183,20 @@ def clone(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def host_repo(tmp_path: Path) -> Path:
+    """A clone with one commit and an identity, as a session's host repo."""
+    repo = tmp_path / "host"
+    repo.mkdir()
+    _git(repo, "init", "--quiet", "--initial-branch=main")
+    _git(repo, "config", "user.name", "Ada")
+    _git(repo, "config", "user.email", "ada@example.com")
+    (repo / "README.md").write_text("widgets\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "--quiet", "-m", "first")
+    return repo
+
+
+@pytest.fixture
 def github() -> Iterator[GitHub]:
     """The repo the clone was cloned from, on the GitHub stand-in."""
     stand_in = GitHub("octo", "widgets")
@@ -212,6 +227,25 @@ def browser() -> Iterator[Browser]:
             pytest.skip(f"no Chromium for Playwright; `just browser` installs it ({error.message})")
         yield chromium
         chromium.close()
+
+
+@pytest.fixture
+def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
+    """The app's /gallery: every primitive in every state on one page."""
+    page = browser.new_page(viewport=VIEWPORT)
+    page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
+    page.wait_for_selector("[data-specimen]")
+    yield page
+    page.close()
+
+
+@pytest.fixture
+def reference(browser: Browser) -> Iterator[Page]:
+    """The same specimens as the frozen prototype draws them."""
+    page = browser.new_page(viewport=VIEWPORT)
+    page.goto(REFERENCE.as_uri())
+    yield page
+    page.close()
 
 
 def commit_layer(clone: Path, dockerfile: str) -> None:

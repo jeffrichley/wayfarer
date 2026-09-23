@@ -50,8 +50,6 @@ __all__ = ["Cascades", "Gate", "SessionsFor"]
 
 _log = logging.getLogger(__name__)
 
-_DONE = (TicketState.LANDED, TicketState.CLOSED)
-
 SessionsFor = Callable[[Store], Sessions]
 """The sessions a start runs, recording into the store it is given."""
 
@@ -155,7 +153,7 @@ class Cascades:
         cascade = store.cascades()
         armed, paused = number in cascade, cascade.get(number, False)
         await self._read_back(tickets, submitting=armed and not paused)
-        if armed and tickets and all(ticket.state in _DONE for ticket in tickets):
+        if armed and tickets and not any(ticket.open for ticket in tickets):
             store.disarm(number)
             armed = paused = False
             self._stream.upsert(

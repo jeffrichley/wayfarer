@@ -36,8 +36,11 @@ def _ready(**fields: Any) -> PullRequest:
     unremarkable: dict[str, Any] = {
         "number": 7,
         "branch": "ticket/7-x",
+        "base": "effort/1-x",
+        "head_commit": "1" * 40,
         "draft": False,
         "merged": False,
+        "merge_commit": None,
         "checks": None,
         "approved": False,
     }

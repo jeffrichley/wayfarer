@@ -16,11 +16,13 @@ from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
+from waystation import DockerSandbox, SandboxBackend
 
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
+from wayfarer.merge_queue import MergeQueue
 from wayfarer.models import Health, WireEvent
 from wayfarer.poll import poll
 from wayfarer.queue import Queue
@@ -76,18 +78,25 @@ def create_app(
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     images = Images(repo, store)
-    efforts = Efforts(github, store, settings)
     start_gate = StartGate(repo, images, settings)
 
     def in_image(record: Record) -> Sessions:
         # The gate admitted this start, so the repo is known and its image is built.
         tag = images.current()
         assert github.repo is not None and tag is not None
-        return Sessions.in_image(repo, record, github.repo, tag, settings)
+        return Sessions.in_image(repo, record, github.repo, tag, settings, store)
 
-    queue = Queue(settings.cap)
+    def sandbox() -> SandboxBackend | None:
+        """Where the merge queue re-tests: the session image as it stands, which is the
+        repo's toolchain, and never anywhere unsandboxed (ADR-0005)."""
+        current = images.current()
+        return None if current is None else DockerSandbox(current)
+
+    queue = MergeQueue(repo, github, settings, sandbox)
+    efforts = Efforts(github, store, settings, line=queue.line)
+    runs = Queue(settings.cap)
     cascades = Cascades(
-        efforts, github, store, settings, gate or start_gate, sessions or in_image, queue
+        efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
@@ -98,12 +107,13 @@ def create_app(
         tasks = [asyncio.create_task(poll(github, settings)), asyncio.create_task(efforts.follow())]
         for task in tasks:
             task.add_done_callback(_report_death)
-        async with queue:
+        async with runs:
             yield
         for task in tasks:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        await queue.stop()
         cascades.close()
 
     app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)

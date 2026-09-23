@@ -13,19 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
-import subprocess
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import closing
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pytest
-from waystation import AgentProvider, ClaudeCode, NoSandbox, OutcomeInvalid, RunFailed, RunSucceeded
-from waystation.agents import AgentCommand, AgentEvent
+from claude_stream import DONE, Replayed, calls, init, reads, reports, returns, says
+from waystation import AgentProvider, NoSandbox, OutcomeInvalid, RunFailed, RunSucceeded
 from waystation.testing import ScriptedAgent
 
+from wayfarer import stream
 from wayfarer.github import Repo
 from wayfarer.outcome import Assumption, Axis, Finding, FindingKind
 from wayfarer.sessions import Sessions, read_events
@@ -34,26 +31,6 @@ from wayfarer.store import Purpose, SessionRow, Store
 
 pytestmark = pytest.mark.git
 
-_DONE = {"status": "done", "summary": "Added the widget.", "open_findings": [], "assumptions": []}
-
-
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
-
-
-@pytest.fixture
-def clone(tmp_path: Path) -> Path:
-    """A clone with one commit and an identity, as a session's host repo."""
-    repo = tmp_path / "clone"
-    repo.mkdir()
-    _git(repo, "init", "--quiet", "--initial-branch=main")
-    _git(repo, "config", "user.name", "Ada")
-    _git(repo, "config", "user.email", "ada@example.com")
-    (repo / "README.md").write_text("widgets\n")
-    _git(repo, "add", "README.md")
-    _git(repo, "commit", "--quiet", "-m", "first")
-    return repo
-
 
 @pytest.fixture
 def store(tmp_path: Path) -> Iterator[Store]:
@@ -61,68 +38,34 @@ def store(tmp_path: Path) -> Iterator[Store]:
         yield opened
 
 
-def _sessions(clone: Path, store: Store, agent: AgentProvider) -> Sessions:
+def _sessions(host_repo: Path, store: Store, agent: AgentProvider) -> Sessions:
     return Sessions(
-        clone, store, Repo("octo", "widgets"), agent=agent, sandbox=NoSandbox(), settings=Settings()
+        host_repo,
+        store,
+        Repo("octo", "widgets"),
+        agent=agent,
+        sandbox=NoSandbox(),
+        settings=Settings(),
+        stream=stream.Store(backlog=1000),
     )
-
-
-@dataclass(frozen=True)
-class _Replayed:
-    """Recorded Claude Code output, played back by the scripted agent and read by
-    Claude Code's own parser, so a session's events are the real ones for free."""
-
-    lines: Sequence[str]
-
-    def preflight(self) -> None:
-        return None
-
-    def command(self, prompt: str, outcome_schema: dict[str, Any]) -> AgentCommand:
-        return ScriptedAgent(lines=self.lines).command(prompt, outcome_schema)
-
-    def parse(self, line: str) -> Sequence[AgentEvent]:
-        return ClaudeCode().parse(line)
-
-
-def _claude(kind: str, *content: dict[str, Any]) -> str:
-    return json.dumps({"type": kind, "message": {"content": list(content)}})
 
 
 def _recorded(ticket: int) -> list[str]:
     """A short session on `ticket` as Claude Code's stream-json prints it."""
     return [
-        json.dumps({"type": "system", "subtype": "init"}),
-        _claude(
-            "assistant",
-            {"type": "text", "text": f"Reading ticket {ticket}."},
-            {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "README.md"}},
-        ),
-        _claude("user", {"type": "tool_result", "tool_use_id": "t1", "content": "widgets"}),
-        _claude(
-            "assistant",
-            {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "wf-test"}},
-        ),
-        _claude(
-            "user",
-            {"type": "tool_result", "tool_use_id": "t2", "is_error": True, "content": "1 failed"},
-        ),
-        json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "structured_output": _DONE,
-                "usage": {"input_tokens": 10, "output_tokens": 5},
-                "num_turns": 3,
-            }
-        ),
+        init(),
+        says(f"Reading ticket {ticket}."),
+        *reads("t1", "README.md"),
+        calls("t2", "Bash", command="wf-test"),
+        returns("t2", "1 failed", is_error=True),
+        reports(DONE),
     ]
 
 
 def test_a_session_is_given_the_bare_slash_command_and_nothing_else(
-    clone: Path, store: Store
+    host_repo: Path, store: Store
 ) -> None:
-    sessions = _sessions(clone, store, ScriptedAgent(outcome=_DONE))
+    sessions = _sessions(host_repo, store, ScriptedAgent(outcome=DONE))
 
     spec = sessions.spec(7)
     result = asyncio.run(spec.perform())
@@ -136,7 +79,7 @@ def test_a_session_is_given_the_bare_slash_command_and_nothing_else(
 
 
 def test_the_report_comes_back_in_the_agreed_shape_and_is_written_down(
-    clone: Path, store: Store
+    host_repo: Path, store: Store
 ) -> None:
     reported = {
         "status": "not_done",
@@ -159,7 +102,7 @@ def test_the_report_comes_back_in_the_agreed_shape_and_is_written_down(
         ],
         "assumptions": [{"what": "Tested at the HTTP surface.", "why": "No seam was agreed."}],
     }
-    sessions = _sessions(clone, store, ScriptedAgent(outcome=reported))
+    sessions = _sessions(host_repo, store, ScriptedAgent(outcome=reported))
 
     result = asyncio.run(sessions.spec(7).perform())
 
@@ -189,12 +132,14 @@ def test_the_report_comes_back_in_the_agreed_shape_and_is_written_down(
     assert row.outcome == result.outcome
 
 
-def test_a_report_with_fields_of_its_own_invention_is_refused(clone: Path, store: Store) -> None:
+def test_a_report_with_fields_of_its_own_invention_is_refused(
+    host_repo: Path, store: Store
+) -> None:
     invented = {
-        **_DONE,
+        **DONE,
         "open_findings": [{"severity": "low", "note": "The name is odd."}],
     }
-    sessions = _sessions(clone, store, ScriptedAgent(outcome=invented))
+    sessions = _sessions(host_repo, store, ScriptedAgent(outcome=invented))
 
     result = asyncio.run(sessions.spec(7).perform())
 
@@ -206,10 +151,10 @@ def test_a_report_with_fields_of_its_own_invention_is_refused(clone: Path, store
 
 
 def test_a_session_is_recorded_the_moment_it_starts_not_when_it_ends(
-    clone: Path, store: Store
+    host_repo: Path, store: Store
 ) -> None:
     # Scripted to take far longer than the test waits, so it is still running.
-    sessions = _sessions(clone, store, ScriptedAgent(outcome=_DONE, delay=60))
+    sessions = _sessions(host_repo, store, ScriptedAgent(outcome=DONE, delay=60))
 
     async def while_it_runs() -> list[SessionRow]:
         running = asyncio.create_task(sessions.spec(7).perform())
@@ -233,10 +178,10 @@ def test_a_session_is_recorded_the_moment_it_starts_not_when_it_ends(
 
 
 def test_every_event_is_written_to_the_sessions_own_file_with_nobody_watching(
-    clone: Path, store: Store
+    host_repo: Path, store: Store
 ) -> None:
     for ticket in (7, 8):
-        sessions = _sessions(clone, store, _Replayed(_recorded(ticket)))
+        sessions = _sessions(host_repo, store, Replayed(_recorded(ticket)))
         assert isinstance(asyncio.run(sessions.spec(ticket).perform()), RunSucceeded)
 
     seven, eight = store.sessions()
@@ -267,10 +212,10 @@ def test_every_event_is_written_to_the_sessions_own_file_with_nobody_watching(
     assert answered.model_dump(include={"id", "is_error", "text"}) == {
         "id": "t1",
         "is_error": False,
-        "text": "widgets",
+        "text": "…",
     }
     assert ran.model_dump(include={"tool"}) == {"tool": "shell"}
     assert failed.model_dump(include={"is_error"}) == {"is_error": True}
-    assert outcome.model_dump(include={"raw"}) == {"raw": _DONE}
+    assert outcome.model_dump(include={"raw"}) == {"raw": DONE}
     assert "Reading ticket 8." in eight.event_file.read_text()
     assert "Reading ticket 7." not in eight.event_file.read_text()

@@ -16,3 +16,6 @@
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .swatch { display: grid; gap: 4px; }
 .chip { height: 40px; border: 1px solid var(--border); border-radius: var(--r); }
+/* A frame fills its specimen's box, not the viewport. */
+.frame { width: 720px; height: 280px; }
+.frame > :global(.app) { height: 100%; }

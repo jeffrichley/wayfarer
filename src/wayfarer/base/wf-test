@@ -1,4 +1,79 @@
-#!/bin/sh
-# wf-test: every test run a session makes goes through here (ADR-0005). It runs
-# the command it is given and exits with that command's status.
-exec "$@"
+#!/usr/bin/python3
+"""wf-test: every test run a session makes goes through here (ADR-0005).
+
+    wf-test [command ...]
+
+It runs `command`, or the repo's configured test command in `WF_TEST_COMMAND`
+when none is given, and exits with that command's real status. Last, it prints
+one line in a format Wayfarer owns, the only text of a session Wayfarer parses:
+
+    ::wf-test {"exit": 1, "passed": 12, "failed": 1, "failing": ["test_limit"]}
+
+The counts and names come from the JUnit XML the runner writes at
+`WF_TEST_JUNIT`, when the repo's layer sets one; without it they are null and
+empty, and the run is red or green by its exit status alone.
+
+It is the system Python's, named by path, so a repo's own toolchain never
+changes what runs it.
+"""
+
+import json
+import os
+import shlex
+import subprocess
+import sys
+import xml.etree.ElementTree as ElementTree
+from pathlib import Path
+
+SENTINEL = "::wf-test "
+
+# What a shell exits with when it has nothing it can run, and when it cannot find the command.
+NOTHING_TO_RUN = 2
+NOT_FOUND = 127
+
+
+def main(argv):
+    command = argv or shlex.split(os.environ.get("WF_TEST_COMMAND", ""))
+    junit = os.environ.get("WF_TEST_JUNIT")
+    if junit:
+        # A report left from an earlier run must never be read as this one's.
+        Path(junit).unlink(missing_ok=True)
+    if not command:
+        print("wf-test: no command given, and WF_TEST_COMMAND is not set", file=sys.stderr)
+        status = NOTHING_TO_RUN
+    else:
+        status = run(command)
+    report = {"exit": status, "passed": None, "failed": None, "failing": []}
+    if junit:
+        report.update(read_junit(Path(junit)))
+    print(SENTINEL + json.dumps(report), flush=True)
+    return status
+
+
+def run(command):
+    sys.stdout.flush()
+    try:
+        status = subprocess.call(command)
+    except OSError as error:
+        print(f"wf-test: {error}", file=sys.stderr)
+        return NOT_FOUND
+    # A command killed by a signal exits as a shell reports it: 128 plus the signal.
+    return 128 - status if status < 0 else status
+
+
+def read_junit(path):
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (OSError, ElementTree.ParseError):
+        return {}
+    passed, failing = 0, []
+    for case in root.iter("testcase"):
+        if case.find("failure") is not None or case.find("error") is not None:
+            failing.append(case.get("name", "?"))
+        elif case.find("skipped") is None:
+            passed += 1
+    return {"passed": passed, "failed": len(failing), "failing": failing}
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

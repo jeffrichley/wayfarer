@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from wayfarer.beats import reported_run
 from wayfarer.models import BuildFinished, BuildOutput, ImageStatus, ProbeCheck
 from wayfarer.stream import Store
 
@@ -55,7 +56,7 @@ claude --version 2>&1
 echo {_MARK}
 claude plugin list --json 2>&1
 echo {_MARK}
-command -v wf-test
+wf-test true 2>&1
 echo {_MARK}
 id -u
 stat -c %u /workspace 2>&1
@@ -389,10 +390,13 @@ def _plugin(answer: str, recipe: Recipe) -> ProbeCheck:
 
 
 def _wf_test(answer: str, recipe: Recipe) -> ProbeCheck:
+    # Read as a session's run is read, so an image whose wf-test is on the path but
+    # cannot run, or cannot say so, fails here and not in every session after.
+    run = reported_run(answer)
     return ProbeCheck(
-        name="wf-test on the path",
-        passed=bool(answer),
-        detail=f"found at {answer}" if answer else "wf-test is not on the path",
+        name="wf-test runs and reports",
+        passed=run is not None and run.exit == 0,
+        detail=f"wf-test true said {answer or 'nothing'!r}",
     )
 
 

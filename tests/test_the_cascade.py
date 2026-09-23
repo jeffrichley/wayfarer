@@ -163,6 +163,7 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
         )
         gate = _Gate()
         agent = _Held(released, started)
+        items = Items(settings.stream_backlog)
 
         def sessions(store: Store) -> Sessions:
             return Sessions(
@@ -172,9 +173,9 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
                 agent=agent,
                 sandbox=NoSandbox(),
                 settings=settings,
+                stream=items,
             )
 
-        items = Items(settings.stream_backlog)
         app = create_app(
             clone,
             settings,

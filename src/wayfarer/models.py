@@ -11,12 +11,15 @@ page's one stream, which the browser applies by id without folding anything.
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 __all__ = [
+    "Beat",
+    "BeatKind",
     "BuildFinished",
     "BuildOutput",
     "Cascade",
@@ -33,6 +36,7 @@ __all__ = [
     "Removal",
     "ShipEffort",
     "Snapshot",
+    "TestRun",
     "Ticket",
     "TicketState",
     "Upsert",
@@ -85,8 +89,14 @@ class PullRequest(BaseModel):
     number: int
     branch: str
     """Its head: the ticket branch, `ticket/<n>-…`."""
+    base: str
+    """Where it merges: the effort branch."""
+    head_commit: str
+    """The commit at its head, which moves when work is pushed to it."""
     draft: bool
     merged: bool
+    merge_commit: str | None
+    """The commit its merge made on its base; None until it merges."""
     checks: Checks | None
     """None when the PR has no checks at all, which counts as green."""
     approved: bool
@@ -100,12 +110,19 @@ class Ticket(BaseModel):
     number: int
     title: str
     state: TicketState
+    open: bool
+    """Whether its issue is open. A landed ticket stays open until Wayfarer closes it."""
     labels: list[str]
     assignees: list[str]
     blocked_by: list[int]
     """Every ticket blocking this one, open or closed, from GitHub's issue dependencies."""
     open_blockers: int
     pull_request: PullRequest | None
+    place_in_line: int | None = Field(
+        description="Its place in its effort branch's merge queue while it is Landing, 1 at "
+        "the front; null when it is not in the queue. Read from GitHub, so a restart finds "
+        "the same line."
+    )
 
 
 class Effort(BaseModel):
@@ -115,6 +132,9 @@ class Effort(BaseModel):
     id: str
     number: int
     title: str
+    trunk: str = Field(
+        description="The repo's default branch, which the effort meets once, when it ships."
+    )
     tickets: list[str] = Field(description="The ids of its tickets, each an item of its own.")
 
 
@@ -243,6 +263,56 @@ class GateStatus(BaseModel):
     )
 
 
+class BeatKind(StrEnum):
+    """What kind of moment a beat is."""
+
+    READ = "read"
+    """Consecutive reads and searches, folded into one."""
+    REMARK = "remark"
+    """The agent's own narration."""
+    RED = "red"
+    """A test run through `wf-test` that failed, by its exit status."""
+    GREEN = "green"
+    """A test run through `wf-test` that passed, by its exit status."""
+    REFACTOR = "refactor"
+    """Edits after a green, confirmed by the next run staying green."""
+    OUTCOME = "outcome"
+    """The one beat that closes a session: the Outcome it reported, or how it ended without."""
+    WORKING = "working"
+    """A call with no result yet, which its beat replaces, or which goes when it has none."""
+
+
+class TestRun(BaseModel):
+    """One test run, as `wf-test` reported it on its own line."""
+
+    # Not a test class, though its name says so.
+    __test__ = False
+
+    exit: int = Field(description="The tests' real exit status: 0 is green, anything else red.")
+    passed: int | None = Field(description="Null when the runner wrote no JUnit report.")
+    failed: int | None = Field(description="Null when the runner wrote no JUnit report.")
+    failing: list[str] = Field(description="The failing tests' names, when the runner wrote them.")
+
+
+class Beat(BaseModel):
+    """One meaningful moment in a session, derived from its events and never stored.
+
+    Folding the session's events again gives the same beats with the same ids, so a
+    replay tells exactly the story that was watched live.
+    """
+
+    kind: Literal["beat"]
+    id: str = Field(description="`beat:<session>:<seq>`, where `seq` is its first event's.")
+    session: str = Field(description="The session's run id.")
+    seq: int = Field(description="Its first event's place in the session; beats sort by it.")
+    beat: BeatKind
+    at: datetime = Field(description="When its first event arrived.")
+    chapter: int = Field(description="0 for Orient, before the first red; then cycle 1, 2, ….")
+    text: str = Field(description="One sentence.")
+    run: TestRun | None = Field(description="The test run a red, green or refactor rests on.")
+    output: str | None = Field(description="What a red run printed; null for every other beat.")
+
+
 Item = Annotated[
     ImageStatus
     | BuildOutput
@@ -252,7 +322,8 @@ Item = Annotated[
     | Ticket
     | GateStatus
     | Cascade
-    | ShipEffort,
+    | ShipEffort
+    | Beat,
     Field(discriminator="kind"),
 ]
 """Anything the browser holds, keyed by its `id`."""

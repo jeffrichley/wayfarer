@@ -71,7 +71,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
     assert set(_checks(finished)) == {
         "Claude Code at its pin",
         "mattpocock-skills at its pin",
-        "wf-test on the path",
+        "wf-test runs and reports",
         "a non-root user owns the workspace",
     }
 
@@ -81,7 +81,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
     [
         ("USER root\n", "a non-root user owns the workspace"),
         ("RUN rm -rf /home/agent/.claude/plugins\n", "mattpocock-skills at its pin"),
-        ("USER root\nRUN rm /usr/local/bin/wf-test\nUSER agent\n", "wf-test on the path"),
+        ("USER root\nRUN rm /usr/local/bin/wf-test\nUSER agent\n", "wf-test runs and reports"),
         ("RUN rm /home/agent/.local/bin/claude\n", "Claude Code at its pin"),
     ],
 )
