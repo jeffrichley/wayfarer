@@ -102,16 +102,20 @@ function sentence(line: ChronicleLine): Part[] {
         ? [ticket(moved.ticket), " was taken."]
         : [`${who(moved.by)} took `, ticket(moved.ticket), "."];
     case "asked":
-      return [ticket(moved.ticket), ` stopped to ask: “${moved.gist}”`];
+      return [ticket(moved.ticket), moved.gist === null ? " stopped to ask." : ` stopped to ask: “${moved.gist}”`];
     case "answered":
       return [`${who(moved.by)} answered `, ticket(moved.ticket), ", and its session resumed."];
     case "held":
-      return [ticket(moved.ticket), ` was held. ${moved.reason}`];
+      return [ticket(moved.ticket), moved.reason === null ? " was held." : ` was held. ${moved.reason}`];
     case "retried":
       return [
         "You retried ",
         ticket(moved.ticket),
-        moved.over ? ", starting over from the effort branch." : ", continuing where its session stopped.",
+        moved.over === null
+          ? "."
+          : moved.over
+            ? ", starting over from the effort branch."
+            : ", continuing where its session stopped.",
       ];
     case "landed":
       return [

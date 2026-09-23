@@ -237,9 +237,9 @@ export interface components {
         Asked: {
             /**
              * Gist
-             * @description The question's gist, quoted as the session wrote it: one sentence, since a line is at most two (#22).
+             * @description The question's gist, quoted as the session wrote it: one sentence, since a line is at most two (#22). Null until asking by ending gives it (#42).
              */
-            gist: string;
+            gist: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -597,9 +597,9 @@ export interface components {
             kind: "held";
             /**
              * Reason
-             * @description The plain-words Held reason, quoted: one sentence, since a line is at most two (#22).
+             * @description The plain-words Held reason, quoted: one sentence, since a line is at most two (#22). Null until the chronicle reads it (#41).
              */
-            reason: string;
+            reason: string | null;
             ticket: components["schemas"]["Mention"];
         };
         /**
@@ -774,9 +774,9 @@ export interface components {
             kind: "retried";
             /**
              * Over
-             * @description Started over on the effort branch's head, rather than continuing where its session stopped.
+             * @description Started over on the effort branch's head, rather than continuing where its session stopped. Null until the chronicle reads which (#41).
              */
-            over: boolean;
+            over: boolean | null;
             ticket: components["schemas"]["Mention"];
         };
         /**

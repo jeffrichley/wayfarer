@@ -364,9 +364,9 @@ class Asked(BaseModel):
 
     kind: Literal["asked"]
     ticket: Mention
-    gist: str = Field(
+    gist: str | None = Field(
         description="The question's gist, quoted as the session wrote it: one sentence, "
-        "since a line is at most two (#22)."
+        "since a line is at most two (#22). Null until asking by ending gives it (#42)."
     )
 
 
@@ -383,9 +383,9 @@ class Held(BaseModel):
 
     kind: Literal["held"]
     ticket: Mention
-    reason: str = Field(
+    reason: str | None = Field(
         description="The plain-words Held reason, quoted: one sentence, since a line is at "
-        "most two (#22)."
+        "most two (#22). Null until the chronicle reads it (#41)."
     )
 
 
@@ -394,9 +394,9 @@ class Retried(BaseModel):
 
     kind: Literal["retried"]
     ticket: Mention
-    over: bool = Field(
+    over: bool | None = Field(
         description="Started over on the effort branch's head, rather than continuing "
-        "where its session stopped."
+        "where its session stopped. Null until the chronicle reads which (#41)."
     )
 
 

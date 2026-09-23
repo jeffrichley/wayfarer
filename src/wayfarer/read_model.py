@@ -14,6 +14,10 @@ A ticket's pull request is one that mentions it from its ticket branch,
 `ticket/<n>-…`. GitHub links a PR through closing keywords only when it targets
 the default branch, and ticket PRs target the effort branch, so the link is read
 from the cross-reference the mention leaves on the ticket's timeline instead.
+
+The same read brings each ticket's timeline of assignments, labels, closes and
+comments, and whose token Wayfarer holds, which is all the chronicle is told from
+(`chronicle.py`). Its lines go to the stream beside the tickets.
 """
 
 from __future__ import annotations
@@ -22,12 +26,15 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Collection, Container, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from wayfarer.freshness import Watch
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
 from wayfarer.models import (
     Checks,
+    ChronicleLine,
     Effort,
     EffortUnreadable,
     PullRequest,
@@ -37,15 +44,18 @@ from wayfarer.models import (
 from wayfarer.settings import Settings
 from wayfarer.stream import Store
 
-__all__ = ["ASKED", "HELD", "Efforts", "derive_state", "read_effort"]
+__all__ = ["ASKED", "HELD", "Efforts", "Event", "History", "derive_state", "read_effort"]
 
 ASKED = "wayfarer:asked"
 HELD = "wayfarer:held"
 
 # Leaf connections cost the same whatever their size, so each asks for GitHub's
 # maximum of 100; only `subIssues` multiplies, and its page size is a setting.
+# `events` is the chronicle's, apart from the cross-references so neither crowds
+# the other out of its last 100.
 _EFFORT = """
 query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $after: String) {
+  viewer { login }
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
     issue(number: $effort) {
@@ -81,6 +91,33 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
               }
             }
           }
+          events: timelineItems(
+            itemTypes: [
+              ASSIGNED_EVENT
+              UNASSIGNED_EVENT
+              LABELED_EVENT
+              UNLABELED_EVENT
+              CLOSED_EVENT
+              REOPENED_EVENT
+              ISSUE_COMMENT
+            ]
+            last: 100
+          ) {
+            nodes {
+              __typename
+              ... on AssignedEvent {
+                createdAt actor { login } assignee { ... on User { login } }
+              }
+              ... on UnassignedEvent {
+                createdAt actor { login } assignee { ... on User { login } }
+              }
+              ... on LabeledEvent { createdAt actor { login } label { name } }
+              ... on UnlabeledEvent { createdAt actor { login } label { name } }
+              ... on ClosedEvent { createdAt actor { login } stateReason }
+              ... on ReopenedEvent { createdAt actor { login } }
+              ... on IssueComment { createdAt author { login } body }
+            }
+          }
         }
       }
     }
@@ -97,6 +134,36 @@ _CHECKS = {
 }
 
 
+@dataclass(frozen=True)
+class Event:
+    """One event on a ticket's timeline, as GitHub reported it."""
+
+    kind: str
+    """GitHub's type name: `AssignedEvent`, `ClosedEvent`, `IssueComment`, …"""
+    at: datetime
+    actor: str | None
+    """Who made it; None when GitHub no longer knows, as for a deleted account."""
+    subject: str | None = None
+    """The assignee's login, or the label's name."""
+    reason: str | None = None
+    """Why a close closed: `COMPLETED`, `NOT_PLANNED`, …"""
+    body: str | None = None
+
+
+@dataclass(frozen=True)
+class History:
+    """What one read of an effort found beyond its ticket graph."""
+
+    viewer: str
+    """The login of the token Wayfarer holds: the person's own."""
+    timelines: dict[int, list[Event]]
+    """Each ticket's events, oldest first."""
+
+
+Telling = Callable[[Effort, list[Ticket], History], list[ChronicleLine]]
+"""The chronicle of one read of an effort (`chronicle.py`)."""
+
+
 class Efforts:
     """The efforts a page has asked to read, each read into the stream on request and
     read again whenever something may have changed (ADR-0003)."""
@@ -107,13 +174,15 @@ class Efforts:
         store: Store,
         settings: Settings,
         line: Callable[[Effort, list[Ticket]], Awaitable[list[Ticket]]],
+        telling: Telling,
     ) -> None:
         """`line` is the merge queue's: handed each read, it gives each Landing ticket
-        its place in line."""
+        its place in line. `telling` is the chronicle of each read."""
         self._github = github
         self._store = store
         self._settings = settings
         self._line = line
+        self._telling = telling
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
@@ -173,7 +242,7 @@ class Efforts:
         held = self._store.get(id)
         before = held.tickets if isinstance(held, Effort) else []
         try:
-            effort, tickets = await read_effort(
+            effort, tickets, history = await read_effort(
                 self._github,
                 number,
                 per_page=self._settings.tickets_per_page,
@@ -188,6 +257,7 @@ class Efforts:
             # Tickets before the effort, so it never names one the page lacks.
             for ticket in await self._line(effort, tickets):
                 self._store.upsert(ticket)
+            self._tell(effort, tickets, history)
             self._store.upsert(effort)
         named = {
             ticket
@@ -199,6 +269,21 @@ class Efforts:
             if ticket_id not in named:
                 self._store.remove(ticket_id)
 
+    def _tell(self, effort: Effort, tickets: list[Ticket], history: History) -> None:
+        # Rebuilt whole on every read and never stored (#22): an unchanged line is
+        # not sent again, and one no longer told goes.
+        lines = self._telling(effort, tickets, history)
+        for line in lines:
+            self._store.upsert(line)
+        told = {line.id for line in lines}
+        for item in self._store.items():
+            if (
+                isinstance(item, ChronicleLine)
+                and item.effort.number == effort.number
+                and item.id not in told
+            ):
+                self._store.remove(item.id)
+
 
 async def read_effort(
     github: GitHub,
@@ -207,12 +292,13 @@ async def read_effort(
     per_page: int,
     auto_merge: bool,
     building: Container[int] = frozenset(),
-) -> tuple[Effort, list[Ticket]]:
-    """Effort `number` and its tickets, as GitHub has them now."""
+) -> tuple[Effort, list[Ticket], History]:
+    """Effort `number` and its tickets as GitHub has them now, and their history."""
     nodes: list[dict[str, Any]] = []
     after: str | None = None
     while True:
-        repository = await github.query(_EFFORT, effort=number, perPage=per_page, after=after)
+        data = await github.query(_EFFORT, effort=number, perPage=per_page, after=after)
+        repository = data["repository"]
         issue = repository["issue"]
         if issue is None:
             raise NoSuchIssue(f"{github.repo} has no issue #{number}.")
@@ -230,7 +316,24 @@ async def read_effort(
         trunk=repository["defaultBranchRef"]["name"],
         tickets=[ticket.id for ticket in tickets],
     )
-    return effort, tickets
+    history = History(
+        viewer=data["viewer"]["login"],
+        timelines={node["number"]: [_event(e) for e in node["events"]["nodes"]] for node in nodes},
+    )
+    return effort, tickets, history
+
+
+def _event(node: dict[str, Any]) -> Event:
+    actor = node.get("actor") or node.get("author")
+    subject = (node.get("assignee") or {}).get("login") or (node.get("label") or {}).get("name")
+    return Event(
+        kind=node["__typename"],
+        at=datetime.fromisoformat(node["createdAt"]),
+        actor=actor["login"] if actor else None,
+        subject=subject,
+        reason=node.get("stateReason"),
+        body=node.get("body"),
+    )
 
 
 def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int]) -> Ticket:

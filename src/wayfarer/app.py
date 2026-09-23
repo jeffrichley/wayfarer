@@ -19,14 +19,15 @@ from fastapi.staticfiles import StaticFiles
 from waystation import DockerSandbox, SandboxBackend
 
 from wayfarer.cascade import Cascades, Gate, SessionsFor
+from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
 from wayfarer.merge_queue import MergeQueue
-from wayfarer.models import Health, WireEvent
+from wayfarer.models import ChronicleLine, Effort, Health, Ticket, WireEvent
 from wayfarer.poll import poll
 from wayfarer.queue import Queue
-from wayfarer.read_model import Efforts
+from wayfarer.read_model import Efforts, History
 from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
 from wayfarer.store import Store as Record
@@ -111,7 +112,12 @@ def create_app(
         submit=runs.submit,
         pause=lambda effort, why: cascades.pause_itself(effort, why),
     )
-    efforts = Efforts(github, store, settings, line=queue.line)
+
+    def tell(effort: Effort, tickets: list[Ticket], history: History) -> list[ChronicleLine]:
+        # An effort was read, so there is a repo and its record opens.
+        return chronicle(effort, tickets, history, cascades.record().sessions())
+
+    efforts = Efforts(github, store, settings, line=queue.line, telling=tell)
     cascades = Cascades(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )

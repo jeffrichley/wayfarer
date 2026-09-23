@@ -227,7 +227,7 @@ class Driven:
         return [item.reason for item in self.stream.items() if item.kind == "environment"]
 
     async def read(self) -> dict[int, Ticket]:
-        effort, tickets = await read_effort(
+        effort, tickets, _ = await read_effort(
             self._client, self._spec.number, per_page=50, auto_merge=True
         )
         return {t.number: t for t in await self.queue.line(effort, tickets)}

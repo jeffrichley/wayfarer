@@ -206,7 +206,7 @@ class MergeQueue:
             return {}
         pulls = {t.number: t.pull_request.number for t in joined if t.pull_request}
         aliases = "".join(_PULL % {"number": number} for number in sorted(set(pulls.values())))
-        repository = await self._github.query(_READY % aliases)
+        repository = (await self._github.query(_READY % aliases))["repository"]
         order: dict[int, tuple[datetime, int]] = {}
         for ticket, number in pulls.items():
             pull = repository[f"pr{number}"]
@@ -379,7 +379,7 @@ class MergeQueue:
                 "POST", f"/issues/{ticket.number}/comments", {"body": f"{why}\n\n{HELD_MARKER}"}
             )
             await self._github.write("POST", f"/issues/{ticket.number}/labels", {"labels": [HELD]})
-            found = await self._github.query(_PULL_ID, number=pull.number)
+            found = (await self._github.query(_PULL_ID, number=pull.number))["repository"]
             await self._github.mutate(_TO_DRAFT, id=found["pullRequest"]["id"])
         except GitHubError:
             # Set aside until its pull request reads differently, as any that did not land.
