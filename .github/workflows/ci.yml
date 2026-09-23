@@ -47,6 +47,11 @@ jobs:
 
       - name: just check
         run: just check
+        env:
+          # GitHub's macOS runners have no Docker daemon, so the docker tier skips
+          # there and cannot cover the image build. The floor is held on Ubuntu,
+          # which runs every tier.
+          PYTEST_ADDOPTS: ${{ matrix.os == 'macos-latest' && '--cov-fail-under=0' || '' }}
 
   # The browser's types are generated from the Python models and checked in
   # (ADR-0004). A model changed without regenerating them fails here.
