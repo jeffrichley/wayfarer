@@ -15,6 +15,10 @@ __all__ = ["Settings"]
 
 @dataclass(frozen=True)
 class Settings:
+    port: int = 7431
+    """The port Wayfarer tries first, falling back to any free one when it is taken.
+    The Vite dev server proxies the API here (web/vite.config.ts). `WAYFARER_PORT`
+    changes it, and 0 asks for whatever port is free."""
     github_api: str = "https://api.github.com"
     """Where GitHub's API is. `WAYFARER_GITHUB_API` points it elsewhere, such as a stand-in."""
     github_token: str | None = None
@@ -31,6 +35,7 @@ class Settings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
         return cls(
+            port=int(env.get("WAYFARER_PORT", cls.port)),
             github_api=env.get("WAYFARER_GITHUB_API", cls.github_api),
             github_token=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN") or None,
         )

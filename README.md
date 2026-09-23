@@ -17,8 +17,9 @@ Inside a clone of the repo Wayfarer should work on:
 wayfarer
 ```
 
-It serves on `127.0.0.1` (port 7431, or a free one if that is taken) and opens
-your browser. One instance per clone: a second refuses, naming the first.
+It serves on `127.0.0.1` (port 7431, or `WAYFARER_PORT`, or a free one if that
+is taken) and opens your browser. One instance per clone: a second refuses,
+naming the first.
 Ctrl-C stops it.
 
 ## The session image
