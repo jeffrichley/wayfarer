@@ -15,7 +15,7 @@ from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
 from wayfarer.github import GitHub
-from wayfarer.image import Images, NoLayer
+from wayfarer.image import Images
 from wayfarer.models import Health, WireEvent
 from wayfarer.read_model import Efforts
 from wayfarer.settings import Settings
@@ -77,7 +77,7 @@ def create_app(
         last_event_id: Annotated[str | None, Header()] = None,
     ) -> AsyncIterable[WireEvent]:
         async for framed in store.events(last_event_id):
-            yield framed  # type: ignore[misc]
+            yield framed  # type: ignore[misc]  # a ServerSentEvent framing a WireEvent
 
     @app.post("/api/efforts/{number}/read", status_code=202)
     async def read_effort(number: int) -> Response:
@@ -86,17 +86,13 @@ def create_app(
 
     @app.post("/api/image/read", status_code=202)
     async def read_image() -> Response:
-        """Read what the session image would be now."""
+        """Read what the session image would be now (ADR-0005)."""
         return accept(images.read())
 
-    @app.post("/api/image/build", status_code=202, responses={409: {"description": "No layer"}})
+    @app.post("/api/image/build", status_code=202)
     async def build_image() -> Response:
         """Build the session image. Builds happen only here, when a person clicks."""
-        try:
-            images.build()
-        except NoLayer as refusal:
-            raise HTTPException(status_code=409, detail=str(refusal)) from None
-        return Response(status_code=202)
+        return accept(images.build())
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

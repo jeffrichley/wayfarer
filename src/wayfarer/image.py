@@ -31,7 +31,7 @@ from uuid import uuid4
 from wayfarer.models import BuildFinished, BuildOutput, ImageStatus, ProbeCheck
 from wayfarer.stream import Store
 
-__all__ = ["BASE", "LAYER", "REFUSAL", "Build", "Images", "NoLayer", "Recipe", "tag"]
+__all__ = ["BASE", "LAYER", "REFUSAL", "Build", "Images", "Recipe", "tag"]
 
 LAYER = ".wayfarer/Dockerfile"
 
@@ -80,13 +80,6 @@ BASE = Recipe(
     skills_version="1.2.3",
     skills_commit="6acc160e4e0cd062dbbbd7a1b26ae92855edf07e",
 )
-
-
-class NoLayer(Exception):
-    """The repo has committed no layer of its own."""
-
-    def __init__(self) -> None:
-        super().__init__(REFUSAL)
 
 
 def tag(layer: Path, recipe: Recipe) -> str:
@@ -191,13 +184,16 @@ class Images:
             building=self.building,
         )
 
-    def build(self) -> None:
+    async def build(self) -> None:
         """Start a build of the current inputs, unless one is already running.
 
-        Builds happen only when a person asks: nothing else calls this.
+        Builds happen only when a person asks: nothing else calls this. A repo with
+        no layer is refused, which the page already reads in the image's status, so
+        a refused click is only a fresh read of it.
         """
         if not _has_layer(self._layer):
-            raise NoLayer
+            await self.read()
+            return
         if self.building:
             return
         # Hashed and built from one copy taken now, so editing the layer while it

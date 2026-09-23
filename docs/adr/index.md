@@ -7,3 +7,4 @@ The rules for writing and changing an ADR: [the law of ADRs](CLAUDE.md).
 * [Wayfarer hears from GitHub by poke-and-re-read, and a webhook is only a poke](0003-poke-and-re-read.md)
 * [Wayfarer's UI is a React SPA fed by one SSE stream](0004-a-react-spa-fed-by-one-sse-stream.md)
 * [Sessions run only in Docker, in an image built from Wayfarer's base and the repo's layer](0005-sessions-run-only-in-docker.md)
+* [A reconnect resumes from the last event, and a snapshot is only the fallback](0006-a-reconnect-resumes-and-a-snapshot-is-the-fallback.md)

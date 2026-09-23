@@ -89,7 +89,7 @@ export interface paths {
         put?: never;
         /**
          * Read Image
-         * @description Read what the session image would be now.
+         * @description Read what the session image would be now (ADR-0005).
          */
         post: operations["read_image_api_image_read_post"];
         delete?: never;
@@ -476,13 +476,6 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
-            };
-            /** @description No layer */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };

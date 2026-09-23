@@ -25,15 +25,17 @@ def test_a_repo_with_no_layer_of_its_own_is_refused_and_told_what_to_add(
 ) -> None:
     url = wayfarer.start().url()
 
-    status = _image(url)
-    build = post(f"{url}api/image/build")
+    with Stream(url) as page:
+        clicked = post(f"{url}api/image/build")
+        status = page.item("image")
 
+    assert (clicked.status_code, clicked.content) == (202, b"")
     assert status["tag"] is None
     assert status["ready"] is False
+    assert status["building"] is False
     assert ".wayfarer/Dockerfile" in status["refusal"]
     assert "FROM wayfarer-base" in status["refusal"]
-    assert build.status_code == 409
-    assert build.json()["detail"] == status["refusal"]
+    assert not any(item["kind"].startswith("build") for item in page.items.values())
 
 
 def test_a_repo_with_a_layer_is_not_refused_and_has_a_tag_waiting_to_be_built(

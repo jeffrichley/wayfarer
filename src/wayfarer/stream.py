@@ -30,6 +30,8 @@ class Store:
     """Every item the browser holds, and the recent changes to them."""
 
     def __init__(self, backlog: int) -> None:
+        # Twelve hex digits: enough that two runs never share one, short enough to
+        # read in a trace of the stream.
         self._epoch = uuid4().hex[:12]
         self._items: dict[str, Item] = {}
         self._count = 0

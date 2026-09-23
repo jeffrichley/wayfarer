@@ -45,12 +45,12 @@ class _Server(uvicorn.Server):
     sse-starlette meets the same problem by hooking uvicorn's exit.
     """
 
-    def __init__(self, config: uvicorn.Config, streams: Store) -> None:
+    def __init__(self, config: uvicorn.Config, store: Store) -> None:
         super().__init__(config)
-        self._streams = streams
+        self._store = store
 
     async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
-        self._streams.close()
+        self._store.close()
         await super().shutdown(sockets)
 
 
@@ -60,9 +60,9 @@ async def _serve(lock: InstanceLock, repo: Path) -> None:
     url = f"http://{_HOST}:{port}/"
 
     settings = Settings.from_env()
-    streams = Store(settings.stream_backlog)
-    app = create_app(repo, settings, GitHub(repo_of(repo), settings), streams)
-    server = _Server(uvicorn.Config(app, log_level="warning"), streams)
+    store = Store(settings.stream_backlog)
+    app = create_app(repo, settings, GitHub(repo_of(repo), settings), store)
+    server = _Server(uvicorn.Config(app, log_level="warning"), store)
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     while not server.started and not serving.done():
         await asyncio.sleep(0.05)
