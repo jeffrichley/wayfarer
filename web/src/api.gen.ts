@@ -261,6 +261,11 @@ export interface components {
             tickets: string[];
             /** Title */
             title: string;
+            /**
+             * Trunk
+             * @description The repo's default branch, which the effort meets once, when it ships.
+             */
+            trunk: string;
         };
         /**
          * EffortUnreadable
@@ -418,11 +423,17 @@ export interface components {
         PullRequest: {
             /** Approved */
             approved: boolean;
+            /** Base */
+            base: string;
             /** Branch */
             branch: string;
             checks: components["schemas"]["Checks"] | null;
             /** Draft */
             draft: boolean;
+            /** Head Commit */
+            head_commit: string;
+            /** Merge Commit */
+            merge_commit: string | null;
             /** Merged */
             merged: boolean;
             /** Number */
@@ -500,6 +511,8 @@ export interface components {
             labels: string[];
             /** Number */
             number: number;
+            /** Open */
+            open: boolean;
             /** Open Blockers */
             open_blockers: number;
             pull_request: components["schemas"]["PullRequest"] | null;

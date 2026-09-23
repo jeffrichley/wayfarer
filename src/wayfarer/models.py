@@ -87,8 +87,14 @@ class PullRequest(BaseModel):
     number: int
     branch: str
     """Its head: the ticket branch, `ticket/<n>-…`."""
+    base: str
+    """Where it merges: the effort branch."""
+    head_commit: str
+    """The commit at its head, which moves when work is pushed to it."""
     draft: bool
     merged: bool
+    merge_commit: str | None
+    """The commit its merge made on its base; None until it merges."""
     checks: Checks | None
     """None when the PR has no checks at all, which counts as green."""
     approved: bool
@@ -102,6 +108,8 @@ class Ticket(BaseModel):
     number: int
     title: str
     state: TicketState
+    open: bool
+    """Whether its issue is open. A landed ticket stays open until Wayfarer closes it."""
     labels: list[str]
     assignees: list[str]
     blocked_by: list[int]
@@ -117,6 +125,9 @@ class Effort(BaseModel):
     id: str
     number: int
     title: str
+    trunk: str = Field(
+        description="The repo's default branch, which the effort meets once, when it ships."
+    )
     tickets: list[str] = Field(description="The ids of its tickets, each an item of its own.")
 
 
