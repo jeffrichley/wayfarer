@@ -9,8 +9,14 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
+
+from platformdirs import user_data_dir
 
 __all__ = ["Settings"]
+
+# The per-user data directory, by each platform's own convention.
+_DATA_DIR = Path(user_data_dir("wayfarer"))
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,18 @@ class Settings:
     """The longest that doubling may grow to, so a poll refused for a long spell still
     notices within a quarter of an hour once GitHub answers again."""
 
+    data_dir: Path = _DATA_DIR
+    """Where each repo's store and its sessions' event files live, outside any checkout.
+    `WAYFARER_DATA_DIR` moves it."""
+    session_silence: float = 20 * 60.0
+    """Seconds a session's agent may print nothing before it is stopped. Long, because a
+    long test run prints nothing."""
+    session_wall: float = 2 * 60 * 60.0
+    """Seconds a session's agent may run in all before it is stopped."""
+    stage_timeout: float = 10 * 60.0
+    """Seconds each of a session's workspace, sandbox, collect and integrate stages may
+    take, which only a hang would reach. Every Waystation bound is unbounded unless set."""
+
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
         return cls(
@@ -59,4 +77,5 @@ class Settings:
             rate_limit_backoff=float(
                 env.get("WAYFARER_RATE_LIMIT_BACKOFF", cls.rate_limit_backoff)
             ),
+            data_dir=Path(env.get("WAYFARER_DATA_DIR") or cls.data_dir),
         )
