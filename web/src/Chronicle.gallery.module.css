@@ -1,0 +1,3 @@
+/* A chronicle is as wide as home's left column gives it. */
+.chronicle { width: 660px; }
+.lines { display: grid; gap: 16px; justify-items: start; }

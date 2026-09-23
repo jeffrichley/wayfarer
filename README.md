@@ -69,9 +69,11 @@ Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`.
 Change one, run `just types`, and commit both.
 
 `/gallery` renders every primitive in every state on one page. A widget lands
-there first, with the same specimens drawn from the prototype's own markup in
-`tests/prototype_gallery.html`; `tests/test_the_gallery.py` renders both in
-Chromium and fails on any pixel that differs, in either theme.
+there first, as a `web/src/<Widget>.gallery.tsx` beside it, with the same
+specimens drawn from the prototype's own markup as a fragment in
+`tests/prototype_gallery/`; neither page needs editing to take them.
+`tests/test_the_gallery.py` renders both in Chromium and fails on any pixel that
+differs, in either theme.
 
 ## The prototype is a frozen reference, not the app
 

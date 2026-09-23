@@ -1,8 +1,10 @@
 """The gallery's snapshot check: each specimen, lifted out of its page and drawn.
 
-The app's `/gallery` and the prototype's `prototype_gallery.html` name the same
-specimens with `data-specimen`. Both render in the same browser and each pair is
-compared pixel for pixel, so there are no stored images to drift between machines.
+The app's `/gallery` and the prototype's reference page name the same specimens
+with `data-specimen`. The reference is gathered here from one fragment per
+widget, so a widget's specimens are a file of their own on both sides. Both
+render in the same browser and each pair is compared pixel for pixel, so there
+are no stored images to drift between machines.
 """
 
 from __future__ import annotations
@@ -15,13 +17,29 @@ from pathlib import Path
 from PIL import Image, ImageChops
 from playwright.sync_api import Locator, Page, ViewportSize
 
-REFERENCE = Path(__file__).with_name("prototype_gallery.html")
+# The reference page's frame, and the fragments gathered into it.
+FRAME = Path(__file__).with_name("prototype_gallery.html")
+FRAGMENTS = Path(__file__).with_name("prototype_gallery")
+_MARKER = "<!-- specimens -->"
 THEMES = ["light", "dark"]
 # The size every screen is checked at first (docs/design/visual-language.md).
 VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
 # The gallery's clock stands still here, local time, so a counter reads the same
 # every time it is drawn; the gallery's own dates sit a little before it.
 GALLERY_CLOCK = datetime(2026, 9, 15, 9, 42)
+
+
+def reference_page(into: Path, fragments: Path = FRAGMENTS) -> Path:
+    """The prototype's gallery written into `into`: every fragment in `fragments`
+    gathered into the frame, in name order so the page is the same every time.
+    Its links still resolve from beside the frame, where the prototype is."""
+    frame = FRAME.read_text()
+    assert _MARKER in frame, f"{FRAME.name} has no {_MARKER} to gather the fragments into"
+    gathered = "\n".join(fragment.read_text() for fragment in sorted(fragments.glob("*.html")))
+    page = frame.replace("<head>", f'<head>\n  <base href="{FRAME.parent.as_uri()}/" />', 1)
+    written = into / FRAME.name
+    written.write_text(page.replace(_MARKER, gathered, 1))
+    return written
 
 
 def specimen(page: Page, name: str) -> Locator:

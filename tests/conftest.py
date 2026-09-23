@@ -34,7 +34,7 @@ from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
-from specimens import GALLERY_CLOCK, REFERENCE, VIEWPORT
+from specimens import GALLERY_CLOCK, VIEWPORT, reference_page
 from wayfarer.stream import Store
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
@@ -267,10 +267,10 @@ def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
 
 
 @pytest.fixture
-def reference(browser: Browser) -> Iterator[Page]:
+def reference(browser: Browser, tmp_path: Path) -> Iterator[Page]:
     """The same specimens as the frozen prototype draws them."""
     page = browser.new_page(viewport=VIEWPORT)
-    page.goto(REFERENCE.as_uri())
+    page.goto(reference_page(tmp_path).as_uri())
     yield page
     page.close()
 

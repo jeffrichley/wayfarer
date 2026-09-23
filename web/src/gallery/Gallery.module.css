@@ -1,6 +1,7 @@
 /* The gallery's own layout. Each specimen sits in a bare box, the same box the
    prototype's reference page gives it (tests/prototype_gallery.html), so the two
-   can be compared pixel for pixel. */
+   can be compared pixel for pixel. A widget's own layout sits beside it, in
+   <Widget>.gallery.module.css. */
 .page { max-width: 1240px; margin: 0 auto; padding: 44px 40px 72px; }
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
 .head h1 { font-size: 34px; }
@@ -10,24 +11,10 @@
 .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .row + .row { margin-top: 16px; }
 .column { display: grid; gap: 16px; }
-/* A glyph beside its word, set as the prototype's legends set one (index.html). */
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
-.legend + .legend { margin-top: 16px; }
 .specimen { display: inline-block; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .swatch { display: grid; gap: 4px; }
 .chip { height: 40px; border: 1px solid var(--border); border-radius: var(--r); }
-/* A frame fills its specimen's box, not the viewport. */
-.frame { width: 720px; height: 280px; }
-.frame > :global(.app) { height: 100%; }
-/* A story is as wide as live build's centre column, and its pane scrolls inside
-   whatever height its box is given. */
-.story { display: grid; width: 824px; }
-/* A chronicle is as wide as home's left column gives it. */
-.chronicle { width: 660px; }
-.lines { display: grid; gap: 16px; justify-items: start; }
-/* The shell's bars at a screen's width, and a menu with room to hang open. */
+/* The shell's bars at a screen's width. */
 .stack { display: grid; gap: 16px; justify-items: start; }
 .bar { width: 1100px; }
-.menuBox { width: 400px; height: 300px; }
-.hang { position: relative; }

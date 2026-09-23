@@ -1,0 +1,3 @@
+/* A story is as wide as live build's centre column, and its pane scrolls inside
+   whatever height its box is given. */
+.story { display: grid; width: 824px; }

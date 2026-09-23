@@ -1,0 +1,39 @@
+<style>
+  /* The session's story, from live-build.html. These are its rules, verbatim. */
+  .beats-pane { padding: 8px 32px 28px; }
+  .beats { max-width: 760px; }
+  .chap { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; padding: 22px 0 8px; }
+  .chap .c-label { grid-column: 2; font-family: var(--font-display); font-size: 17.5px; line-height: 1.3; }
+  .chap .c-label .kicker { display: block; margin-bottom: 2px; }
+  .beat { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 7px 0; align-items: start; animation: rise .35s ease both; }
+  .beat time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  .beat .mk { display: grid; place-items: center; height: 21px; }
+  .beat .txt { font-size: 14.5px; line-height: 1.55; }
+  .mk-read { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+  .mk-note { width: 9px; height: 1.5px; background: var(--fg); }
+  .mk-refactor { width: 10px; height: 10px; border: 1.5px solid var(--fg); }
+  .toggle { background: none; border: 0; padding: 2px 0; margin-top: 2px; cursor: pointer; font-size: 12.5px; color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .toggle:hover { text-decoration-color: var(--fg); }
+  pre.out { margin: 8px 0 2px; padding: 10px 12px; background: var(--wash); border: 1px solid var(--border); border-radius: 3px; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+  .working { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 9px 0; color: var(--ink-2); font-size: 14px; }
+  .working .mk { display: grid; place-items: center; height: 21px; }
+  .working .num { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  /* #49 rises only a beat that arrives while the pane is open, so the story
+     it opens on is drawn at rest. */
+  .beat { animation: none; }
+  /* The prototype has no outcome beat; its ringed dot is #49's. */
+  .mk-outcome { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--fg); background: radial-gradient(circle, var(--fg) 0 2px, transparent 2.5px); }
+  /* #49 names a cycle by number, not by the criterion it serves, which no beat
+     knows; the markup is the prototype's chapter all the same. */
+</style>
+
+  <!-- live-build.html's session story: an Orient and two cycles closed by an
+       outcome, and a live one with a call in flight, as #49 names each chapter. -->
+  <section aria-label="Beats">
+    <div data-specimen="beats"><div style="display: grid; width: 824px"><div class="pane beats-pane"><ol class="beats" aria-live="polite"><li class="chap"><span class="c-label"><span class="kicker">Before any test</span>Orient</span></li><li class="beat"><time>09:05</time><span class="mk"><span class="mk-read" aria-label="Read"></span></span><div class="txt">Read ISSUE.md, CONTEXT.md and beats.py</div></li><li class="beat"><time>09:08</time><span class="mk"><span class="mk-note" aria-label="Remark"></span></span><div class="txt">The analysis pass already runs astats, so the noise floor can join it.</div></li><li class="chap"><span class="c-label"><span class="kicker">Red → green</span>Cycle 1</span></li><li class="beat"><time>09:11</time><span class="mk"><span class="tr tr-red" aria-label="Failing test"></span></span><div class="txt">1 failing: measures the noise floor<div><button type="button" class="toggle" aria-expanded="false">Show test output</button><pre class="out" hidden>FAILED tests/test_noise_floor.py::test_measures_the_noise_floor
+  expected a noise floor, got None
+
+1 failed, 11 passed</pre></div></div></li><li class="beat"><time>09:15</time><span class="mk"><span class="tr tr-green" aria-label="Passing test"></span></span><div class="txt">12 passing</div></li><li class="beat"><time>09:17</time><span class="mk"><span class="mk-refactor" aria-label="Refactor"></span></span><div class="txt">Refactored limits.py; still 12 passing</div></li><li class="chap"><span class="c-label"><span class="kicker">Red → green</span>Cycle 2</span></li><li class="beat"><time>09:19</time><span class="mk"><span class="tr tr-red" aria-label="Failing test"></span></span><div class="txt">1 failing: flags the hiss fixture<div><button type="button" class="toggle" aria-expanded="false">Show test output</button><pre class="out" hidden>FAILED tests/test_noise_floor.py::test_flags_the_hiss_fixture</pre></div></div></li><li class="beat"><time>09:24</time><span class="mk"><span class="tr tr-green" aria-label="Passing test"></span></span><div class="txt">13 passing</div></li><li class="beat"><time>09:26</time><span class="mk"><span class="mk-outcome" aria-label="Outcome"></span></span><div class="txt">Every criterion passes, and the full suite with them.</div></li></ol></div></div></div>
+    <div data-specimen="beats-working"><div style="display: grid; width: 824px; height: 300px"><div class="pane beats-pane"><ol class="beats" aria-live="polite"><li class="chap"><span class="c-label"><span class="kicker">Before any test</span>Orient</span></li><li class="beat"><time>09:40</time><span class="mk"><span class="mk-read" aria-label="Read"></span></span><div class="txt">Read ISSUE.md and CONTEXT.md</div></li><li class="beat"><time>09:41</time><span class="mk"><span class="mk-note" aria-label="Remark"></span></span><div class="txt">Running the suite before the first test.</div></li><li class="working"><span></span><span class="mk"><span class="st st-building" aria-hidden="true"></span></span><span>Running the full suite<span class="num">12s</span></span></li></ol></div></div></div>
+  </section>
