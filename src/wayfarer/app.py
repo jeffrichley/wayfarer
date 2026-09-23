@@ -16,17 +16,21 @@ from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
+from waystation import DockerSandbox, SandboxBackend
 
+from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
+from wayfarer.merge_queue import MergeQueue
 from wayfarer.models import ChronicleLine, Effort, Health, Ticket, WireEvent
 from wayfarer.poll import poll
-from wayfarer.pull_requests import PullRequestGate
+from wayfarer.queue import Queue
 from wayfarer.read_model import Efforts, History
+from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
-from wayfarer.store import Store as Sessions
+from wayfarer.store import Store as Record
 from wayfarer.stream import Store
 
 __all__ = ["create_app"]
@@ -58,40 +62,86 @@ def create_app(
     settings: Settings | None = None,
     github: GitHub | None = None,
     store: Store | None = None,
-    sessions: Sessions | None = None,
+    *,
+    sessions: SessionsFor | None = None,
+    gate: Gate | None = None,
 ) -> FastAPI:
     """The app for the clone whose working tree is `repo`, reading GitHub through
     `github`; without one, every read of GitHub says so. `store` is what the page's
-    stream carries, which whoever runs the server closes as it stops. `sessions` is
-    the repo's record of sessions run; without one, none has."""
+    stream carries, which whoever runs the server closes as it stops.
+
+    Sessions run Claude Code in the session image, admitted by the start gate
+    (ADR-0005). `sessions` and `gate` replace both only for a test, which runs
+    Waystation's scripted agent outside Docker; Wayfarer offers no way to do so.
+    """
     settings = settings or Settings()
     github = github or GitHub(None, settings)
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     images = Images(repo, store)
+    start_gate = StartGate(repo, images, settings)
 
-    # Every ticket a read finds Landing lands (#38), until the merge queue takes
-    # that over (#39).
+    def in_image(record: Record) -> Sessions:
+        # The gate admitted this start, so the repo is known and its image is built.
+        tag = images.current()
+        assert github.repo is not None and tag is not None
+        return Sessions.in_image(repo, record, github.repo, tag, settings, store)
+
+    def sandbox() -> SandboxBackend | None:
+        """Where the merge queue re-tests: the session image as it stands, which is the
+        repo's toolchain, and never anywhere unsandboxed (ADR-0005)."""
+        current = images.current()
+        return None if current is None else DockerSandbox(current)
+
+    def resolvers() -> Sessions | None:
+        """Where a conflict's resolver session runs: where a build does, recording into
+        the same store, so its one resolver session is remembered across restarts."""
+        if sessions is None and images.current() is None:
+            return None
+        return (sessions or in_image)(cascades.record())
+
+    runs = Queue(settings.cap)
+    queue = MergeQueue(
+        repo,
+        github,
+        settings,
+        sandbox,
+        stream=store,
+        resolvers=resolvers,
+        # Under the cap every session shares, a build or a resolver alike.
+        submit=runs.submit,
+        pause=lambda effort, why: cascades.pause_itself(effort, why),
+    )
+
     def tell(effort: Effort, tickets: list[Ticket], history: History) -> list[ChronicleLine]:
-        return chronicle(effort, tickets, history, sessions.sessions() if sessions else [])
+        # An effort was read, so there is a repo and its record opens.
+        return chronicle(effort, tickets, history, cascades.record().sessions())
 
-    efforts = Efforts(github, store, settings, landing=PullRequestGate(github).land, telling=tell)
+    efforts = Efforts(github, store, settings, line=queue.line, telling=tell)
+    cascades = Cascades(
+        efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
+    )
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
-    # on the same loop (ADR-0001, ADR-0003).
+    # on the same loop (ADR-0001, ADR-0003). Stopping stops every session, each
+    # keeping its work, as Ctrl-C does.
     @asynccontextmanager
     async def keeping_up(app: FastAPI) -> AsyncIterator[None]:
         tasks = [asyncio.create_task(poll(github, settings)), asyncio.create_task(efforts.follow())]
         for task in tasks:
             task.add_done_callback(_report_death)
-        yield
-        for task in tasks:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        async with runs:
+            yield
+            # The reads stop first, since a read may start a session, and only then
+            # do the sessions, so none starts after the rest were stopped.
+            for task in tasks:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        await queue.stop()
+        cascades.close()
 
     app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)
-    gate = StartGate(repo, images, settings)
     # A command's work outlives its request, and asyncio keeps only a weak
     # reference to a task, so each is held here until it is done.
     working: set[asyncio.Task[None]] = set()
@@ -137,7 +187,7 @@ def create_app(
         """Run the start gate's six checks afresh. Looking raises nothing for a person."""
 
         async def read() -> None:
-            store.upsert(await gate.status())
+            store.upsert(await start_gate.status())
 
         return accept(read())
 
@@ -145,6 +195,26 @@ def create_app(
     async def build_image() -> Response:
         """Build the session image. Builds happen only here, when a person clicks."""
         return accept(images.build())
+
+    @app.post("/api/efforts/{number}/arm", status_code=202)
+    async def arm(number: int) -> Response:
+        """Arm the effort's cascade, the only way a session ever starts; or resume it."""
+        return accept(cascades.arm(number))
+
+    @app.post("/api/efforts/{number}/pause", status_code=202)
+    async def pause(number: int) -> Response:
+        """Start nothing new on the effort; its running sessions finish."""
+        return accept(cascades.pause(number))
+
+    @app.post("/api/efforts/{number}/resume", status_code=202)
+    async def resume(number: int) -> Response:
+        """Resume the effort's cascade, starting what it can as of a fresh read."""
+        return accept(cascades.resume(number))
+
+    @app.post("/api/tickets/{number}/stop", status_code=202)
+    async def stop(number: int) -> Response:
+        """Stop the ticket's session, keeping its work, and hold the ticket."""
+        return accept(cascades.stop(number))
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

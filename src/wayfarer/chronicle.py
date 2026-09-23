@@ -5,21 +5,26 @@ in the store. Nothing of it is stored, so a restart or a second look rebuilds th
 same lines with the same ids, and it outlives the event files that go when an
 effort ships (#22, ADR-0003).
 
-Only a ticket moving earns a line: taken, asked, answered, held, let land,
-retried, landed, closed. A stage, a pull request, a re-test or a resolver session
-never does; each reaches the chronicle only as the movement it ends in.
+Only a ticket moving earns a line, in the shapes `models.ChronicleLine` holds:
+taken, asked, answered, held, retried, landed, closed. A stage, a pull request, a
+re-test or a resolver session never does; each reaches the chronicle only as the
+movement it ends in. Letting a Held ticket land has no line of its own (#51): it
+ends in the landing.
 
-Lines fold by cause, never by time. A close, landed or not, carries what it
-directly caused: the tickets it made takeable, and which of them the cascade
-then took. Two unrelated landings a minute apart stay two lines.
+Lines fold by cause, never by time. A landing carries what it directly caused:
+the tickets it made takeable, and which of them the cascade then took. Two
+unrelated landings a minute apart stay two lines.
 
 Who acted is read from the kind of event, not from the timeline's actor, because
 Wayfarer writes with the person's token and its writes wear their login. Taken,
 asked, held and landed read passively. An assignment is the cascade's when the
 ticket has a session row, and a person's otherwise; a close is Wayfarer's
 landing when a comment carrying `LANDED_MARKER` came before it, and a person's
-otherwise. A person's movement reads "You" for the token's own login, and names
+otherwise. A person's movement is "you" for the token's own login, and names
 any other.
+
+The asked gist, the held reason and whether a retry started over are left null:
+their sources are #42 and #41.
 """
 
 from __future__ import annotations
@@ -27,16 +32,33 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from typing import Literal
 
-from wayfarer.models import ChronicleLine, Effort, LinePart, Movement, Ticket
-from wayfarer.pull_requests import LANDED_MARKER
+from wayfarer.merge_queue import LANDED_MARKER
+from wayfarer.models import (
+    Answered,
+    Asked,
+    ChronicleLine,
+    Closed,
+    Effort,
+    Held,
+    Landed,
+    Mention,
+    Retried,
+    Someone,
+    Taken,
+    Ticket,
+)
 from wayfarer.read_model import ASKED, HELD, Event, History
 from wayfarer.store import Purpose, SessionRow
 
 __all__ = ["chronicle"]
 
 # Who a movement names when GitHub no longer knows who made it: a deleted account.
-_NOBODY = "Someone"
+_NOBODY = Someone(login="Someone")
+
+type _Moved = Taken | Asked | Answered | Held | Retried | Landed | Closed
+type _Person = Literal["you"] | Someone
 
 
 def chronicle(
@@ -58,7 +80,7 @@ class _Telling:
     ) -> None:
         self._effort = effort
         self._tickets = tickets
-        self._titles = {ticket.number: ticket.title for ticket in tickets}
+        self._mentions = {t.number: Mention(number=t.number, title=t.title) for t in tickets}
         self._viewer = history.viewer
         self._timelines = {t.number: history.timelines.get(t.number, []) for t in tickets}
         # A resolver session is landing, and never a resume or a retry.
@@ -86,63 +108,43 @@ class _Telling:
         return sorted(closes + others, key=lambda line: (line.at, line.id))
 
     def _movement(self, number: int, e: Event, timeline: list[Event]) -> ChronicleLine | None:
-        ticket = self._ticket(number)
+        ticket = self._mentions[number]
         match e.kind, e.subject:
             case "AssignedEvent", _ if (number, e.at) not in self._folded:
                 if self._cascade_took(number, e):
-                    return self._line(number, e, Movement.TAKEN, [ticket, _words(" was taken.")])
-                who = self._who(e.subject)
-                return self._line(
-                    number, e, Movement.TAKEN, [_words(f"{who} took "), ticket, _words(".")]
-                )
+                    return self._line(number, e, Taken(kind="taken", ticket=ticket, by="wayfarer"))
+                by = self._who(e.subject)
+                return self._line(number, e, Taken(kind="taken", ticket=ticket, by=by))
             case "LabeledEvent", label if label == ASKED:
-                return self._line(number, e, Movement.ASKED, [ticket, _words(" asked a question.")])
+                return self._line(number, e, Asked(kind="asked", ticket=ticket, gist=None))
             case "LabeledEvent", label if label == HELD:
-                return self._line(number, e, Movement.HELD, [ticket, _words(" was held.")])
+                return self._line(number, e, Held(kind="held", ticket=ticket, reason=None))
             case "UnlabeledEvent", label if label == ASKED:
-                parts = [_words(f"{self._who(e.actor)} answered "), ticket]
-                resumed = self._session_after(number, e.at, timeline, ASKED)
-                parts.append(_words(", and its session resumed." if resumed else "."))
-                return self._line(number, e, Movement.ANSWERED, parts)
-            case "UnlabeledEvent", label if label == HELD:
                 by = self._who(e.actor)
-                if self._session_after(number, e.at, timeline, HELD):
-                    return self._line(
-                        number, e, Movement.RETRIED, [_words(f"{by} retried "), ticket, _words(".")]
-                    )
-                return self._line(
-                    number, e, Movement.LET_LAND, [_words(f"{by} let "), ticket, _words(" land.")]
-                )
+                return self._line(number, e, Answered(kind="answered", ticket=ticket, by=by))
+            # Cleared with no session after it, it was let land, which ends in the landing.
+            case "UnlabeledEvent", label if label == HELD and self._session_after(
+                number, e.at, timeline, HELD
+            ):
+                return self._line(number, e, Retried(kind="retried", ticket=ticket, over=None))
         return None
 
     def _close(self, number: int, e: Event, timeline: list[Event]) -> ChronicleLine:
-        ticket = self._ticket(number)
-        if e.reason == "COMPLETED" and self._marked(e, timeline):
-            movement, parts = Movement.LANDED, [ticket, _words(" landed.")]
-        elif e.reason == "COMPLETED":
-            movement, parts = (
-                Movement.CLOSED,
-                [_words(f"{self._who(e.actor)} closed "), ticket, _words(".")],
+        ticket = self._mentions[number]
+        if not (e.reason == "COMPLETED" and self._marked(e, timeline)):
+            return self._line(
+                number, e, Closed(kind="closed", ticket=ticket, by=self._who(e.actor))
             )
-        else:
-            movement = Movement.CLOSED
-            parts = [
-                _words(f"{self._who(e.actor)} closed "),
-                ticket,
-                _words(" without landing it."),
-            ]
         freed = [t.number for t in self._tickets if number in t.blocked_by and self._freed(t, e)]
-        if freed:
-            taken = [n for n in freed if self._taken_after(n, e, timeline)]
-            parts += [_words(" "), *self._names(freed), _words(" reached the frontier")]
-            if taken == freed:
-                parts.append(_words(" and was taken." if len(taken) == 1 else " and were taken."))
-            elif taken:
-                parts += [_words(", and "), *self._names(taken)]
-                parts.append(_words(" was taken." if len(taken) == 1 else " were taken."))
-            else:
-                parts.append(_words("."))
-        return self._line(number, e, movement, parts)
+        started = [n for n in freed if self._taken_after(n, e, timeline)]
+        landed = Landed(
+            kind="landed",
+            ticket=ticket,
+            by="wayfarer",
+            freed=[self._mentions[n] for n in freed],
+            started=[self._mentions[n] for n in started],
+        )
+        return self._line(number, e, landed)
 
     def _marked(self, close: Event, timeline: list[Event]) -> bool:
         """Whether a landing comment came after the ticket's last close and before this one.
@@ -242,36 +244,16 @@ class _Telling:
             at < started and (again is None or started < again) for started in self._builds[number]
         )
 
-    def _who(self, login: str | None) -> str:
+    def _who(self, login: str | None) -> _Person:
         if login is None:
             return _NOBODY
-        return "You" if login == self._viewer else login
+        return "you" if login == self._viewer else Someone(login=login)
 
-    def _ticket(self, number: int) -> LinePart:
-        return LinePart(text=self._titles[number], ticket=number)
-
-    def _names(self, numbers: list[int]) -> list[LinePart]:
-        """`A`, `A and B`, `A, B and C`."""
-        parts: list[LinePart] = []
-        for i, number in enumerate(numbers):
-            if i:
-                parts.append(_words(" and " if i == len(numbers) - 1 else ", "))
-            parts.append(self._ticket(number))
-        return parts
-
-    def _line(
-        self, number: int, e: Event, movement: Movement, parts: list[LinePart]
-    ) -> ChronicleLine:
+    def _line(self, number: int, e: Event, moved: _Moved) -> ChronicleLine:
         return ChronicleLine(
             kind="chronicle_line",
-            id=f"chronicle:{self._effort.number}:{number}:{movement.value}:{e.at.isoformat()}",
-            effort=self._effort.number,
-            effort_title=self._effort.title,
+            id=f"chronicle:{self._effort.number}:{number}:{moved.kind}:{e.at.isoformat()}",
             at=e.at,
-            movement=movement,
-            parts=parts,
+            effort=Mention(number=self._effort.number, title=self._effort.title),
+            moved=moved,
         )
-
-
-def _words(text: str) -> LinePart:
-    return LinePart(text=text, ticket=None)

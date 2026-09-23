@@ -18,25 +18,38 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 __all__ = [
+    "Answered",
+    "Armed",
+    "Asked",
     "Beat",
     "BeatKind",
     "BuildFinished",
     "BuildOutput",
+    "Cascade",
     "Checks",
     "ChronicleLine",
+    "Closed",
     "Effort",
     "EffortUnreadable",
     "EnvironmentFailure",
     "GateCheck",
     "GateStatus",
     "Health",
+    "Held",
     "ImageStatus",
-    "LinePart",
-    "Movement",
+    "Landed",
+    "Mention",
     "ProbeCheck",
+    "Published",
     "PullRequest",
+    "ReadyToShip",
     "Removal",
+    "Retried",
+    "ShipEffort",
+    "Shipped",
     "Snapshot",
+    "Someone",
+    "Taken",
     "TestRun",
     "Ticket",
     "TicketState",
@@ -119,6 +132,11 @@ class Ticket(BaseModel):
     """Every ticket blocking this one, open or closed, from GitHub's issue dependencies."""
     open_blockers: int
     pull_request: PullRequest | None
+    place_in_line: int | None = Field(
+        description="Its place in its effort branch's merge queue while it is Landing, 1 at "
+        "the front; null when it is not in the queue. Read from GitHub, so a restart finds "
+        "the same line."
+    )
 
 
 class Effort(BaseModel):
@@ -143,41 +161,42 @@ class EffortUnreadable(BaseModel):
     reason: str = Field(description="Why, in words for the person.")
 
 
-class Movement(StrEnum):
-    """What moved a ticket, and so what a chronicle line tells. Never a stage."""
+class Cascade(BaseModel):
+    """An effort's cascade, armed or not: once armed, Wayfarer starts a session on every
+    takeable ticket, up to the cap, and on whatever each landing frees."""
 
-    TAKEN = "taken"
-    ASKED = "asked"
-    ANSWERED = "answered"
-    HELD = "held"
-    LET_LAND = "let_land"
-    """A person cleared a Held ticket to land as it is."""
-    RETRIED = "retried"
-    """A person cleared a Held ticket, and a new session started on it."""
-    LANDED = "landed"
-    CLOSED = "closed"
-    """A person closed it, as completed without landing or as not planned."""
-
-
-class LinePart(BaseModel):
-    """A run of a chronicle line's words. A ticket's part is its title, and links to it."""
-
-    text: str
-    ticket: int | None = Field(description="The ticket this part names; null for plain words.")
-
-
-class ChronicleLine(BaseModel):
-    """One line of the chronicle: one thing that moved a ticket, with what it directly
-    caused. Derived from GitHub's timelines and the session rows, never stored, so a
-    rebuild gives the same lines with the same ids."""
-
-    kind: Literal["chronicle_line"]
-    id: str = Field(description="`chronicle:<effort>:<ticket>:<movement>:<when>`, of its cause.")
+    kind: Literal["cascade"]
+    id: str
     effort: int
-    effort_title: str = Field(description="Shown on the right of the line, in place of a skill.")
-    at: datetime = Field(description="When its cause happened on GitHub; lines sort by it.")
-    movement: Movement = Field(description="What its cause was, which picks its glyph.")
-    parts: list[LinePart] = Field(description="Its one or two sentences, in order.")
+    armed: bool
+    paused: bool = Field(description="Starting nothing new, while running sessions finish.")
+    reason: str | None = Field(
+        description="Why it paused itself, in plain words; null when a person paused it, or "
+        "it is not paused."
+    )
+    waiting: bool = Field(
+        description="Armed and running, with nothing it may start and nothing under way: "
+        "waiting on a person."
+    )
+    takeable: int = Field(
+        description="Takeable tickets it would start, which leaves out any it has started "
+        "once already."
+    )
+    running: int = Field(description="Its tickets claimed or with a session running.")
+    cap: int = Field(description="How many sessions may run at once, across every cascade.")
+    offer: str = Field(
+        description="The confirmation arming asks, naming how many tickets are takeable and "
+        "the cap."
+    )
+
+
+class ShipEffort(BaseModel):
+    """The Needs you item an effort raises when every ticket in it is closed."""
+
+    kind: Literal["ship"]
+    id: str
+    effort: int
+    title: str
 
 
 class ImageStatus(BaseModel):
@@ -237,11 +256,13 @@ class GateCheck(BaseModel):
 
 
 class EnvironmentFailure(BaseModel):
-    """The one Needs you item a failed start gate raises, however many starts it refused."""
+    """The one Needs you item a failure of the environment raises: a start gate that keeps
+    refusing, however many starts it refused, or an effort branch whose tests are red,
+    however many candidates it failed."""
 
     kind: Literal["environment"]
-    id: str = Field(description="Stays the same while the gate keeps failing, so it is one item.")
-    reason: str = Field(description="Which checks failed and why, in plain words.")
+    id: str = Field(description="Stays the same while the failure lasts, so it is one item.")
+    reason: str = Field(description="What failed and why, in plain words.")
     failed: list[GateCheck]
 
 
@@ -308,6 +329,153 @@ class Beat(BaseModel):
     output: str | None = Field(description="What a red run printed; null for every other beat.")
 
 
+class Someone(BaseModel):
+    """Anyone but you, whom a line names by their login (#22)."""
+
+    login: str
+
+
+# Who moved a ticket is read from the kind of event, not the timeline's actor,
+# since Wayfarer writes with the person's own token (#22). "wayfarer" reads
+# passively, "you" reads "You", and anyone else is named.
+Wayfarer = Literal["wayfarer"]
+You = Literal["you"]
+
+
+class Mention(BaseModel):
+    """A ticket or an effort as a line names it: by its title, its number riding after."""
+
+    number: int
+    title: str
+
+
+class Taken(BaseModel):
+    """A ticket was taken: by a session the cascade started, or by a person's hand."""
+
+    kind: Literal["taken"]
+    ticket: Mention
+    by: Wayfarer | You | Someone = Field(
+        description="Wayfarer when a session the cascade started took it; a person otherwise."
+    )
+
+
+class Asked(BaseModel):
+    """A ticket's session ended to ask a person something."""
+
+    kind: Literal["asked"]
+    ticket: Mention
+    gist: str | None = Field(
+        description="The question's gist, quoted as the session wrote it: one sentence, "
+        "since a line is at most two (#22). Null until asking by ending gives it (#42)."
+    )
+
+
+class Answered(BaseModel):
+    """A person answered a ticket's question, and its session resumed."""
+
+    kind: Literal["answered"]
+    ticket: Mention
+    by: You | Someone
+
+
+class Held(BaseModel):
+    """A ticket was kept back until a person decides."""
+
+    kind: Literal["held"]
+    ticket: Mention
+    reason: str | None = Field(
+        description="The plain-words Held reason, quoted: one sentence, since a line is at "
+        "most two (#22). Null until the chronicle reads it (#41)."
+    )
+
+
+class Retried(BaseModel):
+    """You retried a Held ticket (#20). Only Wayfarer starts a session, so only you retry."""
+
+    kind: Literal["retried"]
+    ticket: Mention
+    over: bool | None = Field(
+        description="Started over on the effort branch's head, rather than continuing "
+        "where its session stopped. Null until the chronicle reads which (#41)."
+    )
+
+
+class Landed(BaseModel):
+    """A ticket landed on its effort branch, with what that directly caused (#22)."""
+
+    kind: Literal["landed"]
+    ticket: Mention
+    by: Wayfarer | You | Someone = Field(
+        description="Wayfarer for a landing through the merge queue; a person for a merge "
+        "by hand on GitHub, which lands untested and the line says so (#21)."
+    )
+    freed: list[Mention] = Field(description="The tickets its landing made takeable.")
+    started: list[Mention] = Field(description="Those of them the cascade started a session on.")
+
+
+class Closed(BaseModel):
+    """A person closed a ticket without landing it."""
+
+    kind: Literal["closed"]
+    ticket: Mention
+    by: You | Someone
+
+
+class Armed(BaseModel):
+    """You armed the effort's cascade, with the sessions it started straight away. The
+    cascade is Wayfarer's, so only you arm it (#14)."""
+
+    kind: Literal["armed"]
+    started: list[Mention]
+
+
+class Published(BaseModel):
+    """`/to-tickets` published the effort's tickets, with what that directly caused."""
+
+    kind: Literal["published"]
+    tickets: int = Field(description="How many tickets it published.")
+    freed: list[Mention] = Field(description="Those of them takeable from the start.")
+    started: list[Mention] = Field(description="Those the cascade started a session on.")
+
+
+class ReadyToShip(BaseModel):
+    """The effort's last ticket landed, so the effort can ship."""
+
+    kind: Literal["ready_to_ship"]
+
+
+class Shipped(BaseModel):
+    """The effort's branch landed on the trunk."""
+
+    kind: Literal["shipped"]
+
+
+class ChronicleLine(BaseModel):
+    """One line of the chronicle: one thing that moved a ticket, with what it directly
+    caused, derived from GitHub and never stored (#22). The browser writes its
+    sentence from one template per kind of movement, so a rebuilt chronicle reads
+    the same and no line can misname a ticket."""
+
+    kind: Literal["chronicle_line"]
+    id: str
+    at: datetime
+    effort: Mention = Field(description="The effort it moved, named on the right of the line.")
+    moved: Annotated[
+        Taken
+        | Asked
+        | Answered
+        | Held
+        | Retried
+        | Landed
+        | Closed
+        | Armed
+        | Published
+        | ReadyToShip
+        | Shipped,
+        Field(discriminator="kind"),
+    ]
+
+
 Item = Annotated[
     ImageStatus
     | BuildOutput
@@ -316,6 +484,9 @@ Item = Annotated[
     | EffortUnreadable
     | Ticket
     | GateStatus
+    | EnvironmentFailure
+    | Cascade
+    | ShipEffort
     | Beat
     | ChronicleLine,
     Field(discriminator="kind"),

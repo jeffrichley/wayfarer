@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Collection, Iterator
+from collections.abc import Awaitable, Callable, Collection, Container, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -173,17 +173,23 @@ class Efforts:
         github: GitHub,
         store: Store,
         settings: Settings,
-        landing: Callable[[Effort, list[Ticket]], Awaitable[None]],
+        line: Callable[[Effort, list[Ticket]], Awaitable[list[Ticket]]],
         telling: Telling,
     ) -> None:
+        """`line` is the merge queue's: handed each read, it gives each Landing ticket
+        its place in line. `telling` is the chronicle of each read."""
         self._github = github
         self._store = store
         self._settings = settings
-        self._landing = landing
+        self._line = line
         self._telling = telling
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
+        self.building: Container[int] = frozenset()
+        """The tickets a session is running on, which only this process knows."""
+        self.then: Callable[[int], Awaitable[None]] | None = None
+        """Called with an effort's number after each read of it: the cascade's cue."""
 
     async def read(self, number: int) -> None:
         """Read effort `number` from GitHub, put what changed on the stream, and follow it."""
@@ -193,6 +199,8 @@ class Efforts:
         async with self._reading[number]:
             await self._read(number)
         self._await_open_pulls()
+        if self.then is not None:
+            await self.then(number)
 
     async def follow(self) -> None:
         """Read every followed effort again each time the signal fires, until cancelled."""
@@ -239,6 +247,7 @@ class Efforts:
                 number,
                 per_page=self._settings.tickets_per_page,
                 auto_merge=self._settings.auto_merge,
+                building=self.building,
             )
         except (NotConnected, NoSuchIssue, GitHubError) as error:
             self._store.upsert(
@@ -246,11 +255,8 @@ class Efforts:
             )
         else:
             # Tickets before the effort, so it never names one the page lacks.
-            for ticket in tickets:
+            for ticket in await self._line(effort, tickets):
                 self._store.upsert(ticket)
-            # What this read found Landing lands before the effort is sent, so a
-            # page holding the effort holds a read whose landings were tried.
-            await self._landing(effort, tickets)
             self._tell(effort, tickets, history)
             self._store.upsert(effort)
         named = {
@@ -273,7 +279,7 @@ class Efforts:
         for item in self._store.items():
             if (
                 isinstance(item, ChronicleLine)
-                and item.effort == effort.number
+                and item.effort.number == effort.number
                 and item.id not in told
             ):
                 self._store.remove(item.id)
@@ -285,6 +291,7 @@ async def read_effort(
     *,
     per_page: int,
     auto_merge: bool,
+    building: Container[int] = frozenset(),
 ) -> tuple[Effort, list[Ticket], History]:
     """Effort `number` and its tickets as GitHub has them now, and their history."""
     nodes: list[dict[str, Any]] = []
@@ -300,7 +307,7 @@ async def read_effort(
         if not page["pageInfo"]["hasNextPage"]:
             break
         after = page["pageInfo"]["endCursor"]
-    tickets = [_ticket(node, auto_merge=auto_merge) for node in nodes]
+    tickets = [_ticket(node, auto_merge=auto_merge, building=building) for node in nodes]
     effort = Effort(
         kind="effort",
         id=f"effort:{number}",
@@ -329,7 +336,7 @@ def _event(node: dict[str, Any]) -> Event:
     )
 
 
-def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
+def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int]) -> Ticket:
     number: int = node["number"]
     labels = [label["name"] for label in node["labels"]["nodes"]]
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
@@ -348,8 +355,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
             assignees=assignees,
             open_blockers=open_blockers,
             pull_request=pull_request,
-            # Nothing runs a session yet; the ticket that does feeds this in.
-            building=False,
+            building=number in building,
             auto_merge=auto_merge,
         ),
         open=is_open,
@@ -358,6 +364,8 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],
         open_blockers=open_blockers,
         pull_request=pull_request,
+        # The merge queue's to say, from an order this read does not ask for.
+        place_in_line=None,
     )
 
 

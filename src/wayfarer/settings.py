@@ -38,6 +38,9 @@ class Settings:
     docker_timeout: float = 10.0
     """Seconds the start gate waits for the Docker daemon to answer. One that has not
     answered by then is as good as down, and a wedged one must not hang every start."""
+    cap: int = 3
+    """How many sessions may run at once, one number shared by every armed cascade on
+    the repo, so the machine stays usable. Per repo, default 3."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
     stream_backlog: int = 1000
@@ -62,6 +65,9 @@ class Settings:
     long test run prints nothing."""
     session_wall: float = 2 * 60 * 60.0
     """Seconds a session's agent may run in all before it is stopped."""
+    landing_check_wall: float = 30 * 60.0
+    """Seconds the merge queue's re-test of a candidate may run in all, with no cap on its
+    silence. Reaching it counts as a failed re-test."""
     stage_timeout: float = 10 * 60.0
     """Seconds each of a session's workspace, sandbox, collect and integrate stages may
     take, which only a hang would reach. Every Waystation bound is unbounded unless set."""

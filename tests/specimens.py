@@ -9,21 +9,31 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageChops
-from playwright.sync_api import Page, ViewportSize
+from playwright.sync_api import Locator, Page, ViewportSize
 
 REFERENCE = Path(__file__).with_name("prototype_gallery.html")
 THEMES = ["light", "dark"]
 # The size every screen is checked at first (docs/design/visual-language.md).
 VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
+# The gallery's clock stands still here, local time, so a counter reads the same
+# every time it is drawn; the gallery's own dates sit a little before it.
+GALLERY_CLOCK = datetime(2026, 9, 15, 9, 42)
+
+
+def specimen(page: Page, name: str) -> Locator:
+    """The specimen the page names `name`."""
+    return page.locator(f'[data-specimen="{name}"]')
 
 
 def choose(gallery: Page, theme: str) -> None:
     """Pick a theme as a person does, with the gallery's own buttons."""
+    # Exactly: each theme toggle in the shell's specimens is named for a chart too.
     gallery.get_by_role(
-        "button", name={"light": "The chart", "dark": "The night chart"}[theme]
+        "button", name={"light": "The chart", "dark": "The night chart"}[theme], exact=True
     ).click()
 
 

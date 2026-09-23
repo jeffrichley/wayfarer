@@ -1,260 +1,156 @@
-"""The chronicle: what happened to an effort, worked out from GitHub and the session rows.
+"""The chronicle's lines, as the gallery shows them (#51).
 
-Driven as a person does: GitHub is changed underneath a running Wayfarer, as a
-person, the cascade or Wayfarer's own landing changes it, sessions are written
-into the store as the cascade writes them, and the lines are read off the page's
-stream. The stand-in's clock moves on a minute with every event, so every line
-here is a minute or more from the last.
+The snapshot check in `test_the_gallery.py` holds how each line looks. These hold
+what it says: the sentence each kind of line is written from, the names in it,
+and how its lines fall into days, earlier ones loading a day at a time.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import closing
-from pathlib import Path
-from typing import Any
+import re
 
-import httpx
 import pytest
+from playwright.sync_api import Locator, Page
 
-from conftest import Launcher, Stream, post
-from github_stand_in import GitHub, Issue
-from wayfarer.github import Repo
-from wayfarer.pull_requests import LANDED_MARKER
-from wayfarer.read_model import ASKED, HELD
-from wayfarer.store import Purpose, Store
+from specimens import specimen
 
-pytestmark = pytest.mark.git
+pytestmark = [pytest.mark.git, pytest.mark.browser]
 
-_EFFORT_BRANCH = "effort/1-widgets"
+MINUS = "\N{MINUS SIGN}"
+
+# The gallery's sample tickets and effort, each named as a line reads it: its
+# name, then its id.
+ANALYSIS = "Extract the audio analysis pass from the render worker #125"
+LOUDNESS = f"Flag loudness outside {MINUS}23 to {MINUS}18 dB RMS #126"
+PEAKS = f"Flag peaks above {MINUS}3 dB #127"
+NOISE_FLOOR = f"Flag a noise floor above {MINUS}60 dB #128"
+LONG_CHAPTERS = "Flag chapters longer than 120 minutes #129"
+CREDITS = "Require opening and closing credits #130"
+ROOM_TONE = "Check room tone at the head and tail of each chapter #131"
+MY_BOOKS = "Show compliance status on My Books #132"
+EFFORT = "Pre-delivery compliance checks #124"
+
+# Every kind of line with the sentence its template writes (#22): tickets moving,
+# never stages, and who acted read from the kind of event.
+SENTENCES = {
+    "line-taken": f"{NOISE_FLOOR} was taken.",
+    "line-taken-you": f"You took {CREDITS}.",
+    "line-taken-someone": f"mira took {CREDITS}.",
+    "line-asked": f"{CREDITS} stopped to ask: “Should DOCX books without credits fail or warn?”",
+    "line-answered": f"You answered {CREDITS}, and its session resumed.",
+    "line-answered-someone": f"mira answered {CREDITS}, and its session resumed.",
+    "line-held": f"{LONG_CHAPTERS} was held. Its tests were still red when the session ended.",
+    "line-retried": f"You retried {LONG_CHAPTERS}, continuing where its session stopped.",
+    "line-retried-over": f"You retried {LONG_CHAPTERS}, starting over from the effort branch.",
+    "line-landed": f"{PEAKS} landed.",
+    "line-landed-freed": f"{ANALYSIS} landed. {LOUDNESS} and {PEAKS} reached the frontier.",
+    "line-landed-folded": f"{LOUDNESS} landed. {NOISE_FLOOR}, {LONG_CHAPTERS}, and {CREDITS} "
+    f"reached the frontier, and agents took {NOISE_FLOOR} and {LONG_CHAPTERS}.",
+    "line-landed-all": f"{PEAKS} landed. {MY_BOOKS} reached the frontier, and an agent took it.",
+    "line-landed-by-hand": f"You landed {PEAKS} by hand, not re-tested.",
+    "line-landed-by-someone": f"mira landed {PEAKS} by hand, not re-tested.",
+    "line-closed": f"You closed {ROOM_TONE} without landing it.",
+    "line-closed-someone": f"mira closed {ROOM_TONE} without landing it.",
+    "line-armed": f"You armed the cascade on {EFFORT}. "
+    f"Agents took {NOISE_FLOOR} and {LONG_CHAPTERS}.",
+    "line-armed-idle": f"You armed the cascade on {EFFORT}.",
+    "line-published": f"{EFFORT} was sliced into nine tickets. "
+    f"{ANALYSIS} reached the frontier, and an agent took it.",
+    "line-ready": f"{EFFORT} became ready to ship: its last ticket landed.",
+    "line-shipped": f"{EFFORT} shipped.",
+}
 
 
-@pytest.fixture
-def data_dir(tmp_path: Path) -> Path:
-    return tmp_path / "data"
+def _sentence(line: Locator) -> str:
+    """The line's sentence as it reads: an id rides after its name, set apart by
+    its margin rather than a space."""
+    text: str = line.locator("p").evaluate(
+        """p => {
+            const read = p.cloneNode(true);
+            read.querySelectorAll(".id").forEach(id => id.before(" "));
+            return read.textContent;
+        }"""
+    )
+    return " ".join(text.split())
 
 
-@pytest.fixture
-def store(data_dir: Path) -> Iterator[Store]:
-    """The repo's store, as the running Wayfarer finds it."""
-    with closing(Store.for_repo(data_dir, Repo("octo", "widgets"))) as opened:
-        yield opened
+def test_every_kind_of_line_is_written_from_its_template(gallery: Page) -> None:
+    names = gallery.locator('[data-specimen^="line-"]').evaluate_all(
+        "lines => lines.map(line => line.dataset.specimen)"
+    )
+
+    assert sorted(names) == sorted(SENTENCES)
+    assert {name: _sentence(specimen(gallery, name)) for name in SENTENCES} == SENTENCES
 
 
-def _env(data_dir: Path) -> dict[str, str]:
-    # Quick, so a change on GitHub is read again within a test's patience.
-    return {"WAYFARER_DATA_DIR": str(data_dir), "WAYFARER_POLL_ACTIVE": "0.2"}
+def test_a_line_carries_its_time_and_its_efforts_name(gallery: Page) -> None:
+    line = specimen(gallery, "line-landed").get_by_role("listitem")
+
+    assert line.locator("time").inner_text() == "07:48"
+    assert line.locator("time").get_attribute("datetime") == "2026-09-15T07:48"
+    assert line.locator("p + *").inner_text() == "Pre-delivery compliance checks"
+    # The effort, never the skill that acted (#22).
+    assert "/" not in line.inner_text()
 
 
-def _session(store: Store, github: GitHub, ticket: Issue, purpose: Purpose = Purpose.BUILD) -> None:
-    """A session started on `ticket` now, as the cascade records one."""
-    run_id = f"run-{ticket.number}-{len(store.sessions())}"
-    store.session_started(run_id, ticket.number, purpose, github.now, store.event_file(run_id))
+def test_things_are_named_by_name_as_links_with_their_ids_after(gallery: Page) -> None:
+    sentence = specimen(gallery, "line-landed-folded").locator("p")
+    links = sentence.get_by_role("link")
 
-
-def _lines(items: dict[str, dict[str, Any]], effort: Issue) -> list[dict[str, Any]]:
-    lines = [
-        item
-        for item in items.values()
-        if item["kind"] == "chronicle_line" and item["effort"] == effort.number
+    named = [
+        f"{link.inner_text()} {link.evaluate('a => a.nextElementSibling.textContent')}"
+        for link in (links.nth(i) for i in range(links.count()))
     ]
-    return sorted(lines, key=lambda line: (line["at"], line["id"]))
+    assert named == [LOUDNESS, NOISE_FLOOR, LONG_CHAPTERS, CREDITS, NOISE_FLOOR, LONG_CHAPTERS]
+    # No link's text is an id.
+    assert not any(re.fullmatch(r"#\d+", text) for text in links.all_inner_texts())
+
+    effort = specimen(gallery, "line-shipped").locator("p").get_by_role("link")
+    assert effort.inner_text() == "Pre-delivery compliance checks"
+    assert effort.evaluate("a => a.nextElementSibling.textContent") == "#124"
 
 
-def _told(items: dict[str, dict[str, Any]], effort: Issue) -> list[str]:
-    """The effort's lines as a person reads them, oldest first."""
-    return ["".join(part["text"] for part in line["parts"]) for line in _lines(items, effort)]
+def test_a_folded_line_is_one_event_with_what_it_caused(gallery: Page) -> None:
+    line = specimen(gallery, "line-landed-folded")
+
+    assert line.get_by_role("listitem").count() == 1
+    assert line.locator("time").count() == 1
+    sentences = re.findall(r"[^.]+\.", _sentence(line))
+    assert len(sentences) == 2
+    assert sentences[0].endswith("landed.")
+    assert "reached the frontier, and agents took" in sentences[1]
 
 
-def _chronicle(url: str, effort: Issue, expected: list[str]) -> list[dict[str, Any]]:
-    """The effort's lines, once they read as `expected`."""
-    with Stream(url, timeout=10.0) as page:
-        post(f"{url}api/efforts/{effort.number}/read")
-        try:
-            page.until(lambda items: _told(items, effort) == expected)
-        except httpx.ReadTimeout:
-            pytest.fail(
-                f"the chronicle never read as expected; it reads {_told(page.items, effort)}"
-            )
-        return _lines(page.items, effort)
+def test_lines_group_under_their_days_newest_first(gallery: Page) -> None:
+    chronicle = specimen(gallery, "chronicle")
+    days = chronicle.locator("[data-day]")
 
-
-def _land(github: GitHub, ticket: Issue) -> None:
-    """Closed with the marked comment, as Wayfarer closes a ticket that landed: back to
-    back, so GitHub stamps both to the same second."""
-    at = github.now
-    github.comment(ticket, f"Landed on `{_EFFORT_BRANCH}` at {'a' * 40}.\n\n{LANDED_MARKER}")
-    github.now = at
-    github.close(ticket)
-
-
-def test_a_landing_folds_with_the_tickets_it_freed_and_what_the_cascade_started_on_them(
-    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
-) -> None:
-    spec, (flag, meter, scale, ruler, other) = github.effort("Widgets", tickets=5)
-    flag.title, meter.title, scale.title = "Flag loudness", "Meter peaks", "Scale the meter"
-    ruler.title, other.title = "Draw the ruler", "Pick a font"
-    github.block(meter, by=flag)
-    github.block(scale, by=flag)
-    # Still blocked by a ticket that stays open, so this landing frees it not.
-    github.block(ruler, by=flag)
-    github.block(ruler, by=other)
-    github.pull_request(flag, base=_EFFORT_BRANCH)
-    url = wayfarer.start(env=_env(data_dir)).url()
-
-    # Wayfarer lands it itself, and the cascade takes what that freed.
-    _chronicle(
-        url, spec, ["Flag loudness landed. Meter peaks and Scale the meter reached the frontier."]
-    )
-    github.assign(meter, github.viewer)
-    _session(store, github, meter)
-    [line] = _chronicle(
-        url,
-        spec,
-        [
-            "Flag loudness landed. Meter peaks and Scale the meter reached the frontier, "
-            "and Meter peaks was taken."
-        ],
-    )
-
-    assert line["effort_title"] == spec.title
-    assert line["movement"] == "landed"
-    assert [part["ticket"] for part in line["parts"] if part["ticket"]] == [
-        flag.number,
-        meter.number,
-        scale.number,
-        meter.number,
+    assert days.locator(".kicker").all_text_contents() == [
+        "Today",
+        "Yesterday · Monday 14 September",
     ]
+    assert days.nth(0).locator("time").all_inner_texts() == ["09:41", "09:18", "07:48"]
+    assert days.nth(1).locator("time").all_inner_texts() == ["22:14", "16:40", "10:20"]
 
 
-def test_two_independent_landings_a_minute_apart_stay_two_lines(
-    wayfarer: Launcher, github: GitHub, data_dir: Path
-) -> None:
-    spec, (first, second) = github.effort("Widgets", tickets=2)
-    first.title, second.title = "Flag loudness", "Meter peaks"
-    github.pull_request(first, base=_EFFORT_BRANCH)
-    github.pull_request(second, base=_EFFORT_BRANCH)
-    url = wayfarer.start(env=_env(data_dir)).url()
+def test_earlier_days_load_one_day_at_a_time(gallery: Page) -> None:
+    chronicle = specimen(gallery, "chronicle")
+    earlier = chronicle.get_by_role("button", name="Earlier")
 
-    lines = _chronicle(url, spec, ["Flag loudness landed.", "Meter peaks landed."])
-
-    assert [line["movement"] for line in lines] == ["landed", "landed"]
-
-
-def test_only_a_ticket_moving_earns_a_line_never_a_stage_a_pull_request_or_a_resolver(
-    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
-) -> None:
-    spec, (ticket,) = github.effort("Widgets", tickets=1)
-    ticket.title = "Flag loudness"
-    github.label(ticket, "ready-for-agent")
-    github.comment(ticket, "Looks good to me.")
-    github.pull_request(ticket, base=_EFFORT_BRANCH, draft=True)
-    github.label(ticket, HELD)
-    github.unlabel(ticket, HELD)
-    # Replaying its commits onto the effort branch is landing, not a retry.
-    _session(store, github, ticket, Purpose.RESOLVE)
-    _land(github, ticket)
-    url = wayfarer.start(env=_env(data_dir)).url()
-
-    _chronicle(
-        url,
-        spec,
-        ["Flag loudness was held.", "You let Flag loudness land.", "Flag loudness landed."],
-    )
-
-
-def test_who_acted_is_read_from_the_kind_of_event_and_never_from_the_token(
-    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
-) -> None:
-    names = ["Taken", "Mine", "Theirs", "Rebuilt", "Asked", "Asked them", "Held", "Dropped", "Done"]
-    spec, tickets = github.effort("Widgets", tickets=len(names))
-    for ticket, name in zip(tickets, names, strict=True):
-        ticket.title = name
-    taken, mine, theirs, rebuilt, asked, asked_them, held, dropped, done = tickets
-
-    # Every write Wayfarer makes wears the person's login, as it does on GitHub.
-    github.assign(taken, github.viewer)
-    _session(store, github, taken)
-    github.assign(mine, github.viewer)
-    # A session once ran on it, but none started when it was taken this time.
-    _session(store, github, rebuilt)
-    github.assign(theirs, "octocat", by="octocat")
-    github.assign(rebuilt, "octocat", by="octocat")
-    github.label(asked, ASKED)
-    github.unlabel(asked, ASKED)
-    _session(store, github, asked)
-    github.label(asked_them, ASKED)
-    github.unlabel(asked_them, ASKED, by="octocat")
-    github.label(held, HELD)
-    github.unlabel(held, HELD)
-    _session(store, github, held)
-    github.close(dropped, "NOT_PLANNED", by="octocat")
-    github.close(done)
-    url = wayfarer.start(env=_env(data_dir)).url()
-
-    _chronicle(
-        url,
-        spec,
-        [
-            "Taken was taken.",
-            "You took Mine.",
-            "octocat took Theirs.",
-            "octocat took Rebuilt.",
-            "Asked asked a question.",
-            "You answered Asked, and its session resumed.",
-            "Asked them asked a question.",
-            "octocat answered Asked them.",
-            "Held was held.",
-            "You retried Held.",
-            "octocat closed Dropped without landing it.",
-            "You closed Done.",
-        ],
-    )
-
-
-def test_the_chronicle_rebuilds_identically_after_a_restart(
-    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
-) -> None:
-    spec, (flag, meter) = github.effort("Widgets", tickets=2)
-    flag.title, meter.title = "Flag loudness", "Meter peaks"
-    github.block(meter, by=flag)
-    github.label(flag, HELD)
-    github.unlabel(flag, HELD)
-    _land(github, flag)
-    github.assign(meter, github.viewer)
-    _session(store, github, meter)
-    expected = [
-        "Flag loudness was held.",
-        "You let Flag loudness land.",
-        "Flag loudness landed. Meter peaks reached the frontier and was taken.",
+    earlier.click()
+    assert chronicle.locator("[data-day] .kicker").all_text_contents() == [
+        "Today",
+        "Yesterday · Monday 14 September",
+        "Sunday 13 September",
     ]
 
-    running = wayfarer.start(env=_env(data_dir))
-    before = _chronicle(running.url(), spec, expected)
-    assert running.interrupt() == 0
-    after = _chronicle(wayfarer.start(env=_env(data_dir)).url(), spec, expected)
+    earlier.click()
+    assert chronicle.locator("[data-day] .kicker").all_text_contents()[-1] == "Friday 11 September"
 
-    assert after == before
-
-
-def test_a_reopened_ticket_frees_what_it_blocks_each_time_it_closes(
-    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
-) -> None:
-    spec, (flag, meter) = github.effort("Widgets", tickets=2)
-    flag.title, meter.title = "Flag loudness", "Meter peaks"
-    github.block(meter, by=flag)
-    github.close(flag, by="octocat")
-    github.reopen(flag, by="octocat")
-    _land(github, flag)
-    github.assign(meter, github.viewer)
-    _session(store, github, meter)
-    url = wayfarer.start(env=_env(data_dir)).url()
-
-    _chronicle(
-        url,
-        spec,
-        [
-            "octocat closed Flag loudness. Meter peaks reached the frontier.",
-            "Flag loudness landed. Meter peaks reached the frontier and was taken.",
-        ],
+    earlier.click()
+    # A day from another year says which, since a shipped effort's lines stay.
+    assert chronicle.locator("[data-day] .kicker").all_text_contents()[-1] == (
+        "Wednesday 31 December 2025"
     )
+    # There is nothing earlier than the first line, so nothing more to load.
+    assert earlier.count() == 0

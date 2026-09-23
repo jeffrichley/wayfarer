@@ -7,6 +7,7 @@ signal to re-read (ADR-0003), so what Wayfarer wrote is read straight back.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import subprocess
 import time
@@ -100,6 +101,7 @@ class GitHub:
         self.repo = repo
         self.freshness = freshness or Freshness()
         self._settings = settings
+        self._login: str | None = None
 
     def _connected(self) -> tuple[Repo, dict[str, str]]:
         if self.repo is None:
@@ -111,9 +113,24 @@ class GitHub:
     async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=self._settings.github_timeout) as client:
-                return await client.request(method, f"{self._settings.github_api}{path}", **kwargs)
+                response = await client.request(
+                    method, f"{self._settings.github_api}{path}", **kwargs
+                )
         except httpx.HTTPError as error:
+            _raise_if_cancelled(error)
             raise GitHubError(f"GitHub could not be reached: {error}") from error
+        _raise_if_cancelled()
+        return response
+
+    async def login(self) -> str:
+        """Who Wayfarer writes to GitHub as: the person whose token it holds."""
+        if self._login is None:
+            _, auth = self._connected()
+            response = await self._send("GET", "/user", headers=auth)
+            if response.status_code != 200:
+                raise GitHubError(f"GitHub would not say whose token this is: {response.text}")
+            self._login = str(response.json()["login"])
+        return self._login
 
     async def query(self, document: str, **variables: Any) -> dict[str, Any]:
         """The `data` of `document`, run with `owner` and `name` filled in. Its
@@ -176,6 +193,25 @@ class GitHub:
         # Some writes, such as deleting a branch, answer `204 No Content`.
         return response.json() if response.content else None
 
+    async def mutate(self, document: str, **variables: Any) -> dict[str, Any]:
+        """Send one GraphQL write, for what REST cannot do, and return its `data`.
+
+        As with `write`, the signal to re-read is raised whatever comes back
+        (ADR-0003), and nothing it returns is believed as state.
+        """
+        _, auth = self._connected()
+        try:
+            response = await self._send(
+                "POST", "/graphql", headers=auth, json={"query": document, "variables": variables}
+            )
+        finally:
+            self.freshness.poke()
+        body: dict[str, Any] = response.json() if response.status_code == 200 else {}
+        if response.status_code != 200 or body.get("errors"):
+            raise GitHubError(f"GitHub refused the write ({response.status_code}): {response.text}")
+        data: dict[str, Any] = body["data"]
+        return data
+
     async def _rest(
         self, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: Any
     ) -> httpx.Response:
@@ -186,6 +222,19 @@ class GitHub:
             headers=auth | (headers or {}),
             **kwargs,
         )
+
+
+def _raise_if_cancelled(cause: BaseException | None = None) -> None:
+    """Raise the cancel a request swallowed.
+
+    anyio reports a connect cancelled mid-attempt as a failed connect, and can
+    absorb a cancel while it closes a connection, so a request may fail or even
+    return after its task was cancelled. A cancel must still cancel, or whatever
+    awaits the task, such as the app stopping, waits forever.
+    """
+    task = asyncio.current_task()
+    if task is not None and task.cancelling():
+        raise asyncio.CancelledError from cause
 
 
 # GitHub's rules for its rate-limit responses:

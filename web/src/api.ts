@@ -5,6 +5,8 @@ import type { components } from "./api.gen";
 
 type Schemas = components["schemas"];
 
+export type Beat = Schemas["Beat"];
+export type BeatKind = Schemas["BeatKind"];
 export type Checks = Schemas["Checks"];
 export type Effort = Schemas["Effort"];
 export type EffortUnreadable = Schemas["EffortUnreadable"];
@@ -16,6 +18,9 @@ export type ImageStatus = Schemas["ImageStatus"];
 export type ProbeCheck = Schemas["ProbeCheck"];
 export type BuildOutput = Schemas["BuildOutput"];
 export type BuildFinished = Schemas["BuildFinished"];
+export type ChronicleLine = Schemas["ChronicleLine"];
+export type Mention = Schemas["Mention"];
+export type Someone = Schemas["Someone"];
 
 // Everything the page's one stream carries, and the items it holds by id.
 export type Snapshot = Schemas["Snapshot"];

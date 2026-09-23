@@ -4,7 +4,8 @@ It holds one repo's issues and pull requests in memory and speaks what Wayfarer
 reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; the
 REST issue listing and commit checks the conditional poll uses (ADR-0003); and the
 REST writes Wayfarer makes: claiming, labelling, commenting on and closing an issue,
-and opening and merging a pull request. A test changes it as a person on GitHub
+and opening a pull request; and the one GraphQL write, returning a pull request to
+draft. A test changes it as a person on GitHub
 would, and it can be made to misbehave on purpose:
 
 - **poked**: change an issue or a pull request, and the next read sees it;
@@ -14,7 +15,11 @@ would, and it can be made to misbehave on purpose:
 - **rate-limited**: refuse the next REST reads with `403` or `429`, or ask for a
   slower poll with `X-Poll-Interval`;
 - **disagreeing**: nothing stops a test closing a ticket a session is still on;
-- **unmergeable**: a pull request can refuse to merge, as one with a conflict does.
+- **pushed to**: given the repo's git remote, a bare repo, it reads each pull
+  request's head from its branch there, and marks one merged once its head is on
+  its base, as GitHub does for a push that lands a pull request's commits.
+- **raced**: a person's change lands just after Wayfarer's write, before its
+  read-back.
 
 Every REST request is logged in `requests`, so a test can see the poll's rhythm.
 
@@ -39,12 +44,14 @@ import json
 import math
 import re
 import socket
+import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -66,6 +73,8 @@ from graphql import (
 )
 
 TOKEN = "stand-in-token"
+# Whose token it is: the person Wayfarer writes to GitHub as.
+LOGIN = "ada"
 
 _SCHEMA = build_schema("""
 type Query {
@@ -76,7 +85,19 @@ type Query {
 
 type RateLimit { cost: Int! limit: Int! remaining: Int! }
 
-type Repository { issue(number: Int!): Issue defaultBranchRef: Ref }
+type Mutation {
+  convertPullRequestToDraft(
+    input: ConvertPullRequestToDraftInput!
+  ): ConvertPullRequestToDraftPayload
+}
+input ConvertPullRequestToDraftInput { pullRequestId: ID! }
+type ConvertPullRequestToDraftPayload { pullRequest: PullRequest }
+
+type Repository {
+  issue(number: Int!): Issue
+  pullRequest(number: Int!): PullRequest
+  defaultBranchRef: Ref
+}
 type Ref { name: String! }
 
 enum IssueState { OPEN CLOSED }
@@ -94,6 +115,7 @@ enum IssueTimelineItemsItemType {
   UNASSIGNED_EVENT
   UNLABELED_EVENT
 }
+enum PullRequestTimelineItemsItemType { READY_FOR_REVIEW_EVENT }
 scalar GitObjectID
 scalar DateTime
 
@@ -133,6 +155,7 @@ type StatusCheckRollup { state: StatusState! }
 type Commit { oid: GitObjectID! }
 
 type PullRequest {
+  id: ID!
   number: Int!
   headRefName: String!
   headRefOid: GitObjectID!
@@ -143,7 +166,15 @@ type PullRequest {
   reviewDecision: PullRequestReviewDecision
   statusCheckRollup: StatusCheckRollup
   mergeCommit: Commit
+  createdAt: DateTime!
+  timelineItems(
+    itemTypes: [PullRequestTimelineItemsItemType!], first: Int, last: Int
+  ): PullRequestTimelineItemsConnection!
 }
+
+type ReadyForReviewEvent { createdAt: DateTime! }
+union PullRequestTimelineItems = ReadyForReviewEvent
+type PullRequestTimelineItemsConnection { nodes: [PullRequestTimelineItems] }
 
 union ReferencedSubject = Issue | PullRequest
 type CrossReferencedEvent { source: ReferencedSubject! willCloseTarget: Boolean! }
@@ -223,10 +254,11 @@ class PullRequest:
     body: str = ""
     # The commit at its head, which a push moves.
     head_commit: str = "1" * 40
-    # False is a PR GitHub will not merge, as it will not one with a conflict.
-    mergeable: bool = True
     # The commit its merge made on its base; None until it merges.
     merge_commit: str | None = None
+    created_at: str = "2026-01-01T00:00:00Z"
+    # When it was last marked ready for review; None if it opened ready.
+    ready_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -267,6 +299,9 @@ class GitHub:
         self._live = _Repo()
         self._frozen: _Repo | None = None
         self._next_number = 1
+        self._clock = 0
+        self.git: Path | None = None
+        """The repo's git remote, a bare repo; None when a test needs no git."""
         self._lock = threading.Lock()
         self.queries: list[str] = []
         self.points: list[int] = []
@@ -274,6 +309,7 @@ class GitHub:
         self.poll_interval: int | None = None
         self._refusals: list[Refusal] = []
         self._forbidden: list[str] = []
+        self._meanwhile: list[Callable[[], object]] = []
         self.api = ""
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -296,6 +332,7 @@ class GitHub:
         with self._lock:
             fields.setdefault("head", f"ticket/{ticket.number}-work")
             fields.setdefault("mentions", [ticket.number])
+            fields.setdefault("created_at", self._now())
             pull = PullRequest(self._take_number(), **fields)
             self._live.pulls[pull.number] = pull
             return pull
@@ -303,7 +340,14 @@ class GitHub:
     def merged(self, pull: PullRequest) -> None:
         """Merged, as a person merges one by hand on GitHub."""
         with self._lock:
-            self._merge(pull)
+            pull.state = "MERGED"
+            pull.merge_commit = hashlib.sha1(f"merge {pull.number}".encode()).hexdigest()
+
+    def ready(self, pull: PullRequest) -> None:
+        """Marked ready for review, as a person does to a draft."""
+        with self._lock:
+            pull.draft = False
+            pull.ready_at = self._now()
 
     def pulls(self) -> list[PullRequest]:
         with self._lock:
@@ -312,10 +356,6 @@ class GitHub:
     def labels(self, number: int) -> list[str]:
         with self._lock:
             return list(self._live.issues[number].labels)
-
-    def _merge(self, pull: PullRequest) -> None:
-        pull.state = "MERGED"
-        pull.merge_commit = hashlib.sha1(f"merge {pull.number}".encode()).hexdigest()
 
     def block(self, ticket: Issue, *, by: Issue) -> None:
         ticket.blocked_by.append(by.number)
@@ -347,8 +387,11 @@ class GitHub:
 
     def unassign(self, issue: Issue, login: str, by: str | None = None) -> None:
         with self._lock:
-            issue.assignees.remove(login)
-            self._happened(issue, "UnassignedEvent", by or self.viewer, assignee=login)
+            self._unassign(issue, login, by or self.viewer)
+
+    def _unassign(self, issue: Issue, login: str, by: str) -> None:
+        issue.assignees.remove(login)
+        self._happened(issue, "UnassignedEvent", by, assignee=login)
 
     def label(self, issue: Issue, name: str, by: str | None = None) -> None:
         with self._lock:
@@ -381,6 +424,28 @@ class GitHub:
         with self._lock:
             del self._live.issues[issue.number]
 
+    def _now(self) -> str:
+        """A moment later than the last one asked for: each event gets its own second."""
+        self._clock += 1
+        return (datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=self._clock)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    def _follow_git(self) -> None:
+        """Each open pull request's head as its branch stands on the remote, merged once
+        that head is on its base."""
+        if self.git is None:
+            return
+        for pull in self._live.pulls.values():
+            head = _tip(self.git, pull.head)
+            if pull.state != "OPEN" or head is None:
+                continue
+            pull.head_commit = head
+            base = _tip(self.git, pull.base)
+            if base is not None and _is_ancestor(self.git, head, base):
+                pull.state = "MERGED"
+                pull.merge_commit = head
+
     def _take_number(self) -> int:
         number = self._next_number
         self._next_number += 1
@@ -405,10 +470,20 @@ class GitHub:
             self._refusals += refusals
 
     def forbid(self, path: str) -> None:
-        """Refuse every read of paths ending in `path`, as GitHub refuses a token
-        without the permission that path needs."""
+        """Refuse every read of paths ending in `path`, and every claim, as GitHub
+        refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
+
+    def meanwhile(self, change: Callable[[], object]) -> None:
+        """Make `change` just after Wayfarer's next write, as a person racing it would."""
+        with self._lock:
+            self._meanwhile.append(change)
+
+    def _raced(self) -> None:
+        """Called holding the lock, after a write."""
+        while self._meanwhile:
+            self._meanwhile.pop(0)()
 
     def _visible(self) -> _Repo:
         return self._frozen if self._frozen is not None else self._live
@@ -490,6 +565,10 @@ class GitHub:
         async def status(owner: str, name: str, ref: str, request: Request) -> Response:
             return self._conditional(request, {"state": "pending", "total_count": 0})
 
+        @app.get("/user")
+        async def user() -> Response:
+            return JSONResponse({"login": LOGIN})
+
         @app.post("/repos/{owner}/{name}/issues/{number}/labels")
         async def label(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
@@ -528,30 +607,32 @@ class GitHub:
                     title=body["title"],
                     body=body.get("body") or "",
                     mentions=[int(n) for n in re.findall(r"#(\d+)", body.get("body") or "")],
+                    created_at=self._now(),
                 )
                 self._live.pulls[pull.number] = pull
                 return JSONResponse({"number": pull.number, "draft": pull.draft}, status_code=201)
-
-        # GitHub answers `405` for a PR it will not merge: a draft, or a conflict.
-        @app.put("/repos/{owner}/{name}/pulls/{number}/merge")
-        async def merge(owner: str, name: str, number: int, request: Request) -> Response:
-            with self._lock:
-                pull = self._live.pulls[number]
-                if pull.draft or pull.state != "OPEN" or not pull.mergeable:
-                    return JSONResponse(
-                        {"message": "Pull Request is not mergeable"}, status_code=405
-                    )
-                self._merge(pull)
-                return JSONResponse({"sha": pull.merge_commit, "merged": True})
 
         @app.post("/repos/{owner}/{name}/issues/{number}/assignees")
         async def assign(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
             with self._lock:
+                if refused := self._refused_write(request):
+                    return refused
                 issue = self._live.issues[number]
                 for login in body["assignees"]:
                     self._assign(issue, login, self.viewer)
+                self._raced()
                 return JSONResponse(_rest_issue(issue), status_code=201)
+
+        @app.delete("/repos/{owner}/{name}/issues/{number}/assignees")
+        async def unassign(owner: str, name: str, number: int, request: Request) -> Response:
+            body = await request.json()
+            with self._lock:
+                issue = self._live.issues[number]
+                for login in body["assignees"]:
+                    if login in issue.assignees:
+                        self._unassign(issue, login, self.viewer)
+                return JSONResponse(_rest_issue(issue))
 
         return app
 
@@ -559,6 +640,15 @@ class GitHub:
         with self._lock:
             pulls = [p for p in self._visible().pulls.values() if p.head == ref]
         return pulls[-1].checks if pulls else None
+
+    def _refused_write(self, request: Request) -> Response | None:
+        """The refusal GitHub gives a write to a forbidden path; None when it is allowed.
+        Called holding the lock."""
+        if any(request.url.path.endswith(path) for path in self._forbidden):
+            return JSONResponse(
+                {"message": "Resource not accessible by personal access token"}, status_code=403
+            )
+        return None
 
     def _conditional(self, request: Request, body: Any) -> Response:
         """`body` with an ETag, or a refusal or `304` as GitHub would give instead."""
@@ -582,6 +672,7 @@ class GitHub:
 
     def _graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
+            self._follow_git()
             self.queries.append(query)
             self.points.append(points(query, variables))
             result = graphql_sync(
@@ -616,6 +707,21 @@ def _rest_issue(issue: Issue) -> dict[str, Any]:
     }
 
 
+def _tip(git: Path, branch: str) -> str | None:
+    shown = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+        cwd=git,
+        capture_output=True,
+        text=True,
+    )
+    return shown.stdout.strip() or None
+
+
+def _is_ancestor(git: Path, commit: str, of: str) -> bool:
+    asked = ["git", "merge-base", "--is-ancestor", commit, of]
+    return subprocess.run(asked, cwd=git, capture_output=True).returncode == 0
+
+
 def _check_run(state: str) -> dict[str, Any]:
     if state in ("PENDING", "EXPECTED"):
         return {"status": "in_progress", "conclusion": None}
@@ -648,6 +754,14 @@ def _resolve(source: Any, info: GraphQLResolveInfo, **args: Any) -> Any:
             return _repository(source.repo) if ours else None
         if name == "viewer":
             return _Node("User", {"login": source.github.viewer})
+        if name == "convertPullRequestToDraft":
+            # A write lands on the live repo, whatever a stale read would show.
+            number = _pull_number(args["input"]["pullRequestId"])
+            pull = source.github._live.pulls.get(number)
+            if pull is None:
+                raise _NotFound(f"Could not resolve to a node with the global id of {number}.")
+            pull.draft = True
+            return _Node("ConvertPullRequestToDraftPayload", {"pullRequest": _pull_request(pull)})
         return None
     value = source.fields[name]
     return value(**args) if callable(value) else value
@@ -664,7 +778,20 @@ def _repository(repo: _Repo) -> _Node:
             raise _NotFound(f"Could not resolve to an Issue with the number of {number}.")
         return _issue(repo, found)
 
-    return _Node("Repository", {"issue": issue, "defaultBranchRef": _Node("Ref", {"name": "main"})})
+    def pull_request(number: int) -> _Node:
+        found = repo.pulls.get(number)
+        if found is None:
+            raise _NotFound(f"Could not resolve to a PullRequest with the number of {number}.")
+        return _pull_request(found)
+
+    return _Node(
+        "Repository",
+        {
+            "issue": issue,
+            "pullRequest": pull_request,
+            "defaultBranchRef": _Node("Ref", {"name": "main"}),
+        },
+    )
 
 
 def _connection(items: list[Any], first: int | None, after: str | None) -> _Node:
@@ -756,10 +883,27 @@ def _happened(happened: Happened) -> _Node:
     return _Node(happened.typename, fields)
 
 
+def _pull_id(number: int) -> str:
+    """A pull request's global node id, opaque as GitHub's are."""
+    return f"PR_stand_in_{number}"
+
+
+def _pull_number(node_id: str) -> int:
+    return int(node_id.removeprefix("PR_stand_in_"))
+
+
 def _pull_request(pull: PullRequest) -> _Node:
+    def ready_events(
+        itemTypes: list[str] | None = None, first: int | None = None, last: int | None = None
+    ) -> _Node:
+        # The only item type asked for, and there is at most one: the latest.
+        ready = [_Node("ReadyForReviewEvent", {"createdAt": pull.ready_at})]
+        return _Node("Connection", {"nodes": ready if pull.ready_at else []})
+
     return _Node(
         "PullRequest",
         {
+            "id": _pull_id(pull.number),
             "number": pull.number,
             "headRefName": pull.head,
             "headRefOid": pull.head_commit,
@@ -774,6 +918,8 @@ def _pull_request(pull: PullRequest) -> _Node:
             "mergeCommit": _Node("Commit", {"oid": pull.merge_commit})
             if pull.merge_commit
             else None,
+            "createdAt": pull.created_at,
+            "timelineItems": ready_events,
         },
     )
 
@@ -782,7 +928,13 @@ def _resolve_type(value: _Node, *_: Any) -> str:
     return value.typename
 
 
-for _union in ("ReferencedSubject", "IssueTimelineItems", "Actor", "Assignee"):
+for _union in (
+    "ReferencedSubject",
+    "IssueTimelineItems",
+    "PullRequestTimelineItems",
+    "Actor",
+    "Assignee",
+):
     _SCHEMA.type_map[_union].resolve_type = _resolve_type  # type: ignore[attr-defined]
 
 
