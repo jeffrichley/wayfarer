@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { type Glyph, Run, State } from "../State";
+import { type Glyph, State, TestRun } from "../State";
 import styles from "./Gallery.module.css";
 
 // Every primitive in every state, on one page. A ticket that lands a widget adds
@@ -33,6 +33,7 @@ const TOKENS = [
   "--line",
   "--rule",
   "--accent-hover",
+  "--shadow",
 ];
 
 function Specimen({ name, children }: { name: string; children: ReactNode }) {
@@ -107,10 +108,10 @@ export function Gallery() {
         </div>
         <div className={styles.legend}>
           <Specimen name="run-red">
-            <Run passed={false}>Failing</Run>
+            <TestRun result="red">Failing</TestRun>
           </Specimen>
           <Specimen name="run-green">
-            <Run passed>Passing</Run>
+            <TestRun result="green">Passing</TestRun>
           </Specimen>
         </div>
       </Section>

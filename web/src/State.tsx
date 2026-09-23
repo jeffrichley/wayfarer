@@ -29,11 +29,11 @@ export function State({
   );
 }
 
-// A test run: hatched when it failed, solid when it passed.
-export function Run({ passed, children }: { passed: boolean; children: string }) {
+// A test run: hatched when it went red, solid when it went green.
+export function TestRun({ result, children }: { result: "red" | "green"; children: string }) {
   return (
     <span className="state">
-      <span className={`tr ${passed ? "tr-green" : "tr-red"}`} aria-hidden="true" />
+      <span className={`tr tr-${result}`} aria-hidden="true" />
       {children}
     </span>
   );
