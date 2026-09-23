@@ -169,6 +169,29 @@ def commit_layer(clone: Path, dockerfile: str) -> None:
     (layer / "Dockerfile").write_text(dockerfile)
 
 
+def build_layer(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
+    """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
+    commit_layer(clone, dockerfile)
+
+    assert post(f"{url}api/image/build").status_code == 202
+    output: list[str] = []
+    for kind, event in events(f"{url}api/image/build"):
+        if kind == "output":
+            output.append(event["line"])
+        else:
+            return output, event
+    pytest.fail("the build stream ended without saying how the build finished")
+
+
+@pytest.fixture
+def built_tags() -> Iterator[list[str]]:
+    """Tags a test built, removed afterwards so runs do not pile images up."""
+    tags: list[str] = []
+    yield tags
+    for built in tags:
+        subprocess.run(["docker", "image", "rm", built], capture_output=True)
+
+
 def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
 

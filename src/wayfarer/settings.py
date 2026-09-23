@@ -29,6 +29,9 @@ class Settings:
     """Tickets read per GraphQL query. Each costs about (1 + 4 x this) / 100 points,
     so 50 keeps a thirty-ticket effort to one query of 2 points, inside the 3 its
     budget allows; 100 would cost 4 (ADR-0003)."""
+    docker_timeout: float = 10.0
+    """Seconds the start gate waits for the Docker daemon to answer. One that has not
+    answered by then is as good as down, and a wedged one must not hang every start."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
 
