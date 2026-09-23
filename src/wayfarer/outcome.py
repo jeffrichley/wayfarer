@@ -57,6 +57,12 @@ class Finding(BaseModel):
     file: str | None = Field(default=None, description="The file it is in, when it is in one.")
     line: int | None = Field(default=None, description="The line it is on, when it is on one.")
 
+    @property
+    def blocks(self) -> bool:
+        """Any spec finding, whatever the session called it, and any breach of a
+        documented standard; never a judgement call on the standards axis."""
+        return self.axis is Axis.SPEC or self.kind is FindingKind.BLOCKING
+
 
 class Assumption(BaseModel):
     """A decision the session made for itself rather than stopping to ask."""

@@ -121,6 +121,9 @@ class Effort(BaseModel):
     id: str
     number: int
     title: str
+    trunk: str = Field(
+        description="The repo's default branch, which the effort meets once, when it ships."
+    )
     tickets: list[str] = Field(description="The ids of its tickets, each an item of its own.")
 
 

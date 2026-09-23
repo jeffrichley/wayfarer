@@ -202,6 +202,11 @@ export interface components {
             tickets: string[];
             /** Title */
             title: string;
+            /**
+             * Trunk
+             * @description The repo's default branch, which the effort meets once, when it ships.
+             */
+            trunk: string;
         };
         /**
          * EffortUnreadable

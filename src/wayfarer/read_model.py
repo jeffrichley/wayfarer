@@ -47,6 +47,7 @@ HELD = "wayfarer:held"
 _EFFORT = """
 query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
+    defaultBranchRef { name }
     issue(number: $effort) {
       number
       title
@@ -105,7 +106,7 @@ class Efforts:
         github: GitHub,
         store: Store,
         settings: Settings,
-        landing: Callable[[list[Ticket]], Awaitable[None]] | None = None,
+        landing: Callable[[Effort, list[Ticket]], Awaitable[None]],
     ) -> None:
         self._github = github
         self._store = store
@@ -180,8 +181,7 @@ class Efforts:
                 self._store.upsert(ticket)
             # What this read found Landing lands before the effort is sent, so a
             # page holding the effort holds a read whose landings were tried.
-            if self._landing is not None:
-                await self._landing(tickets)
+            await self._landing(effort, tickets)
             self._store.upsert(effort)
         named = {
             ticket
@@ -220,6 +220,7 @@ async def read_effort(
         id=f"effort:{number}",
         number=issue["number"],
         title=issue["title"],
+        trunk=repository["defaultBranchRef"]["name"],
         tickets=[ticket.id for ticket in tickets],
     )
     return effort, tickets
@@ -231,14 +232,14 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
-    open = node["state"] == "OPEN"
+    is_open = node["state"] == "OPEN"
     return Ticket(
         kind="ticket",
         id=f"ticket:{number}",
         number=number,
         title=node["title"],
         state=derive_state(
-            open=open,
+            open=is_open,
             completed=node["stateReason"] in ("COMPLETED", None),
             labels=labels,
             assignees=assignees,
@@ -248,7 +249,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
             building=False,
             auto_merge=auto_merge,
         ),
-        open=open,
+        open=is_open,
         labels=labels,
         assignees=assignees,
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],

@@ -22,11 +22,11 @@ import logging
 from collections.abc import Iterable
 
 from wayfarer.github import GitHub, GitHubError
-from wayfarer.models import Ticket, TicketState
-from wayfarer.outcome import Axis, Finding, FindingKind, Outcome
+from wayfarer.models import Effort, Ticket, TicketState
+from wayfarer.outcome import Axis, Finding, Outcome
 from wayfarer.read_model import HELD
 
-__all__ = ["LANDED_MARKER", "PullRequestGate", "blocks", "body", "opens_ready"]
+__all__ = ["LANDED_MARKER", "PullRequestGate", "body", "opens_ready"]
 
 _log = logging.getLogger(__name__)
 
@@ -38,14 +38,9 @@ LANDED_MARKER = "<!-- wayfarer:landed -->"
 _MERGE_METHOD = "merge"
 
 
-def blocks(finding: Finding) -> bool:
-    """Any spec finding, and any breach of a documented standard; never a judgement call."""
-    return finding.axis is Axis.SPEC or finding.kind is FindingKind.BLOCKING
-
-
 def opens_ready(outcome: Outcome) -> bool:
     """Finished with nothing blocking. Everything else, every `not_done` too, is a draft."""
-    return outcome.status == "done" and not any(blocks(f) for f in outcome.open_findings)
+    return outcome.status == "done" and not any(f.blocks for f in outcome.open_findings)
 
 
 def body(ticket: int, outcome: Outcome) -> str:
@@ -67,7 +62,7 @@ def body(ticket: int, outcome: Outcome) -> str:
 
 
 def _finding(finding: Finding) -> str:
-    kind = "Blocking" if blocks(finding) else "Judgement call"
+    kind = "Blocking" if finding.blocks else "Judgement call"
     where = ""
     if finding.file is not None:
         at = finding.file if finding.line is None else f"{finding.file}:{finding.line}"
@@ -108,12 +103,16 @@ class PullRequestGate:
         number: int = opened["number"]
         return number
 
-    async def land(self, tickets: Iterable[Ticket]) -> None:
+    async def land(self, effort: Effort, tickets: Iterable[Ticket]) -> None:
         """Merge every Landing ticket's pull request, and close every ticket whose pull
         request has merged. Called after each read; a refusal waits for the next."""
         for ticket in tickets:
             pull = ticket.pull_request
-            if pull is None or self._refused.get(ticket.number) == ticket:
+            # The trunk meets an effort once, through a person's review of the
+            # effort branch, so a ticket's PR into it never lands by itself.
+            if pull is None or pull.base == effort.trunk:
+                continue
+            if self._refused.get(ticket.number) == ticket:
                 continue
             self._refused.pop(ticket.number, None)
             try:

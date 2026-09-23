@@ -68,7 +68,8 @@ type Query {
 
 type RateLimit { cost: Int! limit: Int! remaining: Int! }
 
-type Repository { issue(number: Int!): Issue }
+type Repository { issue(number: Int!): Issue defaultBranchRef: Ref }
+type Ref { name: String! }
 
 enum IssueState { OPEN CLOSED }
 enum IssueStateReason { COMPLETED NOT_PLANNED DUPLICATE REOPENED }
@@ -544,7 +545,7 @@ def _repository(repo: _Repo) -> _Node:
             raise _NotFound(f"Could not resolve to an Issue with the number of {number}.")
         return _issue(repo, found)
 
-    return _Node("Repository", {"issue": issue})
+    return _Node("Repository", {"issue": issue, "defaultBranchRef": _Node("Ref", {"name": "main"})})
 
 
 def _connection(items: list[Any], first: int | None, after: str | None) -> _Node:

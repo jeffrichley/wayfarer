@@ -198,3 +198,20 @@ def test_a_merge_github_refuses_is_not_retried_until_the_pull_request_changes(
         pull.head_commit = "f" * 40
         post(f"{url}api/efforts/{spec.number}/read")
         _landed(page, ticket)
+
+
+def test_a_ticket_pull_request_into_the_trunk_is_never_merged(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Widgets", tickets=1)
+    # The trunk meets an effort once, through a person's review, never a ticket's.
+    github.pull_request(ticket, base="main")
+    url = wayfarer.start().url()
+
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{spec.number}/read")
+        effort = page.item(f"effort:{spec.number}")
+
+    assert effort["trunk"] == "main"
+    assert _merges(github) == []
+    assert ticket.state == "OPEN"
