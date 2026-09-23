@@ -137,7 +137,7 @@ def test_a_long_line_wraps_without_moving_the_gutter(gallery: Page) -> None:
     assert max(heights) > 2 * min(heights), "the long line did not wrap"
     # Every column starts where it starts on every other line.
     columns = [
-        {tuple(round(v) for v in row.locator("td").nth(c).evaluate(_X)) for row in rows}
+        {tuple(round(v) for v in row.locator("td").nth(c).evaluate(_COLUMN_BOX)) for row in rows}
         for c in range(4)
     ]
     assert [len(column) for column in columns] == [1, 1, 1, 1]
@@ -147,7 +147,7 @@ def test_a_long_line_wraps_without_moving_the_gutter(gallery: Page) -> None:
     assert len({round(top) for top in tops if top is not None}) == 1, tops
 
 
-_X = "e => { const r = e.getBoundingClientRect(); return [r.x, r.width]; }"
+_COLUMN_BOX = "e => { const r = e.getBoundingClientRect(); return [r.x, r.width]; }"
 # Where a cell's first line of text starts, not where its box does.
 _TEXT_TOP = """e => {
     const range = document.createRange();

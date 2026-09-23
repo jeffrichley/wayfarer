@@ -3,7 +3,7 @@ import { type ReactNode, useId, useState } from "react";
 import styles from "./Diff.module.css";
 
 // What a reviewer said about a line: who said it, and what.
-export type Finding = { by: string; children: ReactNode };
+export type Finding = { by: string; body: ReactNode };
 
 // One line of a file's change. A line with only a new number was added, one with
 // only an old number was removed, and one with both is context around them.
@@ -44,34 +44,37 @@ function label(path: string): string {
 // A change touches at least one file.
 export function Diff({ files }: { files: [FileDiff, ...FileDiff[]] }) {
   const id = useId();
-  const [open, setOpen] = useState(() =>
+  const [chosen, choose] = useState(() =>
     Math.max(
       0,
       files.findIndex((file) => file.lines.some((line) => line.finding)),
     ),
   );
+  // A list that shrinks under the choice falls back to its first file, so one
+  // tab is always the selected one.
+  const open = chosen < files.length ? chosen : 0;
   const file = files[open] ?? files[0];
 
   return (
     <>
       <div className={styles.tabs} role="tablist" aria-label="Changed files">
-        {files.map((f, i) => {
-          const removed = count(f, "del");
+        {files.map((each, i) => {
+          const removed = count(each, "del");
           return (
             <button
-              key={f.path}
+              key={each.path}
               type="button"
               role="tab"
               id={`${id}-${i}`}
               aria-controls={`${id}-panel`}
               aria-selected={i === open}
               className={styles.tab}
-              title={f.path}
-              onClick={() => setOpen(i)}
+              title={each.path}
+              onClick={() => choose(i)}
             >
-              {label(f.path)}
+              {label(each.path)}
               <span className={styles.d}>
-                {`+${count(f, "add")}${removed ? ` −${removed}` : ""}`}
+                {`+${count(each, "add")}${removed ? ` −${removed}` : ""}`}
               </span>
             </button>
           );
@@ -81,11 +84,11 @@ export function Diff({ files }: { files: [FileDiff, ...FileDiff[]] }) {
         <table className={styles.diff}>
           <tbody>
             {file.lines.flatMap((line, i) => {
-              const k = kind(line);
-              const [sign, word] = SIGNS[k];
+              const change = kind(line);
+              const [sign, word] = SIGNS[change];
               const row = (
                 // Keyed by place: a file's lines run in order, and two may read alike.
-                <tr key={i} className={styles[k]}>
+                <tr key={i} className={styles[change]}>
                   <td className={styles.ln}>{line.old ?? ""}</td>
                   <td className={styles.ln}>{line.new ?? ""}</td>
                   <td className={styles.sg} aria-label={word}>
@@ -101,7 +104,7 @@ export function Diff({ files }: { files: [FileDiff, ...FileDiff[]] }) {
                     <tr key={`${i}-finding`} className={styles.note}>
                       <td colSpan={4}>
                         <span className={styles.by}>{line.finding.by}</span>
-                        <p>{line.finding.children}</p>
+                        <p>{line.finding.body}</p>
                       </td>
                     </tr>,
                   ]

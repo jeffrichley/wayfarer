@@ -150,7 +150,7 @@ const PEAK_TEST: FileDiff = {
           ...line,
           finding: {
             by: "/code-review · Spec axis",
-            children: (
+            body: (
               <>
                 Only checks that <code>at</code> exists. Assert the clipped fixture’s known peak time so
                 story 4 is actually proven.
