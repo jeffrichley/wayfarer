@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/efforts/{number}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Effort Stream */
+        get: operations["effort_stream_api_efforts__number__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gate": {
         parameters: {
             query?: never;
@@ -272,6 +289,8 @@ export interface components {
         PullRequest: {
             /** Approved */
             approved: boolean;
+            /** Branch */
+            branch: string;
             checks: components["schemas"]["Checks"] | null;
             /** Draft */
             draft: boolean;
@@ -348,6 +367,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Effort"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    effort_stream_api_efforts__number__stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */

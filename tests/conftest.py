@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -86,7 +86,7 @@ class Launcher:
         self._recorder.write_text(_RECORDER)
         self._instances: list[Instance] = []
 
-    def start(self, *args: str, env: dict[str, str | None] | None = None) -> Instance:
+    def start(self, *args: str, env: Mapping[str, str | None] | None = None) -> Instance:
         """Run `wayfarer`; `env` overrides the environment, and `None` unsets a name."""
         opened = self._scratch / f"opened-{len(self._instances)}.txt"
         environment = {
@@ -212,6 +212,18 @@ def events(url: str, timeout: float = 900.0) -> Iterator[tuple[str, Any]]:
             if line.startswith("data:"):
                 payload = json.loads(line.removeprefix("data:"))
                 yield payload["kind"], payload
+
+
+def stream(url: str, timeout: float = 10.0) -> Generator[Any]:
+    """Each server-sent event's payload at `url`, read while the stream stays open.
+
+    Close the iterator to hang up, as a page does when it goes away.
+    """
+    with httpx.stream("GET", url, timeout=timeout) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                yield json.loads(line.removeprefix("data:"))
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

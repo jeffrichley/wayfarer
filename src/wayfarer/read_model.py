@@ -145,6 +145,7 @@ def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | 
     rollup = chosen["statusCheckRollup"]
     return PullRequest(
         number=chosen["number"],
+        branch=chosen["headRefName"],
         draft=chosen["isDraft"],
         merged=chosen["state"] == "MERGED",
         checks=_CHECKS[rollup["state"]] if rollup else None,
