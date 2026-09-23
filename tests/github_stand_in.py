@@ -17,6 +17,8 @@ would, and it can be made to misbehave on purpose:
 - **pushed to**: given the repo's git remote, a bare repo, it reads each pull
   request's head from its branch there, and marks one merged once its head is on
   its base, as GitHub does for a push that lands a pull request's commits.
+- **raced**: a person's change lands just after Wayfarer's write, before its
+  read-back.
 
 Every REST request is logged in `requests`, so a test can see the poll's rhythm.
 
@@ -64,6 +66,8 @@ from graphql import (
 )
 
 TOKEN = "stand-in-token"
+# Whose token it is: the person Wayfarer writes to GitHub as.
+LOGIN = "ada"
 
 _SCHEMA = build_schema("""
 type Query {
@@ -234,6 +238,7 @@ class GitHub:
         self.poll_interval: int | None = None
         self._refusals: list[Refusal] = []
         self._forbidden: list[str] = []
+        self._meanwhile: list[Callable[[], object]] = []
         self.api = ""
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -339,10 +344,20 @@ class GitHub:
             self._refusals += refusals
 
     def forbid(self, path: str) -> None:
-        """Refuse every read of paths ending in `path`, as GitHub refuses a token
-        without the permission that path needs."""
+        """Refuse every read of paths ending in `path`, and every claim, as GitHub
+        refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
+
+    def meanwhile(self, change: Callable[[], object]) -> None:
+        """Make `change` just after Wayfarer's next write, as a person racing it would."""
+        with self._lock:
+            self._meanwhile.append(change)
+
+    def _raced(self) -> None:
+        """Called holding the lock, after a write."""
+        while self._meanwhile:
+            self._meanwhile.pop(0)()
 
     def _visible(self) -> _Repo:
         return self._frozen if self._frozen is not None else self._live
@@ -424,6 +439,10 @@ class GitHub:
         async def status(owner: str, name: str, ref: str, request: Request) -> Response:
             return self._conditional(request, {"state": "pending", "total_count": 0})
 
+        @app.get("/user")
+        async def user() -> Response:
+            return JSONResponse({"login": LOGIN})
+
         @app.post("/repos/{owner}/{name}/issues/{number}/labels")
         async def label(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
@@ -470,9 +489,20 @@ class GitHub:
         async def assign(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
             with self._lock:
+                if refused := self._refused_write(request):
+                    return refused
                 issue = self._live.issues[number]
                 issue.assignees += [a for a in body["assignees"] if a not in issue.assignees]
+                self._raced()
                 return JSONResponse(_rest_issue(issue), status_code=201)
+
+        @app.delete("/repos/{owner}/{name}/issues/{number}/assignees")
+        async def unassign(owner: str, name: str, number: int, request: Request) -> Response:
+            body = await request.json()
+            with self._lock:
+                issue = self._live.issues[number]
+                issue.assignees = [a for a in issue.assignees if a not in body["assignees"]]
+                return JSONResponse(_rest_issue(issue))
 
         return app
 
@@ -480,6 +510,15 @@ class GitHub:
         with self._lock:
             pulls = [p for p in self._visible().pulls.values() if p.head == ref]
         return pulls[-1].checks if pulls else None
+
+    def _refused_write(self, request: Request) -> Response | None:
+        """The refusal GitHub gives a write to a forbidden path; None when it is allowed.
+        Called holding the lock."""
+        if any(request.url.path.endswith(path) for path in self._forbidden):
+            return JSONResponse(
+                {"message": "Resource not accessible by personal access token"}, status_code=403
+            )
+        return None
 
     def _conditional(self, request: Request, body: Any) -> Response:
         """`body` with an ETag, or a refusal or `304` as GitHub would give instead."""
