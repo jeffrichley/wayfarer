@@ -41,7 +41,8 @@ def test_a_page_opened_later_gets_what_is_already_known_in_its_snapshot(
     url = wayfarer.start().url()
     with Stream(url) as first:
         post(f"{url}api/efforts/{spec.number}/read")
-        first.item(f"effort:{spec.number}")
+        # Its cascade, armed or not, is said last.
+        first.item(f"cascade:{spec.number}")
 
     with Stream(url) as later:
         snapshot = later.next()
@@ -50,6 +51,7 @@ def test_a_page_opened_later_gets_what_is_already_known_in_its_snapshot(
     assert {item["id"] for item in snapshot["items"]} == {
         f"effort:{spec.number}",
         f"ticket:{ticket.number}",
+        f"cascade:{spec.number}",
     }
 
 
@@ -75,7 +77,7 @@ def test_a_change_to_one_ticket_sends_that_ticket_alone(wayfarer: Launcher, gith
     url = wayfarer.start().url()
     with Stream(url) as page:
         post(f"{url}api/efforts/{spec.number}/read")
-        page.item(f"effort:{spec.number}")
+        page.item(f"cascade:{spec.number}")
 
         changed.labels.append(HELD)
         before = len(page.received)
@@ -86,8 +88,10 @@ def test_a_change_to_one_ticket_sends_that_ticket_alone(wayfarer: Launcher, gith
         page.until(lambda items: f"effort:{other.number}" in items)
         news = page.received[before:]
 
+    # And its cascade, since a held ticket is no longer one it could take.
     assert [event["item"]["id"] for event in news] == [
         f"ticket:{changed.number}",
+        f"cascade:{spec.number}",
         f"effort:{other.number}",
     ]
 
@@ -130,8 +134,8 @@ def test_a_dropped_connection_resumes_from_the_last_event_seen_with_no_gap_and_n
     with Stream(url) as watcher:
         page = Stream(url)
         post(f"{url}api/efforts/{spec.number}/read")
-        page.item(f"effort:{spec.number}")
-        watcher.item(f"effort:{spec.number}")
+        page.item(f"cascade:{spec.number}")
+        watcher.item(f"cascade:{spec.number}")
         page.close()
         dropped_at = page.last_event_id
 
@@ -139,7 +143,7 @@ def test_a_dropped_connection_resumes_from_the_last_event_seen_with_no_gap_and_n
         first.labels.append(HELD)
         second.parent = None
         post(f"{url}api/efforts/{spec.number}/read")
-        watcher.until(lambda items: f"ticket:{second.number}" not in items)
+        watcher.item(f"cascade:{spec.number}", takeable=0)
         missed = watcher.received[watcher.ids.index(dropped_at) + 1 :]
 
         with Stream(url, last_event_id=dropped_at) as resumed:
@@ -153,7 +157,7 @@ def test_a_dropped_connection_resumes_from_the_last_event_seen_with_no_gap_and_n
             post(f"{url}api/efforts/{spec.number}/read")
             news = resumed.until(lambda items: len(items[f"effort:{spec.number}"]["tickets"]) == 2)
 
-    assert [event["kind"] for event in missed] == ["upsert", "upsert", "removal"]
+    assert [event["kind"] for event in missed] == ["upsert", "upsert", "removal", "upsert"]
     assert [event["item"]["id"] for event in news] == [
         f"ticket:{second.number}",
         f"effort:{spec.number}",

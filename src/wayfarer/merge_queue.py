@@ -117,7 +117,8 @@ class MergeQueue:
     `sandbox` is where a re-test runs, asked afresh for each candidate; None when
     there is nowhere to run one, and then the line waits with nothing lost.
     `resolvers` runs a conflicted candidate's resolver session, asked afresh the
-    same way, through `submit`; `stream` carries the item a red effort branch raises.
+    same way, through `submit`; `stream` carries the item a red effort branch raises,
+    and `pause` pauses the effort's cascade as it is raised.
     """
 
     def __init__(
@@ -130,6 +131,7 @@ class MergeQueue:
         stream: Store,
         resolvers: Callable[[], Sessions | None] = lambda: None,
         submit: Submit = lambda spec: spec.perform(),
+        pause: Callable[[int, str], None] = lambda effort, why: None,
     ) -> None:
         self._clone = clone
         self._github = github
@@ -138,6 +140,9 @@ class MergeQueue:
         self._stream = stream
         self._resolvers = resolvers
         self._submit = submit
+        self._pause = pause
+        # Each effort branch's effort, whose cascade a failure while landing pauses.
+        self._effort_of: dict[str, int] = {}
         self.working: dict[str, asyncio.Task[None]] = {}
         """The work each effort branch's line has in hand, by the branch."""
         self.resolving: dict[int, asyncio.Task[None]] = {}
@@ -181,6 +186,7 @@ class MergeQueue:
             lines[ticket.pull_request.base].append(ticket)
         places: dict[int, int] = {}
         for branch, waiting in lines.items():
+            self._effort_of[branch] = effort.number
             places |= {ticket.number: place for place, ticket in enumerate(waiting, 1)}
             if branch not in self.working:
                 self._start(branch, waiting)
@@ -420,6 +426,7 @@ class MergeQueue:
             _log.warning("Ticket #%s's resolver could not run.", ticket.number, exc_info=True)
             self._set_aside.pop(ticket.number, None)
             self._raise(
+                pull.base,
                 _unresolved_id(pull.base),
                 f"A resolver session could not start on `{pull.base}`, so its line waits.",
                 check=f"A resolver session can start on `{pull.base}`",
@@ -476,6 +483,7 @@ class MergeQueue:
         branch moves."""
         self._red[branch] = head
         self._raise(
+            branch,
             _red_id(branch),
             f"The effort branch's tests are red: `{branch}` at {head[:7]} is red on its own, "
             "so nothing lands on it until that is fixed.",
@@ -483,9 +491,12 @@ class MergeQueue:
             detail=bare.output or "`wf-test` was red and said nothing.",
         )
 
-    def _raise(self, id: str, reason: str, *, check: str, detail: str) -> None:
+    def _raise(self, branch: str, id: str, reason: str, *, check: str, detail: str) -> None:
         """One Needs you item for a failure of the environment while landing, the same
-        shape a failed start gate raises. Raising it again changes nothing."""
+        shape a failed start gate raises, which pauses the effort's cascade as a failed
+        gate does (#21, decision 8). Raising it again changes nothing."""
+        if self._stream.get(id) is None and branch in self._effort_of:
+            self._pause(self._effort_of[branch], reason)
         failed = [GateCheck(name=check, passed=False, detail=detail)]
         self._stream.upsert(
             EnvironmentFailure(kind="environment", id=id, reason=reason, failed=failed)

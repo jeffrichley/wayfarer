@@ -204,6 +204,8 @@ class Driven:
                 stream=self.stream,
             )
         self.submitted: list[RunSpec[Outcome]] = []
+        self.paused: list[int] = []
+        """Each effort whose cascade the queue paused, once a pause."""
         self.queue = MergeQueue(
             repos.clone,
             self._client,
@@ -212,6 +214,7 @@ class Driven:
             stream=self.stream,
             resolvers=lambda: sessions,
             submit=self._submit,
+            pause=lambda effort, why: self.paused.append(effort),
         )
 
     def _submit(self, spec: RunSpec[Outcome]) -> Awaitable[RunResult[Outcome]]:
@@ -427,8 +430,9 @@ def test_a_red_effort_branch_raises_one_item_and_blames_no_candidate_until_it_is
     repos.pull(second, "two.py")
     repos.push_to_effort("red", "broken\n")
 
+    driven = Driven(repos, spec)
+
     async def wait_then_land() -> tuple[dict[int, Ticket], list[str], list[str]]:
-        driven = Driven(repos, spec)
         for _ in range(4):
             await driven.read()
             await driven.settled()
@@ -450,6 +454,8 @@ def test_a_red_effort_branch_raises_one_item_and_blames_no_candidate_until_it_is
     ]
     [reason] = raised
     assert f"`{_EFFORT_BRANCH}`" in reason
+    # Its cascade paused once, however many reads found the branch still red.
+    assert driven.paused == [spec.number]
     # Each says only that it landed: neither was blamed for the branch.
     assert [len(first.comments), len(second.comments)] == [1, 1]
     assert LANDED_MARKER in first.comments[0] and LANDED_MARKER in second.comments[0]

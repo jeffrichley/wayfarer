@@ -4,9 +4,9 @@ A run really runs — a real workspace, real git, real Outcome validation, real
 hooks — with Waystation's token-free `ScriptedAgent` in place of a paid model
 and its `NoSandbox` in place of Docker, so nothing here spends anything.
 
-No HTTP command starts a session yet: arming a cascade is the only way one ever
-will (#37). Until then the seam is the session's own interface, the Waystation
-run spec the cascade will submit.
+Arming a cascade is the only way a session starts (`test_the_cascade.py`); here
+the seam is the session's own interface, the Waystation run spec the cascade
+submits, so what one session records is checked without a cascade around it.
 """
 
 from __future__ import annotations

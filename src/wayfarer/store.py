@@ -5,7 +5,9 @@ files. It never holds a ticket's state, which is GitHub's (ADR-0002).
 
 A session is recorded the moment it starts, because Waystation mints the run's
 id and writes it down nowhere else: a session that never ended is then still
-known by the row with no end.
+known by the row with no end. Those rows are also how a ticket is started
+automatically at most once. An armed cascade is its effort and whether it is
+paused.
 """
 
 from __future__ import annotations
@@ -30,7 +32,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     ended TEXT,
     event_file TEXT NOT NULL,
     outcome TEXT
-)
+);
+CREATE TABLE IF NOT EXISTS cascades (
+    effort INTEGER PRIMARY KEY,
+    paused INTEGER NOT NULL
+);
 """
 
 
@@ -72,7 +78,7 @@ class Store:
         directory.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(directory / "wayfarer.sqlite3", isolation_level=None)
         connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute(_SCHEMA)
+        connection.executescript(_SCHEMA)
         return cls(connection, directory)
 
     @classmethod
@@ -122,3 +128,37 @@ class Store:
             )
             for run_id, ticket, purpose, started, ended, event_file, outcome in rows
         ]
+
+    def built(self) -> set[int]:
+        """Every ticket a build session has started on, which is its one automatic start."""
+        rows = self._db.execute(
+            "SELECT DISTINCT ticket FROM sessions WHERE purpose = ?", (Purpose.BUILD.value,)
+        )
+        return {ticket for (ticket,) in rows}
+
+    def cascades(self) -> dict[int, bool]:
+        """Every armed cascade's effort, and whether it is paused."""
+        rows = self._db.execute("SELECT effort, paused FROM cascades ORDER BY effort")
+        return {effort: bool(paused) for effort, paused in rows}
+
+    def arm(self, effort: int) -> None:
+        """Arm `effort`'s cascade, running; arming a paused one resumes it."""
+        self._db.execute(
+            "INSERT INTO cascades (effort, paused) VALUES (?, 0) "
+            "ON CONFLICT (effort) DO UPDATE SET paused = 0",
+            (effort,),
+        )
+
+    def pause(self, effort: int) -> None:
+        """Pause `effort`'s cascade; one not armed stays unarmed."""
+        self._db.execute("UPDATE cascades SET paused = 1 WHERE effort = ?", (effort,))
+
+    def resume(self, effort: int) -> None:
+        """Resume `effort`'s cascade; one not armed stays unarmed."""
+        self._db.execute("UPDATE cascades SET paused = 0 WHERE effort = ?", (effort,))
+
+    def pause_all(self) -> None:
+        self._db.execute("UPDATE cascades SET paused = 1")
+
+    def disarm(self, effort: int) -> None:
+        self._db.execute("DELETE FROM cascades WHERE effort = ?", (effort,))

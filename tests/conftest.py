@@ -10,25 +10,32 @@ launched from, as a person's would be.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+import uvicorn
+from fastapi import FastAPI
 from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
 from specimens import REFERENCE, VIEWPORT
+from wayfarer.stream import Store
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
 _GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
@@ -103,6 +110,8 @@ class Launcher:
             # suite on the machine for the default one.
             "WAYFARER_PORT": "0",
             "GH_TOKEN": TOKEN,
+            # Its store and sessions' files, kept out of the person's own.
+            "WAYFARER_DATA_DIR": str(self._scratch / "data"),
         }
         for name, value in (env or {}).items():
             if value is None:
@@ -131,6 +140,58 @@ class Launcher:
                 except subprocess.TimeoutExpired:
                     instance.process.kill()
                     instance.process.wait(timeout=15)
+
+
+@contextmanager
+def served(app: FastAPI, stream: Store) -> Iterator[str]:
+    """Serve `app`, built in this process, until the block ends; its URL.
+
+    Only for what the console script cannot be given: a session that runs outside
+    Docker, which Wayfarer itself never offers (ADR-0005).
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    url = f"http://127.0.0.1:{sock.getsockname()[1]}/"
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    loops: list[asyncio.AbstractEventLoop] = []
+
+    def serve() -> None:
+        # As `asyncio.run` does, down to cancelling what is left; its loop is held
+        # here, so stopping can reach into it from this thread.
+        with asyncio.Runner() as runner:
+            loops.append(runner.get_loop())
+            runner.run(server.serve(sockets=[sock]))
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not (server.started and loops):
+        assert thread.is_alive() and time.monotonic() < deadline, "wayfarer never started"
+        time.sleep(0.01)
+    try:
+        yield url
+    finally:
+        # As the console script stops: every page's stream ends, then the server.
+        # The stream belongs to the server's loop, so it is closed there.
+        [loop] = loops
+        loop.call_soon_threadsafe(stream.close)
+        server.should_exit = True
+        thread.join(timeout=30)
+        assert not thread.is_alive(), f"wayfarer never stopped, awaiting:\n{_awaiting(loop)}"
+
+
+def _awaiting(loop: asyncio.AbstractEventLoop) -> str:
+    """What each task on `loop` is waiting on, innermost last: why a stop hangs."""
+    lines = []
+    for task in asyncio.all_tasks(loop):
+        lines.append(repr(task))
+        awaited: Any = task.get_coro()
+        while awaited is not None:
+            frame = getattr(awaited, "cr_frame", None) or getattr(awaited, "ag_frame", None)
+            where = f"{frame.f_code.co_filename}:{frame.f_lineno}" if frame else ""
+            lines.append(f"    {type(awaited).__name__} {where}")
+            awaited = getattr(awaited, "cr_await", None) or getattr(awaited, "ag_await", None)
+    return "\n".join(lines)
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -244,10 +305,17 @@ class Stream:
     """One page's stream, applied as the browser applies it: replaced by id, never merged.
 
     `timeout` is per read; a stream carrying an image build needs a generous one,
-    because a build pauses while Docker downloads.
+    because a build pauses while Docker downloads. `patience`, when given, bounds
+    each wait in all, for a stream busy enough that no single read ever times out.
     """
 
-    def __init__(self, url: str, last_event_id: str | None = None, timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        url: str,
+        last_event_id: str | None = None,
+        timeout: float = 20.0,
+        patience: float | None = None,
+    ) -> None:
         headers = {} if last_event_id is None else {"Last-Event-ID": last_event_id}
         self._opened = httpx.stream("GET", f"{url}api/events", headers=headers, timeout=timeout)
         response = self._opened.__enter__()
@@ -256,6 +324,7 @@ class Stream:
         self.items: Items = {}
         self.received: list[dict[str, Any]] = []
         self.ids: list[str] = []
+        self._patience = patience
 
     def __enter__(self) -> Stream:
         return self
@@ -271,10 +340,16 @@ class Stream:
     def last_event_id(self) -> str:
         return self.ids[-1]
 
-    def next(self) -> dict[str, Any]:
-        """The next event, once it is applied."""
+    def next(self, deadline: float | None = None) -> dict[str, Any]:
+        """The next event, once it is applied; failing past `deadline` (monotonic).
+
+        The deadline is checked on every line, keep-alive pings included, since a
+        quiet stream pings often enough that no read ever times out.
+        """
         event: dict[str, Any] | None = None
         for line in self._lines:
+            if deadline is not None and time.monotonic() > deadline:
+                pytest.fail(f"the page never showed it; it holds {self.items}")
             if line.startswith("data:"):
                 event = json.loads(line.removeprefix("data:"))
             elif line.startswith("id:"):
@@ -295,8 +370,9 @@ class Stream:
     def until(self, arrived: Callable[[Items], bool]) -> list[dict[str, Any]]:
         """Read until `arrived` holds of what the page holds; the events that took."""
         start = len(self.received)
+        deadline = None if self._patience is None else time.monotonic() + self._patience
         while not arrived(self.items):
-            self.next()
+            self.next(deadline)
         return self.received[start:]
 
     def item(self, id: str, **fields: Any) -> dict[str, Any]:
