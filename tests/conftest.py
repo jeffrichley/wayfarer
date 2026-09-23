@@ -10,6 +10,7 @@ launched from, as a person's would be.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -152,20 +153,45 @@ def served(app: FastAPI, stream: Store) -> Iterator[str]:
     sock.bind(("127.0.0.1", 0))
     url = f"http://127.0.0.1:{sock.getsockname()[1]}/"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
-    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    loops: list[asyncio.AbstractEventLoop] = []
+
+    def serve() -> None:
+        # As `asyncio.run` does, down to cancelling what is left; its loop is held
+        # here, so stopping can reach into it from this thread.
+        with asyncio.Runner() as runner:
+            loops.append(runner.get_loop())
+            runner.run(server.serve(sockets=[sock]))
+
+    thread = threading.Thread(target=serve, daemon=True)
     thread.start()
     deadline = time.monotonic() + 10
-    while not server.started:
+    while not (server.started and loops):
         assert thread.is_alive() and time.monotonic() < deadline, "wayfarer never started"
         time.sleep(0.01)
     try:
         yield url
     finally:
         # As the console script stops: every page's stream ends, then the server.
-        stream.close()
+        # The stream belongs to the server's loop, so it is closed there.
+        [loop] = loops
+        loop.call_soon_threadsafe(stream.close)
         server.should_exit = True
         thread.join(timeout=30)
-        assert not thread.is_alive(), "wayfarer never stopped"
+        assert not thread.is_alive(), f"wayfarer never stopped, awaiting:\n{_awaiting(loop)}"
+
+
+def _awaiting(loop: asyncio.AbstractEventLoop) -> str:
+    """What each task on `loop` is waiting on, innermost last: why a stop hangs."""
+    lines = []
+    for task in asyncio.all_tasks(loop):
+        lines.append(repr(task))
+        awaited: Any = task.get_coro()
+        while awaited is not None:
+            frame = getattr(awaited, "cr_frame", None) or getattr(awaited, "ag_frame", None)
+            where = f"{frame.f_code.co_filename}:{frame.f_lineno}" if frame else ""
+            lines.append(f"    {type(awaited).__name__} {where}")
+            awaited = getattr(awaited, "cr_await", None) or getattr(awaited, "ag_await", None)
+    return "\n".join(lines)
 
 
 def _git(cwd: Path, *args: str) -> None:

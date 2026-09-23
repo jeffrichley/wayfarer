@@ -30,12 +30,16 @@ class Queue:
         self._slots = asyncio.Semaphore(max_concurrency) if max_concurrency else None
         # The loop holds tasks weakly, so each is held here until it ends.
         self._runs: set[asyncio.Task[Any]] = set()
+        self._stopped = False
 
     def submit[T](self, spec: RunSpec[T]) -> asyncio.Task[RunResult[T]]:
-        """Run `spec` once a slot is free; its task, to await or cancel."""
+        """Run `spec` once a slot is free; its task, to await or cancel. Once the
+        queue has stopped, the task is cancelled before the run begins."""
         run = asyncio.create_task(self._run(spec))
         self._runs.add(run)
         run.add_done_callback(self._runs.discard)
+        if self._stopped:
+            run.cancel()
         return run
 
     async def _run[T](self, spec: RunSpec[T]) -> RunResult[T]:
@@ -49,6 +53,7 @@ class Queue:
     async def __aexit__(self, *exc: object) -> None:
         """Stop every run, and return once each has wound down, its work kept
         (Waystation ADR-0017)."""
+        self._stopped = True
         runs = list(self._runs)
         for run in runs:
             run.cancel()

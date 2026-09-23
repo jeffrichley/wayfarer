@@ -109,10 +109,12 @@ def create_app(
             task.add_done_callback(_report_death)
         async with runs:
             yield
-        for task in tasks:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+            # The reads stop first, since a read may start a session, and only then
+            # do the sessions, so none starts after the rest were stopped.
+            for task in tasks:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
         await queue.stop()
         cascades.close()
 
