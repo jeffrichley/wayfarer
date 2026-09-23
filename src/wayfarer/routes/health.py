@@ -10,8 +10,6 @@ from wayfarer.routes import Wired
 router = APIRouter()
 
 
-# Handlers are async so they run on the loop every agent run shares (ADR-0001),
-# not in a thread pool beside it.
 @router.get("/api/health")
-async def health(wired: Wired) -> Health:
-    return Health(version=wired.running)
+async def health(services: Wired) -> Health:
+    return Health(version=services.running)

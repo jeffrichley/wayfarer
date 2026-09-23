@@ -10,6 +10,6 @@ router = APIRouter()
 
 
 @router.post("/api/tickets/{number}/stop", status_code=202)
-async def stop(number: int, wired: Wired) -> Response:
+async def stop(number: int, services: Wired) -> Response:
     """Stop the ticket's session, keeping its work, and hold the ticket."""
-    return wired.accept(wired.cascades.stop(number))
+    return services.accept(services.cascades.stop(number))

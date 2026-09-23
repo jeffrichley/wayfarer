@@ -2,7 +2,9 @@
 
 What a handler needs reaches it as `Wired`, the services `create_app` built and
 left on `app.state`, the way FastAPI's "bigger applications" guide has it, so a
-feature's endpoints add a module here and touch no other handler.
+feature's endpoints add a module here and touch no other handler. Handlers are
+async so they run on the loop every agent run shares (ADR-0001), not in a thread
+pool beside it.
 """
 
 from __future__ import annotations
@@ -23,16 +25,17 @@ from wayfarer.stream import Store
 __all__ = ["Services", "Wired"]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Services:
-    """What the routers reach: the services one app runs on."""
+    """What the routers reach: the services one app runs on, one sorted line each,
+    so two tickets adding a service insert at different places."""
 
-    running: str
-    store: Store
-    efforts: Efforts
     cascades: Cascades
+    efforts: Efforts
     images: Images
+    running: str
     start_gate: StartGate
+    store: Store
     # A command's work outlives its request, and asyncio keeps only a weak
     # reference to a task, so each is held here until it is done.
     working: set[asyncio.Task[None]] = field(default_factory=set)
@@ -47,6 +50,7 @@ class Services:
 
 
 def _services(request: Request) -> Services:
+    """The services `create_app` left on the app serving `request`."""
     services: Services = request.app.state.services
     return services
 

@@ -10,10 +10,10 @@ router = APIRouter()
 
 
 @router.post("/api/gate/read", status_code=202)
-async def read_gate(wired: Wired) -> Response:
+async def read_gate(services: Wired) -> Response:
     """Run the start gate's six checks afresh. Looking raises nothing for a person."""
 
     async def read() -> None:
-        wired.store.upsert(await wired.start_gate.status())
+        services.store.upsert(await services.start_gate.status())
 
-    return wired.accept(read())
+    return services.accept(read())

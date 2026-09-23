@@ -137,7 +137,14 @@ def create_app(
         cascades.close()
 
     app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)
-    app.state.services = Services(running, store, efforts, cascades, images, start_gate)
+    app.state.services = Services(
+        cascades=cascades,
+        efforts=efforts,
+        images=images,
+        running=running,
+        start_gate=start_gate,
+        store=store,
+    )
     # One line per feature, sorted, so two tickets adding routers insert at
     # different places rather than both appending at the end.
     app.include_router(efforts_routes.router)
