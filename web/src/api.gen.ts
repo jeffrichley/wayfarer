@@ -506,24 +506,26 @@ export interface components {
         };
         /**
          * EnvironmentFailure
-         * @description The one Needs you item a failed start gate raises, however many starts it refused.
+         * @description The one Needs you item a failure of the environment raises: a start gate that keeps
+         *     refusing, however many starts it refused, or an effort branch whose tests are red,
+         *     however many candidates it failed.
          */
         EnvironmentFailure: {
             /** Failed */
             failed: components["schemas"]["GateCheck"][];
             /**
              * Id
-             * @description Stays the same while the gate keeps failing, so it is one item.
+             * @description Stays the same while the failure lasts, so it is one item.
              */
             id: string;
             /**
-             * Kind
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             kind: "environment";
             /**
              * Reason
-             * @description Which checks failed and why, in plain words.
+             * @description What failed and why, in plain words.
              */
             reason: string;
         };
@@ -811,7 +813,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -917,7 +919,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

@@ -4,7 +4,8 @@ It holds one repo's issues and pull requests in memory and speaks what Wayfarer
 reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; the
 REST issue listing and commit checks the conditional poll uses (ADR-0003); and the
 REST writes Wayfarer makes: claiming, labelling, commenting on and closing an issue,
-and opening a pull request. A test changes it as a person on GitHub
+and opening a pull request; and the one GraphQL write, returning a pull request to
+draft. A test changes it as a person on GitHub
 would, and it can be made to misbehave on purpose:
 
 - **poked**: change an issue or a pull request, and the next read sees it;
@@ -77,6 +78,14 @@ type Query {
 
 type RateLimit { cost: Int! limit: Int! remaining: Int! }
 
+type Mutation {
+  convertPullRequestToDraft(
+    input: ConvertPullRequestToDraftInput!
+  ): ConvertPullRequestToDraftPayload
+}
+input ConvertPullRequestToDraftInput { pullRequestId: ID! }
+type ConvertPullRequestToDraftPayload { pullRequest: PullRequest }
+
 type Repository {
   issue(number: Int!): Issue
   pullRequest(number: Int!): PullRequest
@@ -128,6 +137,7 @@ type StatusCheckRollup { state: StatusState! }
 type Commit { oid: GitObjectID! }
 
 type PullRequest {
+  id: ID!
   number: Int!
   headRefName: String!
   headRefOid: GitObjectID!
@@ -622,6 +632,14 @@ def _resolve(source: Any, info: GraphQLResolveInfo, **args: Any) -> Any:
         if name == "repository":
             ours = (args["owner"], args["name"]) == (source.github.owner, source.github.name)
             return _repository(source.repo) if ours else None
+        if name == "convertPullRequestToDraft":
+            # A write lands on the live repo, whatever a stale read would show.
+            number = _pull_number(args["input"]["pullRequestId"])
+            pull = source.github._live.pulls.get(number)
+            if pull is None:
+                raise _NotFound(f"Could not resolve to a node with the global id of {number}.")
+            pull.draft = True
+            return _Node("ConvertPullRequestToDraftPayload", {"pullRequest": _pull_request(pull)})
         return None
     value = source.fields[name]
     return value(**args) if callable(value) else value
@@ -727,6 +745,15 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
     )
 
 
+def _pull_id(number: int) -> str:
+    """A pull request's global node id, opaque as GitHub's are."""
+    return f"PR_stand_in_{number}"
+
+
+def _pull_number(node_id: str) -> int:
+    return int(node_id.removeprefix("PR_stand_in_"))
+
+
 def _pull_request(pull: PullRequest) -> _Node:
     def ready_events(
         itemTypes: list[str] | None = None, first: int | None = None, last: int | None = None
@@ -738,6 +765,7 @@ def _pull_request(pull: PullRequest) -> _Node:
     return _Node(
         "PullRequest",
         {
+            "id": _pull_id(pull.number),
             "number": pull.number,
             "headRefName": pull.head,
             "headRefOid": pull.head_commit,

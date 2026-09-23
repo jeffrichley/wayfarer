@@ -92,9 +92,26 @@ def create_app(
         current = images.current()
         return None if current is None else DockerSandbox(current)
 
-    queue = MergeQueue(repo, github, settings, sandbox)
-    efforts = Efforts(github, store, settings, line=queue.line)
+    def resolvers() -> Sessions | None:
+        """Where a conflict's resolver session runs: where a build does, recording into
+        the same store, so its one resolver session is remembered across restarts."""
+        if sessions is None and images.current() is None:
+            return None
+        return (sessions or in_image)(cascades.record())
+
     runs = Queue(settings.cap)
+    queue = MergeQueue(
+        repo,
+        github,
+        settings,
+        sandbox,
+        stream=store,
+        resolvers=resolvers,
+        # Under the cap every session shares, a build or a resolver alike.
+        submit=runs.submit,
+        pause=lambda effort, why: cascades.pause_itself(effort, why),
+    )
+    efforts = Efforts(github, store, settings, line=queue.line)
     cascades = Cascades(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )

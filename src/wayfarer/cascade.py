@@ -100,7 +100,7 @@ class Cascades:
         async with self._deciding:
             if not isinstance(self._stream.get(f"effort:{effort}"), Effort):
                 return  # Unreadable: the read has already said why, in its place.
-            self._store().arm(effort)
+            self.record().arm(effort)
             self._why.pop(effort, None)
             # The gate is asked as a cascade is armed, as well as before each start.
             if await self._gate.admit() is not None:
@@ -110,12 +110,12 @@ class Cascades:
     async def pause(self, effort: int) -> None:
         """Start nothing new on `effort`; its running sessions finish."""
         async with self._deciding:
-            self._store().pause(effort)
+            self.record().pause(effort)
             await self._decide(effort)
 
     async def resume(self, effort: int) -> None:
         """Start what `effort`'s cascade can again, as of a fresh read."""
-        self._store().resume(effort)
+        self.record().resume(effort)
         self._why.pop(effort, None)
         await self._efforts.read(effort)
 
@@ -128,7 +128,7 @@ class Cascades:
         with contextlib.suppress(asyncio.CancelledError):
             await running
         # A cancelled run reports nothing, so its end is written here.
-        store = self._store()
+        store = self.record()
         for row in store.sessions():
             if row.ticket == ticket and row.ended is None:
                 store.session_ended(row.run_id, datetime.now(UTC), None)
@@ -149,7 +149,7 @@ class Cascades:
         if not isinstance(effort, Effort):
             return
         tickets = [t for id in effort.tickets if isinstance(t := self._stream.get(id), Ticket)]
-        store = self._store()
+        store = self.record()
         cascade = store.cascades()
         armed, paused = number in cascade, cascade.get(number, False)
         await self._read_back(tickets, submitting=armed and not paused)
@@ -198,7 +198,7 @@ class Cascades:
             except GitHubError as error:
                 # The environment's failure, not the ticket's. Pausing is also what
                 # stops a retry on every read, since a refused write still pokes one.
-                self._paused_itself(
+                self.pause_itself(
                     effort, f"GitHub refused to let Wayfarer claim #{ticket.number}: {error}"
                 )
                 return False
@@ -208,12 +208,14 @@ class Cascades:
 
     async def _gate_refused(self, effort: int) -> None:
         """The gate refused: pause, and show the one item it raised. Running sessions carry on."""
-        self._paused_itself(effort, "The start gate refused a start.")
+        self.pause_itself(effort, "The start gate refused a start.")
         self._stream.upsert(await self._gate.status())
 
-    def _paused_itself(self, effort: int, why: str) -> None:
+    def pause_itself(self, effort: int, why: str) -> None:
+        """Pause `effort`'s cascade for a failure of the environment, saying `why`: its
+        running sessions finish, and the next read shows it paused."""
         _log.warning("The cascade on #%s paused: %s", effort, why)
-        self._store().pause(effort)
+        self.record().pause(effort)
         self._why[effort] = why
 
     def _startable(self, tickets: list[Ticket], store: Store) -> list[Ticket]:
@@ -222,7 +224,7 @@ class Cascades:
         return [t for t in tickets if t.state is TicketState.TAKEABLE and t.number not in started]
 
     def _submit(self, ticket: int) -> None:
-        run = self._queue.submit(self._sessions(self._store()).spec(ticket))
+        run = self._queue.submit(self._sessions(self.record()).spec(ticket))
         self._running[ticket] = run
         run.add_done_callback(lambda ended: self._ended(ticket, ended))
         # Its card is now building: re-read.
@@ -258,7 +260,7 @@ class Cascades:
             )
         )
 
-    def _store(self) -> Store:
+    def record(self) -> Store:
         """The repo's store, opened on first need: only a readable effort needs it."""
         if self._opened is None:
             assert self._github.repo is not None, "an effort was read, so there is a repo"

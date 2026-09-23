@@ -191,6 +191,25 @@ class GitHub:
         # Some writes, such as deleting a branch, answer `204 No Content`.
         return response.json() if response.content else None
 
+    async def mutate(self, document: str, **variables: Any) -> dict[str, Any]:
+        """Send one GraphQL write, for what REST cannot do, and return its `data`.
+
+        As with `write`, the signal to re-read is raised whatever comes back
+        (ADR-0003), and nothing it returns is believed as state.
+        """
+        _, auth = self._connected()
+        try:
+            response = await self._send(
+                "POST", "/graphql", headers=auth, json={"query": document, "variables": variables}
+            )
+        finally:
+            self.freshness.poke()
+        body: dict[str, Any] = response.json() if response.status_code == 200 else {}
+        if response.status_code != 200 or body.get("errors"):
+            raise GitHubError(f"GitHub refused the write ({response.status_code}): {response.text}")
+        data: dict[str, Any] = body["data"]
+        return data
+
     async def _rest(
         self, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: Any
     ) -> httpx.Response:

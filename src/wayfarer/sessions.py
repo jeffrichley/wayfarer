@@ -1,4 +1,4 @@
-"""A session: one Waystation run of `/implement` against one ticket.
+"""A session: one Waystation run against one ticket, `/implement` or a resolver.
 
 The session is handed exactly the slash command a person would type, and
 nothing inlined beside it: it reads its own ticket and parent spec itself, with
@@ -132,13 +132,52 @@ class Sessions:
         # `/code-review` collides with a bundled CLI skill of that name.
         prompt = f"/mattpocock-skills:implement {ticket}"
         recorder = _Recorder(self._store, self._stream, ticket, Purpose.BUILD)
-        # The session's `gh` reads its ticket and parent spec with the read-only
-        # token, as the only token it has; every write stays with Wayfarer. Read
-        # now, as the run is described, and never stored.
+        return self._flow.run(prompt, outcome=Outcome).env(self._github()).hooks(recorder)
+
+    def resolver(self, ticket: int, *, onto: str, branch: str) -> RunSpec[Outcome]:
+        """A resolver session: `ticket`'s commits on the host branch `branch` replayed onto
+        `onto`, one at a time, conflicts and all. Its commits are kept, landing nowhere, for
+        the merge queue to take again (Waystation ADR-0015)."""
+        prompt = _RESOLVE.format(ticket=ticket, branch=branch)
+        recorder = _Recorder(self._store, self._stream, ticket, Purpose.RESOLVE)
+        return (
+            self._flow.run(prompt, outcome=Outcome)
+            .base(onto)
+            .extra_refs(branch)
+            .env(self._github())
+            .hooks(recorder)
+        )
+
+    def resolved(self, ticket: int) -> bool:
+        """Whether `ticket` has had its one resolver session: one whose agent ran, or that
+        never ended. A resolver the environment stopped before its agent started is not one."""
+        return any(
+            row.ticket == ticket
+            and row.purpose is Purpose.RESOLVE
+            and (
+                row.ended is None or any(e.kind == "agent_end" for e in read_events(row.event_file))
+            )
+            for row in self._store.sessions()
+        )
+
+    def _github(self) -> dict[str, str]:
+        """The session's `gh` reads its ticket and parent spec with the read-only token,
+        as the only token it has; every write stays with Wayfarer. Read now, as the run
+        is described, and never stored."""
         github = {"GH_REPO": str(self._repo)}
         if token := os.environ.get(SESSION_GH_TOKEN):
             github["GH_TOKEN"] = token
-        return self._flow.run(prompt, outcome=Outcome).env(github).hooks(recorder)
+        return github
+
+
+# A resolver's job is narrow: the ticket's own work, replayed, and nothing more.
+_RESOLVE = """Ticket #{ticket}'s commits conflict with this branch, which moved on after they were \
+written. They are on the branch `{branch}`. Replay them onto this branch one at a time, \
+oldest first, with `git cherry-pick`, resolving each conflict so that both what this \
+branch now holds and what the commit meant survive. Change nothing else. Then run \
+`wf-test`, and fix only what the replay broke. Report `done` once every commit is \
+replayed and `wf-test` passes, and `not_done` otherwise.
+"""
 
 
 class _Recorder(HookBundle):

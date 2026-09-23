@@ -15,6 +15,16 @@ onto it. Wayfarer then closes the ticket itself, because GitHub closes an issue
 for a merge into the default branch only. The close comment carries a hidden
 marker, so a close without one is a person's.
 
+A candidate that cannot land is handed to a person, never tried again by itself
+(#21). One that fails its re-test is held: its pull request goes back to draft,
+the ticket is labelled `wayfarer:held`, and a comment names what it was tested
+with and the end of what failed. The effort branch's own head is then checked
+once, so a red branch raises one item and stops its line rather than holding
+every ticket in it. One that conflicts gets one resolver session, which stays
+Landing while it works; a second conflict, or a resolver that fails, holds it.
+A branch with a merge commit in it is held with the reason, since landing it
+would mean rewriting a person's commits.
+
 This stands in for Waystation's merge queue (waystation#138), built from its
 public landing steps, and is deleted when that ships.
 """
@@ -25,23 +35,43 @@ import asyncio
 import contextlib
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from waystation import PreflightError, SandboxBackend, StageError, prepare_workspace
+from waystation import (
+    PreflightError,
+    RunFailed,
+    RunResult,
+    RunSpec,
+    RunSucceeded,
+    SandboxBackend,
+    StageError,
+    prepare_workspace,
+)
 from waystation.integration import Conflict, GitRepo
 
 from wayfarer.github import GitHub, GitHubError
-from wayfarer.models import Effort, PullRequest, Ticket, TicketState
+from wayfarer.models import Effort, EnvironmentFailure, GateCheck, PullRequest, Ticket, TicketState
+from wayfarer.outcome import Outcome
+from wayfarer.read_model import HELD
+from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
+from wayfarer.stream import Store
 
-__all__ = ["LANDED_MARKER", "MergeQueue"]
+__all__ = ["HELD_MARKER", "LANDED_MARKER", "MergeQueue", "Submit"]
 
 _log = logging.getLogger(__name__)
 
 LANDED_MARKER = "<!-- wayfarer:landed -->"
 """Carried by the comment Wayfarer closes a landed ticket with."""
+
+HELD_MARKER = "<!-- wayfarer:held -->"
+"""Carried by the comment saying why the merge queue held a ticket."""
+
+type Submit = Callable[[RunSpec[Outcome]], Awaitable[RunResult[Outcome]]]
+"""Where a resolver session is run: under the cap every session shares."""
 
 # Asked only when something is Landing, one alias per pull request: nested in the
 # effort's own read, this connection would cost a point per ticket (ADR-0003).
@@ -66,12 +96,29 @@ _CHECK = ("wf-test",)
 # branches, and holding what is being tested while it is.
 _FETCHED = "refs/wayfarer/queue"
 
+# A resolver's view of the ticket branch. A workspace carries only branches and
+# tags of the host's (Waystation ADR-0037), so it is one while the resolver runs.
+_RESOLVING = "wayfarer/resolving"
+
+_MERGE_COMMIT = """\
+**Held: the branch has a merge commit; rebase it onto `{base}`.** The merge queue \
+lands a ticket's commits one by one onto the effort branch, and a merge commit \
+cannot be replayed without rewriting it, which Wayfarer never does to a person's \
+commits."""
+
+_CONFLICTED_AGAIN = """\
+**Held: it conflicted with `{base}` again after its resolver session.** Its one \
+automatic resolver session has run, so a person decides what happens next."""
+
 
 class MergeQueue:
     """One line per effort branch, each worked one candidate at a time.
 
     `sandbox` is where a re-test runs, asked afresh for each candidate; None when
     there is nowhere to run one, and then the line waits with nothing lost.
+    `resolvers` runs a conflicted candidate's resolver session, asked afresh the
+    same way, through `submit`; `stream` carries the item a red effort branch raises,
+    and `pause` pauses the effort's cascade as it is raised.
     """
 
     def __init__(
@@ -80,20 +127,36 @@ class MergeQueue:
         github: GitHub,
         settings: Settings,
         sandbox: Callable[[], SandboxBackend | None],
+        *,
+        stream: Store,
+        resolvers: Callable[[], Sessions | None] = lambda: None,
+        submit: Submit = lambda spec: spec.perform(),
+        pause: Callable[[int, str], None] = lambda effort, why: None,
     ) -> None:
         self._clone = clone
         self._github = github
         self._settings = settings
         self._sandbox = sandbox
+        self._stream = stream
+        self._resolvers = resolvers
+        self._submit = submit
+        self._pause = pause
+        # Each effort branch's effort, whose cascade a failure while landing pauses.
+        self._effort_of: dict[str, int] = {}
         self.working: dict[str, asyncio.Task[None]] = {}
         """The work each effort branch's line has in hand, by the branch."""
+        self.resolving: dict[int, asyncio.Task[None]] = {}
+        """Each ticket with a resolver session under way. It stays Landing, and in line."""
         # The ticket each line is landing: a read may see its pull request merged
         # before the line has closed it, and it is the line's to close.
         self._in_hand: set[int] = set()
         # A candidate that did not land is kept as its pull request read then,
-        # and taken again only once that reads differently: a push, a check.
-        # What else a failed re-test or a conflict does is the unhappy path's (#40).
+        # and taken again only once that reads differently: a push, a check. A
+        # held one reads differently at once, and is not Landing, so it is not.
         self._set_aside: dict[int, PullRequest] = {}
+        # Each effort branch whose head failed the suite on its own, at that head:
+        # its line lands nothing until the branch moves.
+        self._red: dict[str, str] = {}
         # A close GitHub refused is tried again only once its ticket reads
         # differently, since retrying on every read would ask without end.
         self._refused: dict[int, Ticket] = {}
@@ -123,6 +186,7 @@ class MergeQueue:
             lines[ticket.pull_request.base].append(ticket)
         places: dict[int, int] = {}
         for branch, waiting in lines.items():
+            self._effort_of[branch] = effort.number
             places |= {ticket.number: place for place, ticket in enumerate(waiting, 1)}
             if branch not in self.working:
                 self._start(branch, waiting)
@@ -130,7 +194,7 @@ class MergeQueue:
 
     async def stop(self) -> None:
         """Abandon every candidate in hand. Nothing is lost: each is still in line on GitHub."""
-        for task in list(self.working.values()):
+        for task in [*self.working.values(), *self.resolving.values()]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -160,6 +224,10 @@ class MergeQueue:
     async def _work(self, waiting: list[Ticket]) -> None:
         """Land the first candidate that will, in order. One that lands ends the turn: its
         writes set off a read, and that read starts the next."""
+        # A resolver builds on the head as it stands, so its line lands nothing behind
+        # its back: what it makes is re-tested on that same head.
+        if any(ticket.number in self.resolving for ticket in waiting):
+            return
         for ticket in waiting:
             pull = ticket.pull_request
             assert pull is not None
@@ -186,31 +254,41 @@ class MergeQueue:
             _log.warning("The merge queue has nowhere to re-test.", exc_info=True)
             return True
         try:
-            landed = await self._land(pull, backend)
+            return await self._land(ticket, pull, backend)
         except (StageError, OSError, TimeoutError):
             _log.warning("Ticket #%s could not be re-tested.", ticket.number, exc_info=True)
-            landed = None
-        if landed is None:
             self._set_aside[ticket.number] = pull
             return False
-        # The push is not GitHub's API, so nothing else says to read again.
-        self._github.freshness.poke()
-        try:
-            await self._close(ticket.number, pull.base, landed)
-        except GitHubError:
-            # The next read finds its pull request merged and closes it then.
-            _log.warning("Ticket #%s landed but is not closed.", ticket.number, exc_info=True)
-        return True
 
-    async def _land(self, pull: PullRequest, backend: SandboxBackend) -> str | None:
-        """Re-apply, re-test and land `pull`: the commit that landed, or None if it did not."""
+    async def _land(self, ticket: Ticket, pull: PullRequest, backend: SandboxBackend) -> bool:
+        """Re-apply, re-test and land `pull`, or say why not: whether the line's turn is over."""
         async with self._bounded():
             git = await GitRepo.open(self._clone)
             head = await self._fetch(git, pull.base)
             theirs = await self._fetch(git, pull.branch)
-            candidate = await _reapply(git, onto=head, series=theirs)
-        if isinstance(candidate, Conflict) or not await self._passes(backend, candidate):
-            return None
+        if self._red.get(pull.base) == head:
+            return True
+        self._forget_red(pull.base)
+        async with self._bounded():
+            merges = await _has_merge_commit(git, onto=head, series=theirs)
+            candidate = None if merges else await _reapply(git, onto=head, series=theirs)
+        if candidate is None:
+            await self._hold(ticket, pull, _MERGE_COMMIT.format(base=pull.base))
+            return False
+        if isinstance(candidate, Conflict):
+            await self._conflicted(ticket, pull, head, theirs)
+            return False
+        tested = await self._check(backend, candidate)
+        if not tested.passed:
+            # Checked once, so a red branch raises one item rather than one a ticket.
+            bare = await self._check(backend, head)
+            if not bare.passed:
+                self._raise_red(pull.base, head, bare)
+                return True
+            await self._hold(
+                ticket, pull, await self._why_retest_failed(git, pull, head, theirs, tested)
+            )
+            return False
         # Atomic, so the pull request is marked merged exactly when the effort
         # branch takes it. The effort branch is not forced: if it moved since the
         # fetch, the push is refused and nothing lands.
@@ -226,8 +304,16 @@ class MergeQueue:
             )
         if pushed.exit_code != 0:
             _log.warning("Pushing #%s's landing was refused: %s", pull.number, pushed.stderr)
-            return None
-        return candidate
+            self._set_aside[ticket.number] = pull
+            return False
+        # The push is not GitHub's API, so nothing else says to read again.
+        self._github.freshness.poke()
+        try:
+            await self._close(ticket.number, pull.base, candidate)
+        except GitHubError:
+            # The next read finds its pull request merged and closes it then.
+            _log.warning("Ticket #%s landed but is not closed.", ticket.number, exc_info=True)
+        return True
 
     def _bounded(self) -> asyncio.Timeout:
         """The cap on every step but the re-test itself, which only a hang would reach:
@@ -247,19 +333,178 @@ class MergeQueue:
         )
         return await git.git("rev-parse", "--verify", f"{ref}^{{commit}}")
 
-    async def _passes(self, backend: SandboxBackend, candidate: str) -> bool:
-        """The repo's suite, run in a sandbox over exactly `candidate`, passed in time."""
+    async def _check(self, backend: SandboxBackend, commit: str) -> _Tested:
+        """The repo's suite, run in a sandbox over exactly `commit`, and how it ended."""
         async with self._bounded():
-            workspace = await prepare_workspace(self._clone, base=candidate)
+            workspace = await prepare_workspace(self._clone, base=commit)
         try:
             async with backend.start(workspace, env={}) as sandbox:
                 async with asyncio.timeout(self._settings.landing_check_wall):
+                    # Uncaptured, so the result carries Waystation's bounded tails.
                     ran = await sandbox.exec(_CHECK, capture=False)
         except TimeoutError:
-            return False
+            cap = _duration(self._settings.landing_check_wall)
+            return _Tested(False, f"`wf-test` ran past its {cap} cap and was stopped.")
         finally:
             await workspace.remove()
-        return ran.exit_code == 0
+        output = "\n".join(tail for tail in (ran.stdout, ran.stderr) if tail.strip())
+        return _Tested(ran.exit_code == 0, output.rstrip())
+
+    async def _why_retest_failed(
+        self, git: GitRepo, pull: PullRequest, head: str, theirs: str, tested: _Tested
+    ) -> str:
+        """Why a candidate that failed its re-test is held: what it was tested with, and
+        the end of what failed."""
+        cut = await git.git("merge-base", head, theirs)
+        landed = await git.git("log", "--format=- %h %s", f"{cut}..{head}")
+        since = (
+            f"It was tested with what had landed on `{pull.base}` since it was cut:\n\n{landed}"
+            if landed
+            else f"Nothing had landed on `{pull.base}` since it was cut."
+        )
+        return (
+            f"**Held: its re-test on `{pull.base}` was red.** Its commits were re-applied "
+            f"onto `{pull.base}` at {head}, and the suite was red there, though `{pull.base}` "
+            f"alone is green. Nothing re-runs it by itself.\n\n{since}\n\n"
+            f"The end of what `wf-test` said:\n\n````text\n{tested.output}\n````"
+        )
+
+    async def _hold(self, ticket: Ticket, pull: PullRequest, why: str) -> None:
+        """Hand `ticket` to a person: say why on it, label it Held, and return its pull
+        request to draft. A Held ticket is not Landing, so nothing takes it again by itself."""
+        self._set_aside[ticket.number] = pull
+        try:
+            # The comment first, so the ticket is never held without saying why.
+            await self._github.write(
+                "POST", f"/issues/{ticket.number}/comments", {"body": f"{why}\n\n{HELD_MARKER}"}
+            )
+            await self._github.write("POST", f"/issues/{ticket.number}/labels", {"labels": [HELD]})
+            found = await self._github.query(_PULL_ID, number=pull.number)
+            await self._github.mutate(_TO_DRAFT, id=found["pullRequest"]["id"])
+        except GitHubError:
+            # Set aside until its pull request reads differently, as any that did not land.
+            _log.warning("Ticket #%s could not be held.", ticket.number, exc_info=True)
+
+    async def _conflicted(self, ticket: Ticket, pull: PullRequest, head: str, theirs: str) -> None:
+        """A candidate that conflicts gets one resolver session, and is held on its second
+        conflict. Its place in line is kept while the resolver works."""
+        self._set_aside[ticket.number] = pull
+        sessions = self._resolvers()
+        if sessions is None:
+            # Nowhere to run a resolver: it waits for its pull request to change.
+            _log.warning("Ticket #%s conflicts, with nowhere to resolve it.", ticket.number)
+            return
+        if sessions.resolved(ticket.number):
+            await self._hold(ticket, pull, _CONFLICTED_AGAIN.format(base=pull.base))
+            return
+        task = asyncio.create_task(self._resolve(sessions, ticket, pull, head, theirs))
+        self.resolving[ticket.number] = task
+        task.add_done_callback(lambda _: self.resolving.pop(ticket.number, None))
+
+    async def _resolve(
+        self, sessions: Sessions, ticket: Ticket, pull: PullRequest, head: str, theirs: str
+    ) -> None:
+        """Run `ticket`'s resolver session onto `head`, and push what it made to the ticket
+        branch, which puts it back in line to be re-tested; or hold the ticket."""
+        local = f"{_RESOLVING}/{pull.branch}"
+        try:
+            async with self._bounded():
+                git = await GitRepo.open(self._clone)
+                await git.git("branch", "--force", local, theirs)
+            try:
+                result = await self._submit(
+                    sessions.resolver(ticket.number, onto=head, branch=local)
+                )
+            finally:
+                async with self._bounded():
+                    await git.git("branch", "--delete", "--force", local)
+            await self._take_resolution(git, ticket, pull, theirs, result)
+        except (PreflightError, StageError, OSError, TimeoutError, GitHubError) as error:
+            # The environment's, before the resolver's agent ran: that is not its one
+            # resolver session, so the next read tries again, from its place in line,
+            # with one item raised however many times it cannot (#21, decision 8).
+            _log.warning("Ticket #%s's resolver could not run.", ticket.number, exc_info=True)
+            self._set_aside.pop(ticket.number, None)
+            self._raise(
+                pull.base,
+                _unresolved_id(pull.base),
+                f"A resolver session could not start on `{pull.base}`, so its line waits.",
+                check=f"A resolver session can start on `{pull.base}`",
+                detail=str(error) or type(error).__name__,
+            )
+            return
+        self._stream.remove(_unresolved_id(pull.base))
+
+    async def _take_resolution(
+        self,
+        git: GitRepo,
+        ticket: Ticket,
+        pull: PullRequest,
+        theirs: str,
+        result: RunResult[Outcome],
+    ) -> None:
+        if isinstance(result, RunFailed) and result.agent is None:
+            raise StageError(result.stage, result.failure)
+        if (
+            isinstance(result, RunSucceeded)
+            and result.outcome.status == "done"
+            and result.preserved is not None
+        ):
+            # Not forced past a person's push: if the ticket branch moved, this is
+            # refused, and the pull request, having moved, is taken again anyway.
+            async with self._bounded():
+                pushed = await git.run(
+                    "push",
+                    "--quiet",
+                    f"--force-with-lease=refs/heads/{pull.branch}:{theirs}",
+                    "origin",
+                    f"refs/heads/{result.preserved}:refs/heads/{pull.branch}",
+                )
+            if pushed.exit_code != 0:
+                _log.warning("Pushing #%s's resolution was refused: %s", pull.number, pushed.stderr)
+            self._github.freshness.poke()
+            return
+        if isinstance(result, RunFailed):
+            said = f"It failed: {result.failure!r}."
+        elif isinstance(result, RunSucceeded) and result.outcome.status == "done":
+            said = "It changed nothing."
+        else:
+            said = f"It said: {result.outcome.summary}"
+        await self._hold(
+            ticket,
+            pull,
+            f"**Held: its resolver session could not resolve its conflict with "
+            f"`{pull.base}`.** {said}",
+        )
+
+    def _raise_red(self, branch: str, head: str, bare: _Tested) -> None:
+        """The one item a red effort branch raises, however many candidates it failed. The
+        candidate keeps its place at the front of a line that lands nothing until the
+        branch moves."""
+        self._red[branch] = head
+        self._raise(
+            branch,
+            _red_id(branch),
+            f"The effort branch's tests are red: `{branch}` at {head[:7]} is red on its own, "
+            "so nothing lands on it until that is fixed.",
+            check=f"The tests are green on `{branch}`",
+            detail=bare.output or "`wf-test` was red and said nothing.",
+        )
+
+    def _raise(self, branch: str, id: str, reason: str, *, check: str, detail: str) -> None:
+        """One Needs you item for a failure of the environment while landing, the same
+        shape a failed start gate raises, which pauses the effort's cascade as a failed
+        gate does (#21, decision 8). Raising it again changes nothing."""
+        if self._stream.get(id) is None and branch in self._effort_of:
+            self._pause(self._effort_of[branch], reason)
+        failed = [GateCheck(name=check, passed=False, detail=detail)]
+        self._stream.upsert(
+            EnvironmentFailure(kind="environment", id=id, reason=reason, failed=failed)
+        )
+
+    def _forget_red(self, branch: str) -> None:
+        if self._red.pop(branch, None) is not None:
+            self._stream.remove(_red_id(branch))
 
     async def _close_merged(self, effort: Effort, tickets: Iterable[Ticket]) -> None:
         """Close each open ticket whose pull request merged: by hand, or by a Wayfarer that
@@ -291,6 +536,47 @@ class MergeQueue:
         await self._github.write(
             "PATCH", f"/issues/{ticket}", {"state": "closed", "state_reason": "completed"}
         )
+
+
+@dataclass(frozen=True)
+class _Tested:
+    """How one run of the suite ended."""
+
+    passed: bool
+    output: str
+    """The end of what it printed, or why it said nothing."""
+
+
+_PULL_ID = """
+query PullId($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
+}
+"""
+
+# A draft is a Held ticket's pull request, and only GraphQL can make one of a ready one.
+_TO_DRAFT = """
+mutation ToDraft($id: ID!) {
+  convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { isDraft } }
+}
+"""
+
+
+def _red_id(branch: str) -> str:
+    return f"environment:red:{branch}"
+
+
+def _unresolved_id(branch: str) -> str:
+    return f"environment:resolver:{branch}"
+
+
+def _duration(seconds: float) -> str:
+    return f"{seconds / 60:g} min" if seconds >= 60 else f"{seconds:g} s"
+
+
+async def _has_merge_commit(git: GitRepo, *, onto: str, series: str) -> bool:
+    """Whether `series` carries a merge commit that `onto` does not."""
+    base = await git.git("merge-base", onto, series)
+    return bool(await git.git("rev-list", "--merges", f"{base}..{series}"))
 
 
 async def _reapply(git: GitRepo, *, onto: str, series: str) -> str | Conflict:
