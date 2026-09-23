@@ -29,6 +29,13 @@ def _hint(card: Locator) -> Locator:
     return card.get_by_role("status")
 
 
+def _expect_checked(where: Locator, checked: list[str]) -> None:
+    radios = where.get_by_role("radio")
+    expect(radios).to_have_count(len(checked))
+    for radio, state in zip(radios.all(), checked, strict=True):
+        expect(radio).to_have_attribute("aria-checked", state)
+
+
 def test_each_option_carries_the_sentence_on_what_picking_it_means(gallery: Page) -> None:
     options = _card(gallery, "question-1").get_by_role("radio")
 
@@ -62,15 +69,8 @@ def test_picking_an_option_picks_only_that_one_in_its_question(gallery: Page) ->
     second.get_by_role("radio").nth(0).click()
     first.get_by_role("radio").nth(0).click()
 
-    assert [r.get_attribute("aria-checked") for r in first.get_by_role("radio").all()] == [
-        "true",
-        "false",
-    ]
-    assert [r.get_attribute("aria-checked") for r in second.get_by_role("radio").all()] == [
-        "true",
-        "false",
-        "false",
-    ]
+    _expect_checked(first, ["true", "false"])
+    _expect_checked(second, ["true", "false", "false"])
 
 
 def test_sending_with_no_choice_and_no_note_is_refused(gallery: Page) -> None:
@@ -80,8 +80,8 @@ def test_sending_with_no_choice_and_no_note_is_refused(gallery: Page) -> None:
     _send(card).click()
 
     expect(_hint(card)).to_have_text(REFUSED)
-    assert _send(card).get_attribute("aria-disabled") is None
-    assert card.get_by_role("textbox").is_editable()
+    expect(_send(card)).not_to_have_attribute("aria-disabled", "true")
+    expect(card.get_by_role("textbox")).to_be_editable()
 
 
 def test_a_note_of_only_spaces_is_no_answer(gallery: Page) -> None:
@@ -136,18 +136,20 @@ def test_after_sending_the_controls_lock_and_the_card_says_where_the_answer_went
 
     expect(_hint(card)).to_have_text(POSTED)
     sent = card.get_by_role("button", name="Answer sent")
-    assert sent.get_attribute("aria-disabled") == "true"
-    assert not card.get_by_role("textbox").is_editable()
+    expect(sent).to_have_attribute("aria-disabled", "true")
+    expect(sent).to_have_attribute("data-piece", "send-answer-130")
+    expect(card.get_by_role("textbox")).not_to_be_editable()
     radios = card.get_by_role("radio").all()
-    assert [r.get_attribute("aria-disabled") for r in radios] == ["true", "true"]
+    for radio in radios:
+        expect(radio).to_have_attribute("aria-disabled", "true")
 
     # A locked card keeps the answer it sent, whatever is clicked or typed after.
     radios[1].click(force=True)
     card.get_by_role("textbox").focus()
     gallery.keyboard.type(" More.")
     sent.click(force=True)
-    assert [r.get_attribute("aria-checked") for r in radios] == ["true", "false"]
-    assert card.get_by_role("textbox").input_value() == "Authors can mark credits later."
+    _expect_checked(card, ["true", "false"])
+    expect(card.get_by_role("textbox")).to_have_value("Authors can mark credits later.")
     expect(_hint(card)).to_have_text(POSTED)
 
 
@@ -156,4 +158,5 @@ def test_a_locked_option_is_not_offered_to_the_keyboard(gallery: Page) -> None:
     card.get_by_role("textbox").fill("Warn for now.")
     _send(card).click()
 
-    assert [r.get_attribute("tabindex") for r in card.get_by_role("radio").all()] == ["-1", "-1"]
+    for radio in card.get_by_role("radio").all():
+        expect(radio).to_have_attribute("tabindex", "-1")

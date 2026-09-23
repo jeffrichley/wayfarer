@@ -9,46 +9,41 @@ export type Option = { label: string; consequence: string };
 // one to four questions of two to four options each (docs/design/data-and-commands.md).
 export type Question = { text: string; options: Option[] };
 
-// What a person sent: the label they picked for each question, in order, or null
-// where they picked none, and their note, trimmed.
-export type Answer = { choices: (string | null)[]; note: string };
-
 type Props = {
   ticket: number;
   // Who asked, from where and when: "Claude Code · wt/credits · 09:18".
   by: string;
   questions: Question[];
-  onSend?: (answer: Answer) => void;
 };
-
-const WAITING = "Pick an option or write your own answer.";
 
 // What a session paused to ask, and where a person answers it (docs/design/shell.md,
 // "Question card"). Sending needs a choice for every question, or a note; once
 // sent, the controls lock and the card says the answer was posted to the ticket.
-export function QuestionCard({ ticket, by, questions, onSend }: Props) {
+// Posting the answer is the screen's, once one carries the card.
+export function QuestionCard({ ticket, by, questions }: Props) {
   const [choices, setChoices] = useState<(string | null)[]>(() => questions.map(() => null));
   const [note, setNote] = useState("");
-  const [hint, setHint] = useState<{ text: string; said: boolean }>({ text: WAITING, said: false });
+  const [refused, setRefused] = useState(false);
   const [sent, setSent] = useState(false);
   const noteId = useId();
 
   function pick(question: number, label: string) {
     if (sent) return;
-    setChoices(choices.map((choice, i) => (i === question ? label : choice)));
+    setChoices((picked) => picked.map((choice, i) => (i === question ? label : choice)));
   }
 
   function send() {
-    const text = note.trim();
-    if (!text && choices.includes(null)) {
-      const each = questions.length > 1 ? " for each question" : "";
-      setHint({ text: `Choose an option${each}, or write an answer first.`, said: true });
-      return;
-    }
-    setSent(true);
-    setHint({ text: `Posted to #${ticket}. The session resumes.`, said: true });
-    onSend?.({ choices, note: text });
+    const answered = note.trim() !== "" || !choices.includes(null);
+    setRefused(!answered);
+    setSent(answered);
   }
+
+  const each = questions.length > 1 ? " for each question" : "";
+  const hint = sent
+    ? `Posted to #${ticket}. The session resumes.`
+    : refused
+      ? `Choose an option${each}, or write an answer first.`
+      : "Pick an option or write your own answer.";
 
   return (
     <div className="qcard" data-piece={`question-${ticket}`}>
@@ -99,11 +94,11 @@ export function QuestionCard({ ticket, by, questions, onSend }: Props) {
           onChange={(event) => setNote(event.target.value)}
         />
         <div className="q-send">
-          <Button variant="primary" disabled={sent} onClick={send}>
+          <Button variant="primary" disabled={sent} piece={`send-answer-${ticket}`} onClick={send}>
             {sent ? "Answer sent" : "Send answer and resume"}
           </Button>
-          <span className={`meta q-hint${hint.said ? " said" : ""}`} role="status">
-            {hint.text}
+          <span className={`meta q-hint${sent || refused ? " spoken" : ""}`} role="status">
+            {hint}
           </span>
         </div>
       </div>

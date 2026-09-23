@@ -233,7 +233,8 @@ a.nm:hover { text-decoration-color: var(--fg); background: var(--hover); }
 .qcard .q-next { margin-top: 14px; }
 .qcard .q-note { margin: 12px 0 10px 36px; }
 .qcard .q-send { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-.qcard .q-hint.said { color: var(--fg); }
+/* The hint darkens once it answers something the person did. */
+.qcard .q-hint.spoken { color: var(--fg); }
 
 @media (prefers-reduced-motion: reduce) {
   .st-building { animation: none; }
