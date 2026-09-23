@@ -57,7 +57,7 @@ Test at the HTTP surface, driving Wayfarer as a person and the browser do: the
 (`tests/conftest.py` has the launcher). Name each test for the behaviour, as a
 sentence about the app.
 
-Mark each module by what it needs — `unit`, `git`, `docker`, `live` — so the
+Mark each module by what it needs — `unit`, `git`, `docker`, `browser`, `live` — so the
 cheap tiers run anywhere; `live` spends real credentials and never runs by
 default or in CI. Poll for the signal itself rather than sleeping a fixed time.
 The 90% branch-coverage floor is a floor: cover behaviour, and leave a

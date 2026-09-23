@@ -26,6 +26,10 @@ python-check:
     uv run mypy
     uv run pytest
 
+# Install the Chromium the browser tier drives (tests marked `browser`), once per machine.
+browser:
+    uv run playwright install --with-deps chromium
+
 # Regenerate the browser's types from the Python models (web/src/api.gen.ts).
 types:
     {{pnpm}} gen:types
