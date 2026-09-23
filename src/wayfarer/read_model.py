@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Collection, Iterator
+from collections.abc import Awaitable, Callable, Collection, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -68,10 +68,13 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
                   ... on PullRequest {
                     number
                     headRefName
+                    headRefOid
+                    baseRefName
                     isDraft
                     state
                     reviewDecision
                     statusCheckRollup { state }
+                    mergeCommit { oid }
                   }
                 }
               }
@@ -97,10 +100,17 @@ class Efforts:
     """The efforts a page has asked to read, each read into the stream on request and
     read again whenever something may have changed (ADR-0003)."""
 
-    def __init__(self, github: GitHub, store: Store, settings: Settings) -> None:
+    def __init__(
+        self,
+        github: GitHub,
+        store: Store,
+        settings: Settings,
+        landing: Callable[[list[Ticket]], Awaitable[None]] | None = None,
+    ) -> None:
         self._github = github
         self._store = store
         self._settings = settings
+        self._landing = landing
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
@@ -168,6 +178,10 @@ class Efforts:
             # Tickets before the effort, so it never names one the page lacks.
             for ticket in tickets:
                 self._store.upsert(ticket)
+            # What this read found Landing lands before the effort is sent, so a
+            # page holding the effort holds a read whose landings were tried.
+            if self._landing is not None:
+                await self._landing(tickets)
             self._store.upsert(effort)
         named = {
             ticket
@@ -217,13 +231,14 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
+    open = node["state"] == "OPEN"
     return Ticket(
         kind="ticket",
         id=f"ticket:{number}",
         number=number,
         title=node["title"],
         state=derive_state(
-            open=node["state"] == "OPEN",
+            open=open,
             completed=node["stateReason"] in ("COMPLETED", None),
             labels=labels,
             assignees=assignees,
@@ -233,6 +248,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
             building=False,
             auto_merge=auto_merge,
         ),
+        open=open,
         labels=labels,
         assignees=assignees,
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],
@@ -258,8 +274,11 @@ def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | 
     return PullRequest(
         number=chosen["number"],
         branch=chosen["headRefName"],
+        base=chosen["baseRefName"],
+        head_commit=chosen["headRefOid"],
         draft=chosen["isDraft"],
         merged=chosen["state"] == "MERGED",
+        merge_commit=(chosen["mergeCommit"] or {}).get("oid"),
         checks=_CHECKS[rollup["state"]] if rollup else None,
         approved=chosen["reviewDecision"] == "APPROVED",
     )

@@ -66,8 +66,11 @@ def test_one_read_returns_every_ticket_with_its_labels_assignees_blockers_and_pr
     assert tickets[second.number]["pull_request"] == {
         "number": pull.number,
         "branch": f"ticket/{second.number}-work",
+        "base": "main",
+        "head_commit": pull.head_commit,
         "draft": True,
         "merged": False,
+        "merge_commit": None,
         "checks": "pending",
         "approved": False,
     }

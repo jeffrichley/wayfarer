@@ -22,13 +22,12 @@ from wayfarer.github import GitHub
 from wayfarer.image import Images
 from wayfarer.models import Health, WireEvent
 from wayfarer.poll import poll
+from wayfarer.pull_requests import PullRequestGate
 from wayfarer.read_model import Efforts
 from wayfarer.settings import Settings
 from wayfarer.stream import Store
 
 __all__ = ["create_app"]
-
-_log = logging.getLogger(__name__)
 
 _log = logging.getLogger(__name__)
 
@@ -66,7 +65,9 @@ def create_app(
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     images = Images(repo, store)
-    efforts = Efforts(github, store, settings)
+    # Every ticket a read finds Landing lands (#38), until the merge queue takes
+    # that over (#39).
+    efforts = Efforts(github, store, settings, landing=PullRequestGate(github).land)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003).
