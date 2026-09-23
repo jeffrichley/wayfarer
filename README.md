@@ -21,6 +21,27 @@ It serves on `127.0.0.1` (port 7431, or a free one if that is taken) and opens
 your browser. One instance per clone: a second refuses, naming the first.
 Ctrl-C stops it.
 
+## The session image
+
+Every session runs in Docker, in an image of two parts: Wayfarer's base (a
+non-root user, git, `gh`, a pinned Claude Code CLI, the mattpocock-skills plugin
+at its pin, and the `wf-test` wrapper) and **your repo's own layer**, which adds
+the toolchain its tests need:
+
+```dockerfile
+# .wayfarer/Dockerfile
+FROM wayfarer-base
+USER root
+RUN apt-get update && apt-get install --yes python3 python3-venv
+USER agent
+```
+
+The layer's build context is `.wayfarer/` alone. A repo with no layer is refused;
+Wayfarer never falls back to the bare base. Images are built only when you click
+Build, and the tag hashes the base recipe, the pins and everything in
+`.wayfarer/`, so a stale image shows up as a missing tag. A new image is probed
+before it gets its tag, so an image that failed its probe has no tag at all.
+
 ## Developing
 
 Needs [uv](https://docs.astral.sh/uv/), Node 24 (pnpm comes through corepack),
