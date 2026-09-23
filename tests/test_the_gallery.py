@@ -9,113 +9,20 @@ from __future__ import annotations
 
 import io
 import re
-from collections.abc import Iterator
 from itertools import combinations
 from pathlib import Path
 
 import pytest
 from PIL import Image, ImageChops
-from playwright.sync_api import Browser, Page, ViewportSize
+from playwright.sync_api import Page
 
-from conftest import Launcher
+from specimens import THEMES, choose, disagreements, set_theme
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
 
-REFERENCE = Path(__file__).with_name("prototype_gallery.html")
 PROTOTYPE_CSS = Path(__file__).parents[1] / "prototype" / "assets" / "wayfarer.css"
 
 GLYPHS = ["done", "review", "building", "ask", "held", "take", "blocked", "pending", "out"]
-THEMES = ["light", "dark"]
-# The size every screen is checked at first (docs/design/visual-language.md).
-VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
-
-
-@pytest.fixture
-def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
-    page = browser.new_page(viewport=VIEWPORT)
-    page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
-    page.wait_for_selector("[data-specimen]")
-    yield page
-    page.close()
-
-
-@pytest.fixture
-def reference(browser: Browser) -> Iterator[Page]:
-    page = browser.new_page(viewport=VIEWPORT)
-    page.goto(REFERENCE.as_uri())
-    yield page
-    page.close()
-
-
-def _choose(gallery: Page, theme: str) -> None:
-    """Pick a theme as a person does, with the gallery's own buttons."""
-    gallery.get_by_role(
-        "button", name={"light": "The chart", "dark": "The night chart"}[theme]
-    ).click()
-
-
-def _theme(page: Page, theme: str) -> None:
-    page.evaluate(
-        """theme => theme === "dark"
-            ? document.documentElement.setAttribute("data-theme", "dark")
-            : document.documentElement.removeAttribute("data-theme")""",
-        theme,
-    )
-
-
-# Where a specimen sits on its page is the page's business, and a box that starts
-# half a pixel down draws its edges differently. So each is lifted to the
-# viewport's corner, still inheriting from where it sits, with the rest of its
-# page hidden so a box a fraction of a pixel wide shows bare page at its edge. It
-# keeps the width its place gave it, so a widget laid out wrong in its column
-# still disagrees.
-_LIFT = """element => {
-    const before = element.style.cssText;
-    const width = element.getBoundingClientRect().width;
-    document.body.style.visibility = "hidden";
-    element.style.cssText += `;position:fixed;left:0;top:0;margin:0;width:${width}px;`
-        + "box-sizing:border-box;visibility:visible";
-    return before;
-}"""
-_SET_DOWN = """(element, before) => {
-    element.style.cssText = before;
-    document.body.style.visibility = "";
-}"""
-
-
-def _specimens(page: Page) -> dict[str, Image.Image]:
-    """Each specimen on the page, by name, as it is drawn now. The spinning ring
-    is caught at its first frame, so a screenshot is the same every time."""
-    # The pointer rests where specimens are lifted to, and would hover them.
-    page.mouse.move(VIEWPORT["width"] - 1, VIEWPORT["height"] - 1)
-    shots: dict[str, Image.Image] = {}
-    for element in page.locator("[data-specimen]").all():
-        name = element.get_attribute("data-specimen")
-        assert name is not None
-        before = element.evaluate(_LIFT)
-        png = element.screenshot(animations="disabled")
-        element.evaluate(_SET_DOWN, before)
-        shots[name] = Image.open(io.BytesIO(png)).convert("RGB")
-    return shots
-
-
-def _disagreements(gallery: Page, reference: Page) -> list[str]:
-    """Every specimen the gallery draws differently from the prototype, and every
-    one drawn on only one side, which the check could not compare."""
-    drawn = _specimens(gallery)
-    expected_names = set()
-    found = []
-    for name, expected in _specimens(reference).items():
-        expected_names.add(name)
-        actual = drawn.get(name)
-        if actual is None:
-            found.append(f"{name}: not in the gallery")
-        elif actual.size != expected.size:
-            found.append(f"{name}: {actual.size} in the gallery, {expected.size} in the prototype")
-        elif ImageChops.difference(actual, expected).getbbox() is not None:
-            found.append(f"{name}: drawn differently")
-    found += [f"{name}: not in the prototype" for name in sorted(drawn.keys() - expected_names)]
-    return found
 
 
 def _tokens() -> list[str]:
@@ -154,16 +61,16 @@ def _token_values(page: Page, names: list[str]) -> dict[str, str]:
 def test_the_gallery_draws_every_primitive_as_the_prototype_does(
     gallery: Page, reference: Page, theme: str
 ) -> None:
-    _choose(gallery, theme)
-    _theme(reference, theme)
+    choose(gallery, theme)
+    set_theme(reference, theme)
 
-    assert _disagreements(gallery, reference) == []
+    assert disagreements(gallery, reference) == []
 
 
 @pytest.mark.parametrize("theme", THEMES)
 def test_every_token_has_the_prototypes_value(gallery: Page, reference: Page, theme: str) -> None:
-    _choose(gallery, theme)
-    _theme(reference, theme)
+    choose(gallery, theme)
+    set_theme(reference, theme)
     names = _tokens()
 
     assert _token_values(gallery, names) == _token_values(reference, names)
@@ -171,7 +78,7 @@ def test_every_token_has_the_prototypes_value(gallery: Page, reference: Page, th
 
 def test_the_night_chart_is_a_different_chart(gallery: Page) -> None:
     light = _token_values(gallery, ["--bg", "--fg", "--accent"])
-    _choose(gallery, "dark")
+    choose(gallery, "dark")
 
     night = _token_values(gallery, ["--bg", "--fg", "--accent"])
 
@@ -183,7 +90,7 @@ def test_a_visual_change_makes_the_gallery_disagree_with_the_prototype(
 ) -> None:
     gallery.add_style_tag(content=".st-held { border-width: 3px; }")
 
-    assert _disagreements(gallery, reference) == [
+    assert disagreements(gallery, reference) == [
         "glyph-held: drawn differently",
         "glyph-held-lg: drawn differently",
     ]
@@ -197,7 +104,7 @@ def test_a_gallery_specimen_with_nothing_to_compare_against_fails_the_check(
             .insertAdjacentHTML("beforeend", '<div data-specimen="widget-new">New</div>')"""
     )
 
-    assert _disagreements(gallery, reference) == ["widget-new: not in the prototype"]
+    assert disagreements(gallery, reference) == ["widget-new: not in the prototype"]
 
 
 def test_every_state_glyph_sits_beside_its_word(gallery: Page) -> None:
@@ -212,7 +119,7 @@ def test_every_state_glyph_sits_beside_its_word(gallery: Page) -> None:
 
 @pytest.mark.parametrize("theme", THEMES)
 def test_every_state_glyph_reads_apart_with_colour_removed(gallery: Page, theme: str) -> None:
-    _choose(gallery, theme)
+    choose(gallery, theme)
     gallery.add_style_tag(content="html { filter: grayscale(1); }")
 
     glyphs = [_glyph_shot(gallery, glyph) for glyph in GLYPHS]
