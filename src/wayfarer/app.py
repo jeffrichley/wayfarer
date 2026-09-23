@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterable
 from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
-from wayfarer.models import Health
+from wayfarer.image import Build, Images, NoLayer
+from wayfarer.models import BuildEvent, Health, ImageStatus
 
 __all__ = ["create_app"]
 
@@ -26,15 +30,50 @@ or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 """
 
 
-def create_app() -> FastAPI:
+async def _last_build(request: Request) -> Build:
+    # A dependency, so a missing build is a 404 before its stream starts.
+    images: Images = request.app.state.images
+    if images.last_build is None:
+        raise HTTPException(status_code=404, detail="No build has been asked for.")
+    return images.last_build
+
+
+LastBuild = Annotated[Build, Depends(_last_build)]
+
+
+def create_app(repo: Path) -> FastAPI:
+    """The app for the clone whose working tree is `repo`."""
     running = version("wayfarer")
     app = FastAPI(title="Wayfarer", version=running)
+    images = Images(repo)
+    app.state.images = images
 
     # Handlers are async so they run on the loop every agent run shares (ADR-0001),
     # not in a thread pool beside it.
     @app.get("/api/health")
     async def health() -> Health:
         return Health(version=running)
+
+    @app.get("/api/image")
+    async def image() -> ImageStatus:
+        return await images.status()
+
+    @app.post("/api/image/build", status_code=202, responses={409: {"description": "No layer"}})
+    async def build_image() -> None:
+        """Build the session image. Builds happen only here, when a person clicks."""
+        try:
+            images.build()
+        except NoLayer as refusal:
+            raise HTTPException(status_code=409, detail=str(refusal)) from None
+
+    # The build's output, from its first line. Until the page's one stream lands
+    # (#31), a build streams on its own (ADR-0004).
+    @app.get("/api/image/build", response_class=EventSourceResponse)
+    async def build_output(
+        build: LastBuild,
+    ) -> AsyncIterable[BuildEvent]:
+        async for event in build.events():
+            yield event
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

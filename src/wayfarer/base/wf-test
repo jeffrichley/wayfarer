@@ -1,0 +1,4 @@
+#!/bin/sh
+# wf-test: every test run a session makes goes through here (ADR-0005). It runs
+# the command it is given and exits with that command's status.
+exec "$@"
