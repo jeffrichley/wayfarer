@@ -9,6 +9,10 @@ here by one line, so every shape is reachable from `wayfarer.models`. The lines
 stay sorted: two tickets adding areas then insert at different places, not both
 at the end (#92). `tests/test_the_schema.py` fails for a shape in any module
 here that is missing from the schema or from this package.
+
+Needs you has no module of its own: each of its items lives with the area that
+raises it, `ShipEffort` with the cascade and `EnvironmentFailure` with the gate,
+whose `GateStatus` names the one it raised.
 """
 
 from wayfarer.models.cascade import *
