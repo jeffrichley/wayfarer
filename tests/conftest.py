@@ -24,6 +24,8 @@ from typing import Any
 
 import httpx
 import pytest
+from playwright.sync_api import Browser, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
 
@@ -160,6 +162,21 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Launcher]:
     launcher = Launcher(clone, scratch, github)
     yield launcher
     launcher.close()
+
+
+# Per module, not per session: Playwright's sync API holds an event loop open on
+# this thread while it runs, and `asyncio.run` in a later module refuses to start
+# inside it.
+@pytest.fixture(scope="module")
+def browser() -> Iterator[Browser]:
+    """Chromium, as the person's browser; the browser tier skips, saying why, without it."""
+    with sync_playwright() as playwright:
+        try:
+            chromium = playwright.chromium.launch()
+        except PlaywrightError as error:
+            pytest.skip(f"no Chromium for Playwright; `just browser` installs it ({error.message})")
+        yield chromium
+        chromium.close()
 
 
 def commit_layer(clone: Path, dockerfile: str) -> None:

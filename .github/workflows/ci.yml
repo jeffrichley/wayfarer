@@ -45,6 +45,10 @@ jobs:
       - name: Sync dependencies
         run: uv sync
 
+      # The gallery's snapshot check drives it; without it the browser tier skips.
+      - name: Install Chromium
+        run: just browser
+
       - name: just check
         run: just check
         env:
