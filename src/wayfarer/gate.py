@@ -25,10 +25,10 @@ from uuid import uuid4
 
 from wayfarer.image import REFUSAL, Images
 from wayfarer.models import EnvironmentFailure, GateCheck, GateStatus
+from wayfarer.settings import Settings
 
 __all__ = [
     "API_KEY",
-    "DOCKER_TIMEOUT_SECONDS",
     "OAUTH_TOKEN",
     "SESSION_GH_TOKEN",
     "StartGate",
@@ -44,22 +44,19 @@ OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN"
 # which Wayfarer writes to GitHub with.
 SESSION_GH_TOKEN = "WAYFARER_SESSION_GH_TOKEN"
 
-# How long `docker info` may take to answer. A daemon that has not answered by
-# then is as good as down, and a wedged one must not hang every start behind it.
-DOCKER_TIMEOUT_SECONDS = 10.0
-
 
 class StartGate:
     """The six checks for one clone, and the one item they raise when they fail."""
 
-    def __init__(self, repo: Path, images: Images) -> None:
+    def __init__(self, repo: Path, images: Images, settings: Settings) -> None:
         self._repo = repo
         self._images = images
+        self._settings = settings
         self.raised: EnvironmentFailure | None = None
 
     async def check(self) -> list[GateCheck]:
         """All six checks, run afresh, in order. A failure never skips a later check."""
-        docker = await _daemon_answers()
+        docker = await _daemon_answers(self._settings.docker_timeout)
         built, probed = await self._image(docker.passed)
         return [docker, built, probed, _credential(), await self._identity(), _session_token()]
 
@@ -151,7 +148,7 @@ class StartGate:
         )
 
 
-async def _daemon_answers() -> GateCheck:
+async def _daemon_answers(timeout: float) -> GateCheck:
     name = "Docker is running"
     try:
         process = await asyncio.create_subprocess_exec(
@@ -163,14 +160,14 @@ async def _daemon_answers() -> GateCheck:
     except OSError as error:
         return GateCheck(name=name, passed=False, detail=f"Docker could not be run: {error}.")
     try:
-        _, stderr = await asyncio.wait_for(process.communicate(), DOCKER_TIMEOUT_SECONDS)
+        _, stderr = await asyncio.wait_for(process.communicate(), timeout)
     except TimeoutError:
         process.kill()
         await process.wait()
         return GateCheck(
             name=name,
             passed=False,
-            detail=f"The Docker daemon did not answer within {DOCKER_TIMEOUT_SECONDS:g} seconds.",
+            detail=f"The Docker daemon did not answer within {timeout:g} seconds.",
         )
     if process.returncode != 0:
         said = stderr.decode(errors="replace").strip().splitlines()

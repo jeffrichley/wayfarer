@@ -16,6 +16,7 @@ import pytest
 from conftest import Launcher, build_layer, commit_layer, get
 from wayfarer.gate import API_KEY, OAUTH_TOKEN, SESSION_GH_TOKEN, StartGate
 from wayfarer.image import Images
+from wayfarer.settings import Settings
 
 pytestmark = pytest.mark.git
 
@@ -237,7 +238,7 @@ def test_ten_tickets_refused_at_once_raise_one_item_not_ten(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone))
+    gate = StartGate(clone, Images(clone), Settings())
 
     refusals = _admit_many(gate, 10)
 
@@ -250,7 +251,7 @@ def test_the_item_says_in_plain_words_which_check_failed(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone))
+    gate = StartGate(clone, Images(clone), Settings())
 
     [refusal] = _admit_many(gate, 1)
 
@@ -264,7 +265,7 @@ def test_the_gate_reads_the_environment_again_before_every_start(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone))
+    gate = StartGate(clone, Images(clone), Settings())
     [first] = _admit_many(gate, 1)
 
     monkeypatch.setenv(API_KEY, SECRET)
@@ -325,7 +326,7 @@ def test_once_the_gate_passes_again_its_item_is_cleared(
         else:
             monkeypatch.setenv(variable, value)
     monkeypatch.delenv(SESSION_GH_TOKEN)
-    gate = StartGate(clone, Images(clone))
+    gate = StartGate(clone, Images(clone), Settings())
     [refused] = _admit_many(gate, 1)
 
     monkeypatch.setenv(SESSION_GH_TOKEN, "github_pat_not-a-real-token")
