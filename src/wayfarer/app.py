@@ -16,13 +16,14 @@ from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
+from waystation import DockerSandbox, SandboxBackend
 
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
+from wayfarer.merge_queue import MergeQueue
 from wayfarer.models import Health, WireEvent
 from wayfarer.poll import poll
-from wayfarer.pull_requests import PullRequestGate
 from wayfarer.read_model import Efforts
 from wayfarer.settings import Settings
 from wayfarer.stream import Store
@@ -65,9 +66,15 @@ def create_app(
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     images = Images(repo, store)
-    # Every ticket a read finds Landing lands (#38), until the merge queue takes
-    # that over (#39).
-    efforts = Efforts(github, store, settings, landing=PullRequestGate(github).land)
+
+    def sandbox() -> SandboxBackend | None:
+        """Where the merge queue re-tests: the session image as it stands, which is the
+        repo's toolchain, and never anywhere unsandboxed (ADR-0005)."""
+        current = images.current()
+        return None if current is None else DockerSandbox(current)
+
+    queue = MergeQueue(repo, github, settings, sandbox)
+    efforts = Efforts(github, store, settings, line=queue.line)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003).
@@ -81,6 +88,7 @@ def create_app(
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        await queue.stop()
 
     app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)
     gate = StartGate(repo, images, settings)
