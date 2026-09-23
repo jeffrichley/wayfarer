@@ -19,3 +19,6 @@
 /* A frame fills its specimen's box, not the viewport. */
 .frame { width: 720px; height: 280px; }
 .frame > :global(.app) { height: 100%; }
+/* A chronicle is as wide as home's left column gives it. */
+.chronicle { width: 660px; }
+.lines { display: grid; gap: 16px; justify-items: start; }

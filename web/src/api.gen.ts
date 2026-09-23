@@ -123,6 +123,65 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Actor
+         * @description Who moved a ticket, read from the kind of event rather than the timeline's
+         *     actor, since Wayfarer writes with the person's own token (#22).
+         * @enum {string}
+         */
+        Actor: "wayfarer" | "you" | "someone";
+        /**
+         * Answered
+         * @description A person answered a ticket's question, and its session resumed.
+         */
+        Answered: {
+            /**
+             * By
+             * @enum {string}
+             */
+            by: "you" | "someone";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "answered";
+            /**
+             * Login
+             * @description Who answered, when it was someone else; else null.
+             */
+            login: string | null;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * Armed
+         * @description You armed the effort's cascade, with the sessions it started straight away.
+         */
+        Armed: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "armed";
+            /** Started */
+            started: components["schemas"]["Mention"][];
+        };
+        /**
+         * Asked
+         * @description A ticket's session ended to ask a person something.
+         */
+        Asked: {
+            /**
+             * Gist
+             * @description The question's gist, quoted as the session wrote it.
+             */
+            gist: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "asked";
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
          * Beat
          * @description One meaningful moment in a session, derived from its events and never stored.
          *
@@ -240,6 +299,53 @@ export interface components {
          * @enum {string}
          */
         Checks: "passing" | "pending" | "failing";
+        /**
+         * ChronicleLine
+         * @description One line of the chronicle: one thing that moved a ticket, with what it directly
+         *     caused, derived from GitHub and never stored (#22). The browser writes its
+         *     sentence from one template per kind of movement, so a rebuilt chronicle reads
+         *     the same and no line can misname a ticket.
+         */
+        ChronicleLine: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** @description The effort it moved, named on the right of the line. */
+            effort: components["schemas"]["Mention"];
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "chronicle_line";
+            /** Moved */
+            moved: components["schemas"]["Taken"] | components["schemas"]["Asked"] | components["schemas"]["Answered"] | components["schemas"]["Held"] | components["schemas"]["Retried"] | components["schemas"]["Landed"] | components["schemas"]["Closed"] | components["schemas"]["Armed"] | components["schemas"]["Published"] | components["schemas"]["ReadyToShip"] | components["schemas"]["Shipped"];
+        };
+        /**
+         * Closed
+         * @description A person closed a ticket without landing it.
+         */
+        Closed: {
+            /**
+             * By
+             * @enum {string}
+             */
+            by: "you" | "someone";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "closed";
+            /**
+             * Login
+             * @description Who closed it, when it was someone else; else null.
+             */
+            login: string | null;
+            ticket: components["schemas"]["Mention"];
+        };
         /**
          * Effort
          * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
@@ -367,6 +473,23 @@ export interface components {
             version: string;
         };
         /**
+         * Held
+         * @description A ticket was kept back until a person decides.
+         */
+        Held: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "held";
+            /**
+             * Reason
+             * @description The plain-words Held reason, quoted, as a sentence.
+             */
+            reason: string;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
          * ImageStatus
          * @description The image this repo's sessions run in: Wayfarer's base plus the repo's layer (ADR-0005).
          */
@@ -405,6 +528,45 @@ export interface components {
             tag: string | null;
         };
         /**
+         * Landed
+         * @description A ticket landed on its effort branch, with what that directly caused (#22).
+         */
+        Landed: {
+            /** @description Wayfarer for a landing through the merge queue; a person for a merge by hand on GitHub, which was not re-tested. */
+            by: components["schemas"]["Actor"];
+            /**
+             * Freed
+             * @description The tickets its landing made takeable.
+             */
+            freed: components["schemas"]["Mention"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "landed";
+            /**
+             * Login
+             * @description Who merged it, when it was someone else; else null.
+             */
+            login: string | null;
+            /**
+             * Started
+             * @description Those of them the cascade started a session on.
+             */
+            started: components["schemas"]["Mention"][];
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * Mention
+         * @description A ticket or an effort as a line names it: by its title, its number riding after.
+         */
+        Mention: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+        };
+        /**
          * ProbeCheck
          * @description One thing the probe proved, or failed to prove, about a newly built image.
          */
@@ -415,6 +577,32 @@ export interface components {
             name: string;
             /** Passed */
             passed: boolean;
+        };
+        /**
+         * Published
+         * @description `/to-tickets` published the effort's tickets, with what that directly caused.
+         */
+        Published: {
+            /**
+             * Freed
+             * @description Those of them takeable from the start.
+             */
+            freed: components["schemas"]["Mention"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "published";
+            /**
+             * Started
+             * @description Those the cascade started a session on.
+             */
+            started: components["schemas"]["Mention"][];
+            /**
+             * Tickets
+             * @description How many tickets it published.
+             */
+            tickets: number;
         };
         /**
          * PullRequest
@@ -440,6 +628,17 @@ export interface components {
             number: number;
         };
         /**
+         * ReadyToShip
+         * @description The effort's last ticket landed, so the effort can ship.
+         */
+        ReadyToShip: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ready_to_ship";
+        };
+        /**
          * Removal
          * @description The item with this id is gone.
          */
@@ -453,17 +652,63 @@ export interface components {
             kind: "removal";
         };
         /**
+         * Retried
+         * @description You retried a Held ticket (#20).
+         */
+        Retried: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "retried";
+            /**
+             * Over
+             * @description Started over on the effort branch's head, rather than continuing where its session stopped.
+             */
+            over: boolean;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * Shipped
+         * @description The effort's branch landed on the trunk.
+         */
+        Shipped: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "shipped";
+        };
+        /**
          * Snapshot
          * @description Everything there is, replacing whatever the browser held.
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "snapshot";
+        };
+        /**
+         * Taken
+         * @description A ticket was taken: by a session the cascade started, or by a person's hand.
+         */
+        Taken: {
+            by: components["schemas"]["Actor"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "taken";
+            /**
+             * Login
+             * @description Who took it, when it was someone else; else null.
+             */
+            login: string | null;
+            ticket: components["schemas"]["Mention"];
         };
         /**
          * TestRun
@@ -534,7 +779,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
