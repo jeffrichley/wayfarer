@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -177,18 +177,76 @@ def post(url: str) -> httpx.Response:
     return httpx.post(url, timeout=5.0)
 
 
-def events(url: str, timeout: float = 900.0) -> Iterator[tuple[str, Any]]:
-    """Each server-sent event at `url` as (kind, payload), until the server ends it.
+Items = dict[str, dict[str, Any]]
 
-    The timeout is per read, and generous because a stream may carry a whole
-    image build, which pauses while Docker downloads.
+
+class Stream:
+    """One page's stream, applied as the browser applies it: replaced by id, never merged.
+
+    `timeout` is per read; a stream carrying an image build needs a generous one,
+    because a build pauses while Docker downloads.
     """
-    with httpx.stream("GET", url, timeout=timeout) as response:
+
+    def __init__(self, url: str, last_event_id: str | None = None, timeout: float = 20.0) -> None:
+        headers = {} if last_event_id is None else {"Last-Event-ID": last_event_id}
+        self._opened = httpx.stream("GET", f"{url}api/events", headers=headers, timeout=timeout)
+        response = self._opened.__enter__()
         response.raise_for_status()
-        for line in response.iter_lines():
+        self._lines = response.iter_lines()
+        self.items: Items = {}
+        self.received: list[dict[str, Any]] = []
+        self.ids: list[str] = []
+
+    def __enter__(self) -> Stream:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Drop the connection, as a closed tab or a lost network does."""
+        self._opened.__exit__(None, None, None)
+
+    @property
+    def last_event_id(self) -> str:
+        return self.ids[-1]
+
+    def next(self) -> dict[str, Any]:
+        """The next event, once it is applied."""
+        event: dict[str, Any] | None = None
+        for line in self._lines:
             if line.startswith("data:"):
-                payload = json.loads(line.removeprefix("data:"))
-                yield payload["kind"], payload
+                event = json.loads(line.removeprefix("data:"))
+            elif line.startswith("id:"):
+                self.ids.append(line.removeprefix("id:").strip())
+            elif not line and event is not None:
+                break
+        else:
+            pytest.fail("the stream ended")
+        if event["kind"] == "snapshot":
+            self.items = {item["id"]: item for item in event["items"]}
+        elif event["kind"] == "upsert":
+            self.items[event["item"]["id"]] = event["item"]
+        else:
+            del self.items[event["id"]]
+        self.received.append(event)
+        return event
+
+    def until(self, arrived: Callable[[Items], bool]) -> list[dict[str, Any]]:
+        """Read until `arrived` holds of what the page holds; the events that took."""
+        start = len(self.received)
+        while not arrived(self.items):
+            self.next()
+        return self.received[start:]
+
+    def item(self, id: str, **fields: Any) -> dict[str, Any]:
+        """The item with `id`, once it has arrived with every one of `fields`."""
+        self.until(lambda items: _has(items.get(id), fields))
+        return self.items[id]
+
+
+def _has(item: dict[str, Any] | None, fields: dict[str, Any]) -> bool:
+    return item is not None and all(item.get(k) == v for k, v in fields.items())
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

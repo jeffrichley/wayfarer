@@ -4,15 +4,35 @@
  */
 
 export interface paths {
-    "/api/efforts/{number}": {
+    "/api/efforts/{number}/read": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Effort */
-        get: operations["effort_api_efforts__number__get"];
+        get?: never;
+        put?: never;
+        /**
+         * Read Effort
+         * @description Read an effort's ticket graph from GitHub afresh (ADR-0003).
+         */
+        post: operations["read_effort_api_efforts__number__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38,23 +58,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/image": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Image */
-        get: operations["image_api_image_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/image/build": {
         parameters: {
             query?: never;
@@ -62,8 +65,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Build Output */
-        get: operations["build_output_api_image_build_get"];
+        get?: never;
         put?: never;
         /**
          * Build Image
@@ -76,13 +78,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/image/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Image
+         * @description Read what the session image would be now.
+         */
+        post: operations["read_image_api_image_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
          * BuildFinished
-         * @description How a build ended. The last event of its stream.
+         * @description How the last build ended.
          */
         BuildFinished: {
             /**
@@ -96,10 +118,15 @@ export interface components {
              */
             error: string | null;
             /**
+             * Id
+             * @constant
+             */
+            id: "build_finished";
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "finished";
+            kind: "build_finished";
             /**
              * Ready
              * @description Built and passed its probe, so sessions may use it.
@@ -110,16 +137,23 @@ export interface components {
         };
         /**
          * BuildOutput
-         * @description One line of a build's output, as Docker printed it.
+         * @description One line of the last build's output, as Docker printed it.
          */
         BuildOutput: {
+            /** Id */
+            id: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "output";
+            kind: "build_output";
             /** Line */
             line: string;
+            /**
+             * Number
+             * @description Where the line falls in the output, counting from 0.
+             */
+            number: number;
         };
         /**
          * Checks
@@ -132,12 +166,42 @@ export interface components {
          * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
          */
         Effort: {
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "effort";
             /** Number */
             number: number;
-            /** Tickets */
-            tickets: components["schemas"]["Ticket"][];
+            /**
+             * Tickets
+             * @description The ids of its tickets, each an item of its own.
+             */
+            tickets: string[];
             /** Title */
             title: string;
+        };
+        /**
+         * EffortUnreadable
+         * @description An effort Wayfarer was asked to read and could not. It stands in the effort's place.
+         */
+        EffortUnreadable: {
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "effort_unreadable";
+            /** Number */
+            number: number;
+            /**
+             * Reason
+             * @description Why, in words for the person.
+             */
+            reason: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -159,6 +223,16 @@ export interface components {
         ImageStatus: {
             /** Building */
             building: boolean;
+            /**
+             * Id
+             * @constant
+             */
+            id: "image";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "image";
             /**
              * Layer
              * @description Where the repo's layer lives, relative to the clone.
@@ -208,6 +282,32 @@ export interface components {
             number: number;
         };
         /**
+         * Removal
+         * @description The item with this id is gone.
+         */
+        Removal: {
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "removal";
+        };
+        /**
+         * Snapshot
+         * @description Everything there is, replacing whatever the browser held.
+         */
+        Snapshot: {
+            /** Items */
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"])[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "snapshot";
+        };
+        /**
          * Ticket
          * @description One ticket in an effort, as GitHub has it now.
          */
@@ -216,6 +316,13 @@ export interface components {
             assignees: string[];
             /** Blocked By */
             blocked_by: number[];
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ticket";
             /** Labels */
             labels: string[];
             /** Number */
@@ -235,6 +342,19 @@ export interface components {
          * @enum {string}
          */
         TicketState: "landed" | "closed" | "asked" | "held" | "landing" | "in_review" | "building" | "takeable" | "blocked";
+        /**
+         * Upsert
+         * @description One item, new or replacing the one with its id.
+         */
+        Upsert: {
+            /** Item */
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "upsert";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -257,7 +377,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    effort_api_efforts__number__get: {
+    read_effort_api_efforts__number__read_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -269,12 +389,43 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "last-event-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Effort"];
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */
@@ -308,46 +459,6 @@ export interface operations {
             };
         };
     };
-    image_api_image_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImageStatus"];
-                };
-            };
-        };
-    };
-    build_output_api_image_build_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-        };
-    };
     build_image_api_image_build_post: {
         parameters: {
             query?: never;
@@ -372,6 +483,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    read_image_api_image_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
         };
     };

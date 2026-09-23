@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
-from conftest import Launcher, commit_layer, events, get, post
+from conftest import Items, Launcher, Stream, commit_layer, post
 
 pytestmark = pytest.mark.docker
 
@@ -28,18 +29,34 @@ def built_tags() -> Iterator[list[str]]:
         subprocess.run(["docker", "image", "rm", built], capture_output=True)
 
 
-def _build(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
-    """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
-    commit_layer(clone, dockerfile)
+# Per read of the stream: a build pauses while Docker downloads.
+_BUILD_TIMEOUT = 900.0
 
-    assert post(f"{url}api/image/build").status_code == 202
-    output: list[str] = []
-    for kind, event in events(f"{url}api/image/build"):
-        if kind == "output":
-            output.append(event["line"])
-        else:
-            return output, event
-    pytest.fail("the build stream ended without saying how the build finished")
+
+@dataclass
+class _Built:
+    """What the page was told of one build, once the image says it is over."""
+
+    output: list[str]
+    finished: dict[str, Any]
+    image: dict[str, Any]
+
+
+def _build(url: str, clone: Path, dockerfile: str) -> _Built:
+    """Commit `dockerfile` as the layer, click Build, and watch the stream to its end."""
+    commit_layer(clone, dockerfile)
+    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
+        assert post(f"{url}api/image/build").status_code == 202
+        # Started, which clears any earlier build's output and ending from the page.
+        page.item("image", building=True)
+        finished = page.item("build_finished")
+        image = page.item("image", building=False)
+        return _Built(_output(page.items), finished, image)
+
+
+def _output(items: Items) -> list[str]:
+    lines = [item for item in items.values() if item["kind"] == "build_output"]
+    return [item["line"] for item in sorted(lines, key=lambda item: item["number"])]
 
 
 def _checks(finished: dict[str, Any]) -> dict[str, bool]:
@@ -57,13 +74,16 @@ def test_a_repo_with_a_layer_gets_an_image_built_on_click_with_output_streamed(
 
     # Unique, so the step really runs and its own output, not a cache hit, streams.
     marker = uuid4().hex
-    output, finished = _build(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
+    built = _build(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
+    finished = built.finished
     built_tags.append(finished["tag"])
 
-    assert any(line.endswith(marker[::-1]) for line in output)
-    assert finished["ready"] is True, output
+    assert any(line.endswith(marker[::-1]) for line in built.output)
+    assert finished["ready"] is True, built.output
     assert set(_checks(finished).values()) == {True}
-    assert get(f"{url}api/image").json() == {
+    assert built.image == {
+        "kind": "image",
+        "id": "image",
         "layer": ".wayfarer/Dockerfile",
         "refusal": None,
         "tag": finished["tag"],
@@ -78,7 +98,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
 ) -> None:
     url = wayfarer.start().url()
 
-    _, finished = _build(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n")
+    finished = _build(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n").finished
     built_tags.append(finished["tag"])
 
     assert set(_checks(finished)) == {
@@ -103,13 +123,14 @@ def test_an_image_that_fails_its_probe_is_never_tagged_for_a_session(
 ) -> None:
     url = wayfarer.start().url()
 
-    _, finished = _build(url, clone, f"FROM wayfarer-base\n{layer}")
+    built = _build(url, clone, f"FROM wayfarer-base\n{layer}")
+    finished = built.finished
     built_tags.append(finished["tag"])
 
     assert finished["ready"] is False
     assert _checks(finished)[failing] is False
     assert not _exists(finished["tag"])
-    assert get(f"{url}api/image").json()["ready"] is False
+    assert built.image["ready"] is False
 
 
 def test_a_layer_that_does_not_build_says_so_and_leaves_no_tag(
@@ -117,13 +138,14 @@ def test_a_layer_that_does_not_build_says_so_and_leaves_no_tag(
 ) -> None:
     url = wayfarer.start().url()
 
-    output, finished = _build(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
+    built = _build(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
+    finished = built.finished
 
     assert finished["ready"] is False
     assert finished["error"] is not None
     assert finished["checks"] == []
     assert not _exists(finished["tag"])
-    assert output
+    assert built.output
 
 
 def test_a_second_click_while_building_joins_the_build_rather_than_starting_another(
@@ -133,14 +155,36 @@ def test_a_second_click_while_building_joins_the_build_rather_than_starting_anot
     # Unique, so Docker's cache cannot make it quick enough to finish between clicks.
     commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {uuid4()}\n")
 
-    assert post(f"{url}api/image/build").status_code == 202
-    assert get(f"{url}api/image").json()["building"] is True
-    assert post(f"{url}api/image/build").status_code == 202
-    streamed = list(events(f"{url}api/image/build"))
-    built_tags.append(streamed[-1][1]["tag"])
+    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
+        assert post(f"{url}api/image/build").status_code == 202
+        page.item("image", building=True)
+        assert post(f"{url}api/image/build").status_code == 202
+        built_tags.append(page.item("build_finished")["tag"])
+        page.item("image", building=False)
 
-    assert [kind for kind, _ in streamed].count("finished") == 1
-    assert sum("RUN sleep 3" in event.get("line", "") for _, event in streamed) == 1
+    # A second build would have replaced the first one's output with its own.
+    assert not [event for event in page.received if event["kind"] == "removal"]
+    assert sum("RUN sleep 3" in line for line in _output(page.items)) == 1
+
+
+def test_a_new_click_replaces_the_last_builds_output_with_its_own(
+    wayfarer: Launcher, clone: Path, built_tags: list[str]
+) -> None:
+    url = wayfarer.start().url()
+    # Far longer than the second, so a line of it left behind would show.
+    before = uuid4().hex
+    first = _build(
+        url, clone, f"FROM wayfarer-base\nRUN for i in $(seq 200); do echo {before}; done\n"
+    )
+    built_tags.append(first.finished["tag"])
+
+    after = uuid4().hex
+    second = _build(url, clone, f"FROM wayfarer-base\nRUN echo {after}\n")
+    built_tags.append(second.finished["tag"])
+
+    assert any(before in line for line in first.output)
+    assert any(after in line for line in second.output)
+    assert not any(before in line for line in second.output)
 
 
 def test_editing_the_layer_mid_build_does_not_change_what_the_build_is_tagged(
@@ -149,11 +193,13 @@ def test_editing_the_layer_mid_build_does_not_change_what_the_build_is_tagged(
     url = wayfarer.start().url()
     marker = uuid4().hex
     commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {marker} > /tmp/built\n")
-    clicked = get(f"{url}api/image").json()["tag"]
 
-    assert post(f"{url}api/image/build").status_code == 202
-    commit_layer(clone, "FROM wayfarer-base\nRUN echo edited > /tmp/built\n")
-    *_, (_, finished) = events(f"{url}api/image/build")
+    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
+        post(f"{url}api/image/read")
+        clicked = page.item("image")["tag"]
+        assert post(f"{url}api/image/build").status_code == 202
+        commit_layer(clone, "FROM wayfarer-base\nRUN echo edited > /tmp/built\n")
+        finished = page.item("build_finished")
     built_tags.append(finished["tag"])
 
     assert finished["tag"] == clicked

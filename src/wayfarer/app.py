@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable
+import asyncio
+from collections.abc import AsyncIterable, Coroutine
 from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
-from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
-from wayfarer.image import Build, Images, NoLayer
-from wayfarer.models import BuildEvent, Effort, Health, ImageStatus
-from wayfarer.read_model import read_effort
+from wayfarer.github import GitHub
+from wayfarer.image import Images, NoLayer
+from wayfarer.models import Health, WireEvent
+from wayfarer.read_model import Efforts
 from wayfarer.settings import Settings
+from wayfarer.stream import Store
 
 __all__ = ["create_app"]
 
@@ -33,28 +35,33 @@ or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 """
 
 
-async def _last_build(request: Request) -> Build:
-    # A dependency, so a missing build is a 404 before its stream starts.
-    images: Images = request.app.state.images
-    if images.last_build is None:
-        raise HTTPException(status_code=404, detail="No build has been asked for.")
-    return images.last_build
-
-
-LastBuild = Annotated[Build, Depends(_last_build)]
-
-
 def create_app(
-    repo: Path, settings: Settings | None = None, github: GitHub | None = None
+    repo: Path,
+    settings: Settings | None = None,
+    github: GitHub | None = None,
+    store: Store | None = None,
 ) -> FastAPI:
     """The app for the clone whose working tree is `repo`, reading GitHub through
-    `github`; without one, every read of GitHub says so."""
+    `github`; without one, every read of GitHub says so. `store` is what the page's
+    stream carries, which whoever runs the server closes as it stops."""
     settings = settings or Settings()
     github = github or GitHub(None, settings)
+    store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     app = FastAPI(title="Wayfarer", version=running)
-    images = Images(repo)
-    app.state.images = images
+    images = Images(repo, store)
+    efforts = Efforts(github, store, settings)
+    # A command's work outlives its request, and asyncio keeps only a weak
+    # reference to a task, so each is held here until it is done.
+    working: set[asyncio.Task[None]] = set()
+
+    def accept(work: Coroutine[None, None, None]) -> Response:
+        """Start `work` and say only that it was accepted; its effect comes back over
+        the stream like any other change (ADR-0004)."""
+        task = asyncio.create_task(work)
+        working.add(task)
+        task.add_done_callback(working.discard)
+        return Response(status_code=202)
 
     # Handlers are async so they run on the loop every agent run shares (ADR-0001),
     # not in a thread pool beside it.
@@ -62,45 +69,34 @@ def create_app(
     async def health() -> Health:
         return Health(version=running)
 
-    # Read afresh on every ask; nothing is kept between reads (ADR-0002). A plain
-    # GET until the SSE stream exists (#31), which then carries this as its
-    # snapshot, the only way data reaches the browser (ADR-0004).
-    @app.get("/api/efforts/{number}")
-    async def effort(number: int) -> Effort:
-        try:
-            return await read_effort(
-                github,
-                number,
-                per_page=settings.tickets_per_page,
-                auto_merge=settings.auto_merge,
-            )
-        except NotConnected as error:
-            raise HTTPException(status_code=503, detail=str(error)) from error
-        except NoSuchIssue as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
-        except GitHubError as error:
-            raise HTTPException(status_code=502, detail=str(error)) from error
+    # The only way data reaches the browser (ADR-0004). The annotation puts every
+    # event's shape in the schema the browser's types come from; each goes out
+    # framed with its id, which FastAPI sends as it is.
+    @app.get("/api/events", response_class=EventSourceResponse)
+    async def events(
+        last_event_id: Annotated[str | None, Header()] = None,
+    ) -> AsyncIterable[WireEvent]:
+        async for framed in store.events(last_event_id):
+            yield framed  # type: ignore[misc]
 
-    @app.get("/api/image")
-    async def image() -> ImageStatus:
-        return await images.status()
+    @app.post("/api/efforts/{number}/read", status_code=202)
+    async def read_effort(number: int) -> Response:
+        """Read an effort's ticket graph from GitHub afresh (ADR-0003)."""
+        return accept(efforts.read(number))
+
+    @app.post("/api/image/read", status_code=202)
+    async def read_image() -> Response:
+        """Read what the session image would be now."""
+        return accept(images.read())
 
     @app.post("/api/image/build", status_code=202, responses={409: {"description": "No layer"}})
-    async def build_image() -> None:
+    async def build_image() -> Response:
         """Build the session image. Builds happen only here, when a person clicks."""
         try:
             images.build()
         except NoLayer as refusal:
             raise HTTPException(status_code=409, detail=str(refusal)) from None
-
-    # The build's output, from its first line. Until the page's one stream lands
-    # (#31), a build streams on its own (ADR-0004).
-    @app.get("/api/image/build", response_class=EventSourceResponse)
-    async def build_output(
-        build: LastBuild,
-    ) -> AsyncIterable[BuildEvent]:
-        async for event in build.events():
-            yield event
+        return Response(status_code=202)
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

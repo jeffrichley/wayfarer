@@ -1,7 +1,8 @@
 """The read model: an effort's whole ticket graph, read from GitHub on every ask.
 
 An effort is a spec issue, and its tickets are that issue's sub-issues. Each read
-is one GraphQL query of the stand-in; nothing is kept between reads.
+is one GraphQL query of the stand-in; nothing is kept between reads. A read is
+asked for by a command, and what it found arrives over the page's stream.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from conftest import Launcher, get
+from conftest import Launcher, Stream, post
 from github_stand_in import GitHub
 from wayfarer.read_model import ASKED, HELD
 
@@ -21,10 +22,19 @@ pytestmark = pytest.mark.git
 
 
 def _read(url: str, effort: int) -> dict[str, Any]:
-    response = get(f"{url}api/efforts/{effort}")
-    assert response.status_code == 200, response.text
-    body: dict[str, Any] = response.json()
-    return body
+    """The first read of `effort`, with its tickets in place of their ids."""
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{effort}/read")
+        read = page.item(f"effort:{effort}")
+        return read | {"tickets": [page.items[id] for id in read["tickets"]]}
+
+
+def _unreadable(url: str, effort: int) -> str:
+    """Why a read of `effort` failed, as the page is told."""
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{effort}/read")
+        reason: str = page.item(f"effort:{effort}", kind="effort_unreadable")["reason"]
+        return reason
 
 
 def _tickets(effort: dict[str, Any]) -> dict[int, dict[str, Any]]:
@@ -208,7 +218,9 @@ def test_nothing_is_kept_between_reads_so_a_change_on_github_shows_at_once(
 
     ticket.labels.append(HELD)
 
-    assert _states(url, spec.number) == {ticket.number: "held"}
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{spec.number}/read")
+        page.item(f"ticket:{ticket.number}", state="held")
     assert len(github.queries) == 2
 
 
@@ -220,25 +232,21 @@ def test_a_stale_github_is_believed_until_it_catches_up(wayfarer: Launcher, gith
         github.close(ticket)
         assert _states(url, spec.number) == {ticket.number: "takeable"}
 
-    assert _states(url, spec.number) == {ticket.number: "landed"}
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{spec.number}/read")
+        page.item(f"ticket:{ticket.number}", state="landed")
 
 
 def test_an_issue_that_does_not_exist_is_not_found(wayfarer: Launcher) -> None:
     url = wayfarer.start().url()
 
-    response = get(f"{url}api/efforts/404")
-
-    assert response.status_code == 404
-    assert "no issue #404" in response.json()["detail"]
+    assert "no issue #404" in _unreadable(url, 404)
 
 
 def test_without_a_github_token_a_read_says_so(wayfarer: Launcher) -> None:
     url = wayfarer.start(env={"GH_TOKEN": None, "GITHUB_TOKEN": None}).url()
 
-    response = get(f"{url}api/efforts/1")
-
-    assert response.status_code == 503
-    assert "GH_TOKEN" in response.json()["detail"]
+    assert "GH_TOKEN" in _unreadable(url, 1)
 
 
 def test_a_token_github_refuses_is_reported_rather_than_read_as_empty(
@@ -246,10 +254,7 @@ def test_a_token_github_refuses_is_reported_rather_than_read_as_empty(
 ) -> None:
     url = wayfarer.start(env={"GH_TOKEN": "revoked"}).url()
 
-    response = get(f"{url}api/efforts/1")
-
-    assert response.status_code == 502
-    assert "Bad credentials" in response.json()["detail"]
+    assert "Bad credentials" in _unreadable(url, 1)
 
 
 def test_a_clone_with_no_github_remote_cannot_read_an_effort(
@@ -258,10 +263,7 @@ def test_a_clone_with_no_github_remote_cannot_read_an_effort(
     subprocess.run(["git", "remote", "remove", "origin"], cwd=clone, check=True)
     url = wayfarer.start().url()
 
-    response = get(f"{url}api/efforts/1")
-
-    assert response.status_code == 503
-    assert "no GitHub remote" in response.json()["detail"]
+    assert "no GitHub remote" in _unreadable(url, 1)
 
 
 def test_a_github_that_cannot_be_reached_is_reported(wayfarer: Launcher) -> None:
@@ -270,10 +272,7 @@ def test_a_github_that_cannot_be_reached_is_reported(wayfarer: Launcher) -> None
         nowhere = f"http://127.0.0.1:{closed.getsockname()[1]}"
     url = wayfarer.start(env={"WAYFARER_GITHUB_API": nowhere}).url()
 
-    response = get(f"{url}api/efforts/1")
-
-    assert response.status_code == 502
-    assert "could not be reached" in response.json()["detail"]
+    assert "could not be reached" in _unreadable(url, 1)
 
 
 def test_a_clone_of_a_repo_github_does_not_have_says_so(wayfarer: Launcher, clone: Path) -> None:
@@ -284,7 +283,4 @@ def test_a_clone_of_a_repo_github_does_not_have_says_so(wayfarer: Launcher, clon
     )
     url = wayfarer.start().url()
 
-    response = get(f"{url}api/efforts/1")
-
-    assert response.status_code == 404
-    assert "octo/gone was not found" in response.json()["detail"]
+    assert "octo/gone was not found" in _unreadable(url, 1)

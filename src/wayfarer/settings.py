@@ -27,6 +27,9 @@ class Settings:
     budget allows; 100 would cost 4 (ADR-0003)."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
+    stream_backlog: int = 1000
+    """Changes kept for a page that reconnects. One that missed more is sent a snapshot
+    instead, which costs it nothing but bytes, so this only bounds memory."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:

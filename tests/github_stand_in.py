@@ -198,6 +198,11 @@ class GitHub:
         issue.state = "CLOSED"
         issue.state_reason = reason
 
+    def delete(self, issue: Issue) -> None:
+        """Delete it, as a repo's admin can."""
+        with self._lock:
+            del self._live.issues[issue.number]
+
     def _take_number(self) -> int:
         number = self._next_number
         self._next_number += 1

@@ -1,53 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 
-import type { BuildEvent, BuildFinished, ImageStatus } from "./api";
+import type { BuildFinished, BuildOutput, ImageStatus } from "./api";
+import { command, useItems } from "./store";
 
 // The image this repo's sessions run in (ADR-0005). It is built only when the
 // person clicks Build, and its output streams in as Docker prints it.
 export function SessionImage() {
-  const [status, setStatus] = useState<ImageStatus | null>(null);
-  const [output, setOutput] = useState<string[]>([]);
-  const [finished, setFinished] = useState<BuildFinished | null>(null);
+  const status = useItems((items) => items["image"] as ImageStatus | undefined);
+  const finished = useItems((items) => items["build_finished"] as BuildFinished | undefined);
+  const output = useItems(
+    useShallow((items) =>
+      Object.values(items)
+        .filter((item): item is BuildOutput => item.kind === "build_output")
+        .sort((a, b) => a.number - b.number)
+        .map((item) => item.line),
+    ),
+  );
 
-  // Bumped to read the status again, after a click and when a build finishes.
-  // Read by fetch until the page's one stream lands (#31), which will carry it.
-  const [asked, setAsked] = useState(0);
-  const refresh = () => setAsked((n) => n + 1);
-
+  // The layer may have changed on disk since anything last looked.
   useEffect(() => {
-    let current = true;
-    void fetch("/api/image")
-      .then((response) => response.json() as Promise<ImageStatus>)
-      .then((read) => {
-        if (current) setStatus(read);
-      });
-    return () => {
-      current = false;
-    };
-  }, [asked]);
+    void command("/api/image/read");
+  }, []);
 
-  const build = async () => {
-    setOutput([]);
-    setFinished(null);
-    const response = await fetch("/api/image/build", { method: "POST" });
-    refresh();
-    if (response.status !== 202) {
-      return;
-    }
-    const stream = new EventSource("/api/image/build");
-    stream.onmessage = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as BuildEvent;
-      if (event.kind === "output") {
-        setOutput((lines) => [...lines, event.line]);
-      } else {
-        stream.close();
-        setFinished(event);
-        refresh();
-      }
-    };
-  };
-
-  if (status === null) {
+  if (status === undefined) {
     return null;
   }
 
@@ -62,12 +38,16 @@ export function SessionImage() {
             <code>{status.tag}</code>{" "}
             {status.ready ? "is built and passed its probe." : "has not been built."}
           </p>
-          <button type="button" onClick={() => void build()} disabled={status.building}>
+          <button
+            type="button"
+            onClick={() => void command("/api/image/build")}
+            disabled={status.building}
+          >
             {status.building ? "Building…" : "Build"}
           </button>
         </>
       )}
-      {finished !== null && (
+      {finished !== undefined && (
         <>
           {finished.error !== null && <p role="alert">{finished.error}</p>}
           <ul>
