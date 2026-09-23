@@ -1,0 +1,18 @@
+/* The gallery's own layout. Each specimen sits in a bare box, the same box the
+   prototype's reference page gives it (tests/prototype_gallery.html), so the two
+   can be compared pixel for pixel. */
+.page { max-width: 1240px; margin: 0 auto; padding: 44px 40px 72px; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
+.head h1 { font-size: 34px; }
+.themes { display: flex; gap: 6px; }
+.section { padding: 24px 0; border-bottom: 1px solid var(--border); }
+.section > h2 { font-size: 20px; margin-bottom: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.row + .row { margin-top: 16px; }
+/* A glyph beside its word, set as the prototype's legends set one (index.html). */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend + .legend { margin-top: 16px; }
+.specimen { display: inline-block; }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.swatch { display: grid; gap: 4px; }
+.chip { height: 40px; border: 1px solid var(--border); border-radius: var(--r); }

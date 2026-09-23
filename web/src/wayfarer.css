@@ -1,0 +1,171 @@
+/* The design system every component styles itself over, ported from the frozen
+   prototype (prototype/assets/wayfarer.css) as ADR-0004 decides. Its rules are
+   copied, not re-derived: the gallery's snapshot check (tests/test_the_gallery.py)
+   compares the page against the prototype, so a value that drifts fails a test.
+   Only what the shell and widgets share lives here; each widget ports its own
+   rules into its own CSS Module as its ticket lands. */
+
+/* ─── Wayfarer · shared styles ──────────────────────────────────────────
+   Direction: editorial-monocle paper and ink. Six tokens, everything
+   else derived with color-mix(). Status is carried by shape, never hue.
+   The accent is chart magenta — the colour navigators plot a course in —
+   and it means two things only: the course walked so far, and the one
+   primary action on a screen. */
+:root {
+  /* Contrast is held near 14:1 for body text rather than the 17:1 of
+     pure ink on white paper: still well past AAA, without the glare. */
+  --bg:      oklch(97.5% 0.005 92);
+  --surface: oklch(99.2% 0.003 92);
+  --fg:      oklch(26% 0.016 68);
+  --muted:   oklch(47% 0.012 70);
+  --border:  oklch(89.5% 0.007 92);
+  --accent:  oklch(52% 0.18 350);
+
+  --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace;
+
+  /* derived */
+  --ink-2: color-mix(in oklch, var(--fg) 78%, var(--bg));
+  --wash:  color-mix(in oklch, var(--fg) 3.5%, var(--bg));
+  --hover: color-mix(in oklch, var(--fg) 8%, var(--bg));
+  --line:  color-mix(in oklch, var(--fg) 24%, var(--bg));
+  --accent-hover: color-mix(in oklch, var(--accent) 80%, var(--fg));
+  --shadow: color-mix(in oklch, var(--fg) 40%, transparent);
+  --rule:  var(--fg);   /* heavy rules and emphasis outlines */
+
+  --r: 3px;
+  --topbar-h: 52px;
+  color-scheme: light;
+}
+
+/* ─── night chart ───────────────────────────────────────────────────────
+   The same chart read at night: warm ink ground, paper-coloured type, and
+   the magenta course lifted so it stays the brightest line on the screen,
+   the way it does on a glass-cockpit display. Only the six tokens change;
+   every derived tone follows.
+   Bright type on near-black halates — it glows and reads as blurry — so the
+   ground is a charcoal, not black, and the paper is dimmed: body text sits
+   near 11:1 instead of 15:1. */
+:root[data-theme="dark"] {
+  --bg:      oklch(22% 0.009 75);
+  --surface: oklch(25.5% 0.010 75);
+  --fg:      oklch(84.5% 0.016 85);
+  --muted:   oklch(70% 0.013 80);
+  --border:  oklch(34.5% 0.011 75);
+  --accent:  oklch(72% 0.17 350);
+
+  /* on a dark ground a hover needs a larger lightness step to read,
+     so raised surfaces still move by at least 0.06 L */
+  --hover:  color-mix(in oklch, var(--fg) 16%, var(--bg));
+  --shadow: color-mix(in oklch, black 70%, transparent);
+  /* bright 1px outlines glow on dark; rules step back to a quieter ink */
+  --rule:   color-mix(in oklch, var(--fg) 45%, var(--bg));
+  color-scheme: dark;
+}
+html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after {
+  transition: background-color .3s ease, border-color .3s ease, color .3s ease, fill .3s ease, stroke .3s ease !important;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+p { margin: 0; text-wrap: pretty; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; font-family: var(--font-display); font-weight: 500; letter-spacing: -0.012em; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+code, .mono { font-family: var(--font-mono); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; border-radius: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+
+/* ─── type helpers ──────────────────────────────────────────────────── */
+.kicker { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.meta { font-size: 12.5px; color: var(--muted); }
+.display { font-family: var(--font-display); font-weight: 500; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--border); border-radius: 2px;
+  padding: 1px 6px; white-space: nowrap; background: var(--surface);
+}
+.skill { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+a.nm {
+  color: var(--fg); text-decoration: underline; text-decoration-thickness: 1px;
+  text-decoration-color: var(--line); text-underline-offset: 3px;
+}
+a.nm:hover { text-decoration-color: var(--fg); background: var(--hover); }
+.id { font-family: var(--font-mono); font-size: 0.8em; color: var(--muted); margin-left: 5px; white-space: nowrap; }
+.rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+
+/* ─── buttons ───────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 36px; padding: 7px 14px;
+  border-radius: var(--r); border: 1px solid transparent;
+  font-size: 13.5px; font-weight: 500; line-height: 1.2;
+  cursor: pointer; white-space: nowrap; text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--surface); }
+.btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+.btn-secondary:hover { background: var(--hover); border-color: var(--line); }
+.btn-ghost { background: transparent; color: var(--fg); padding-inline: 10px; }
+.btn-ghost:hover { background: var(--hover); }
+.btn-sm { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+.btn[aria-disabled="true"] { cursor: default; transform: none; }
+.btn-primary[aria-disabled="true"], .btn-primary[aria-disabled="true"]:hover { background: var(--hover); border-color: var(--border); color: var(--fg); }
+.btn-arrow::after { content: '→'; transition: transform .15s ease; }
+.btn-arrow:hover::after { transform: translateX(2px); }
+
+/* ─── status glyphs: one vocabulary across every screen ─────────────── */
+.st { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; position: relative; vertical-align: -1px; }
+.st-done     { background: var(--fg); }
+.st-review   { border: 1.5px solid var(--fg); background: linear-gradient(90deg, var(--fg) 50%, transparent 50%); }
+.st-building { border: 1.5px solid var(--line); border-top-color: var(--fg); border-right-color: var(--fg); animation: ws-spin 2.2s linear infinite; }
+.st-ask      { width: 9px; height: 9px; margin: 1.5px; border-radius: 1px; background: var(--fg); transform: rotate(45deg); }
+.st-take     { border: 2px solid var(--fg); background: var(--surface); }
+.st-blocked  { border: 1.5px dashed var(--muted); }
+.st-pending  { border: 1.5px solid var(--line); }
+.st-out      { border: 1.5px solid var(--muted); }
+.st-out::after { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1.5px; background: var(--muted); transform: translateX(-50%) rotate(45deg); }
+/* Held: a hollow diamond beside Asked's solid one, settled after the prototype
+   froze, in the ticket graph's layout prototype (wayfarer#23). */
+.st-held     { width: 9px; height: 9px; margin: 1.5px; border-radius: 1px; border: 1.5px solid var(--fg); transform: rotate(45deg); }
+.st-lg { width: 16px; height: 16px; }
+.st-ask.st-lg { width: 12px; height: 12px; margin: 2px; }
+.st-held.st-lg { width: 12px; height: 12px; margin: 2px; }
+@keyframes ws-spin { to { transform: rotate(360deg); } }
+
+/* test-run marks: hatched = failing run, solid = passing run */
+.tr { display: inline-block; width: 10px; height: 10px; flex: none; border: 1px solid var(--fg); vertical-align: -1px; }
+.tr-red { background: repeating-linear-gradient(135deg, var(--fg) 0 1.3px, transparent 1.3px 3.6px); }
+.tr-green { background: var(--fg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .st-building { animation: none; }
+  * { transition-duration: 0s !important; }
+}
+
+/* A glyph beside its word, spaced as the prototype's legends space one. State is
+   never a glyph alone. */
+.state { display: inline-flex; gap: 6px; align-items: center; }
+
+/* Touch targets grow below the prototype's 920px breakpoint. */
+@media (max-width: 920px) {
+  .btn { min-height: 44px; }
+}

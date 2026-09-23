@@ -50,12 +50,18 @@ and [just](https://just.systems/).
 | command | what it does |
 |---|---|
 | `just check` | lint, type-check and build the page, then lint, type-check and test the process — what CI runs |
+| `just browser` | install the Chromium the browser tests drive, once per machine |
 | `just types` | regenerate `web/src/api.gen.ts` from the Python models; CI fails if it drifts |
 | `just build` | build the sdist and wheel; the wheel carries the built page, so users need no Node |
 | `corepack pnpm --dir web dev` | the Vite dev server, proxying `/api` to a running `wayfarer` |
 
 Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`.
 Change one, run `just types`, and commit both.
+
+`/gallery` renders every primitive in every state on one page. A widget lands
+there first, with the same specimens drawn from the prototype's own markup in
+`tests/prototype_gallery.html`; `tests/test_the_gallery.py` renders both in
+Chromium and fails on any pixel that differs, in either theme.
 
 ## The prototype is a frozen reference, not the app
 
