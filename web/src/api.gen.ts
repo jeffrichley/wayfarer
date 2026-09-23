@@ -123,6 +123,65 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Beat
+         * @description One meaningful moment in a session, derived from its events and never stored.
+         *
+         *     Folding the session's events again gives the same beats with the same ids, so a
+         *     replay tells exactly the story that was watched live.
+         */
+        Beat: {
+            /**
+             * At
+             * Format: date-time
+             * @description When its first event arrived.
+             */
+            at: string;
+            beat: components["schemas"]["BeatKind"];
+            /**
+             * Chapter
+             * @description 0 for Orient, before the first red; then cycle 1, 2, ….
+             */
+            chapter: number;
+            /**
+             * Id
+             * @description `beat:<session>:<seq>`, where `seq` is its first event's.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "beat";
+            /**
+             * Output
+             * @description What a red run printed; null for every other beat.
+             */
+            output: string | null;
+            /** @description The test run a red, green or refactor rests on. */
+            run: components["schemas"]["TestRun"] | null;
+            /**
+             * Seq
+             * @description Its first event's place in the session; beats sort by it.
+             */
+            seq: number;
+            /**
+             * Session
+             * @description The session's run id.
+             */
+            session: string;
+            /**
+             * Text
+             * @description One sentence.
+             */
+            text: string;
+        };
+        /**
+         * BeatKind
+         * @description What kind of moment a beat is.
+         * @enum {string}
+         */
+        BeatKind: "read" | "remark" | "red" | "green" | "refactor" | "outcome" | "working";
+        /**
          * BuildFinished
          * @description How the last build ended.
          */
@@ -388,12 +447,38 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "snapshot";
+        };
+        /**
+         * TestRun
+         * @description One test run, as `wf-test` reported it on its own line.
+         */
+        TestRun: {
+            /**
+             * Exit
+             * @description The tests' real exit status: 0 is green, anything else red.
+             */
+            exit: number;
+            /**
+             * Failed
+             * @description Null when the runner wrote no JUnit report.
+             */
+            failed: number | null;
+            /**
+             * Failing
+             * @description The failing tests' names, when the runner wrote them.
+             */
+            failing: string[];
+            /**
+             * Passed
+             * @description Null when the runner wrote no JUnit report.
+             */
+            passed: number | null;
         };
         /**
          * Ticket
@@ -436,7 +521,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
