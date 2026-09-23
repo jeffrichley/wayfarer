@@ -7,6 +7,7 @@ type Schemas = components["schemas"];
 
 export type Checks = Schemas["Checks"];
 export type Effort = Schemas["Effort"];
+export type EffortUnreadable = Schemas["EffortUnreadable"];
 export type Health = Schemas["Health"];
 export type PullRequest = Schemas["PullRequest"];
 export type Ticket = Schemas["Ticket"];
@@ -15,4 +16,10 @@ export type ImageStatus = Schemas["ImageStatus"];
 export type ProbeCheck = Schemas["ProbeCheck"];
 export type BuildOutput = Schemas["BuildOutput"];
 export type BuildFinished = Schemas["BuildFinished"];
-export type BuildEvent = BuildOutput | BuildFinished;
+
+// Everything the page's one stream carries, and the items it holds by id.
+export type Snapshot = Schemas["Snapshot"];
+export type Upsert = Schemas["Upsert"];
+export type Removal = Schemas["Removal"];
+export type WireEvent = Snapshot | Upsert | Removal;
+export type Item = Upsert["item"];

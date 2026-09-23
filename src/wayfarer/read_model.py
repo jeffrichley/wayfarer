@@ -3,7 +3,10 @@
 An effort is its spec issue, and its tickets are that issue's sub-issues. One
 GraphQL read returns every ticket with its labels, assignees, blocking summary
 and pull request, and each ticket's state is derived from those facts on the
-spot. Nothing is stored: ask again and it reads again (ADR-0002, ADR-0003).
+spot. Nothing is kept for the next read: ask again and it reads again (ADR-0002,
+ADR-0003). What a read finds goes to the page's stream, an effort and each of its
+tickets an item of its own, so a read that changes one ticket sends that ticket
+alone (ADR-0004).
 
 Blocking is GitHub's own issue dependencies, never text in a ticket's body.
 
@@ -15,13 +18,26 @@ from the cross-reference the mention leaves on the ticket's timeline instead.
 
 from __future__ import annotations
 
-from collections.abc import Collection
+import asyncio
+from collections import defaultdict
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from typing import Any
 
-from wayfarer.github import GitHub, NoSuchIssue
-from wayfarer.models import Checks, Effort, PullRequest, Ticket, TicketState
+from wayfarer.freshness import Watch
+from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
+from wayfarer.models import (
+    Checks,
+    Effort,
+    EffortUnreadable,
+    PullRequest,
+    Ticket,
+    TicketState,
+)
+from wayfarer.settings import Settings
+from wayfarer.stream import Store
 
-__all__ = ["ASKED", "HELD", "derive_state", "read_effort"]
+__all__ = ["ASKED", "HELD", "Efforts", "derive_state", "read_effort"]
 
 ASKED = "wayfarer:asked"
 HELD = "wayfarer:held"
@@ -77,14 +93,101 @@ _CHECKS = {
 }
 
 
+class Efforts:
+    """The efforts a page has asked to read, each read into the stream on request and
+    read again whenever something may have changed (ADR-0003)."""
+
+    def __init__(self, github: GitHub, store: Store, settings: Settings) -> None:
+        self._github = github
+        self._store = store
+        self._settings = settings
+        self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._followed: set[int] = set()
+        self._pages: set[Watch] = set()
+
+    async def read(self, number: int) -> None:
+        """Read effort `number` from GitHub, put what changed on the stream, and follow it."""
+        self._followed.add(number)
+        # One read of an effort at a time, taken in the order asked, so an older
+        # read never lands over a newer one.
+        async with self._reading[number]:
+            await self._read(number)
+        self._await_open_pulls()
+
+    async def follow(self) -> None:
+        """Read every followed effort again each time the signal fires, until cancelled."""
+        # Not held as a watch: following is no reason to poll fast, and an open
+        # page, which is, holds one of its own (`watched`).
+        signal = Watch(self._github.freshness, self._github.freshness.version)
+        while True:
+            await signal.changed()
+            for number in sorted(self._followed):
+                await self.read(number)
+
+    @contextmanager
+    def watched(self) -> Iterator[None]:
+        """Held while a page is open: the poll keeps its open rhythm, and polls the
+        checks of every open pull request the page may be shown."""
+        with self._github.freshness.watch() as watch:
+            self._pages.add(watch)
+            self._await_open_pulls()
+            try:
+                yield
+            finally:
+                self._pages.discard(watch)
+
+    def _await_open_pulls(self) -> None:
+        # Checks never change the issue the poll lists, so each open PR is polled
+        # on its own (ADR-0003).
+        awaiting = frozenset(
+            item.pull_request.branch
+            for item in self._store.items()
+            if isinstance(item, Ticket)
+            and item.pull_request is not None
+            and not item.pull_request.merged
+        )
+        for page in self._pages:
+            page.awaiting = awaiting
+
+    async def _read(self, number: int) -> None:
+        id = f"effort:{number}"
+        held = self._store.get(id)
+        before = held.tickets if isinstance(held, Effort) else []
+        try:
+            effort, tickets = await read_effort(
+                self._github,
+                number,
+                per_page=self._settings.tickets_per_page,
+                auto_merge=self._settings.auto_merge,
+            )
+        except (NotConnected, NoSuchIssue, GitHubError) as error:
+            self._store.upsert(
+                EffortUnreadable(kind="effort_unreadable", id=id, number=number, reason=str(error))
+            )
+        else:
+            # Tickets before the effort, so it never names one the page lacks.
+            for ticket in tickets:
+                self._store.upsert(ticket)
+            self._store.upsert(effort)
+        named = {
+            ticket
+            for item in self._store.items()
+            if isinstance(item, Effort)
+            for ticket in item.tickets
+        }
+        for ticket_id in before:
+            if ticket_id not in named:
+                self._store.remove(ticket_id)
+
+
 async def read_effort(
     github: GitHub,
     number: int,
     *,
     per_page: int,
     auto_merge: bool,
-) -> Effort:
-    """Effort `number` as GitHub has it now."""
+) -> tuple[Effort, list[Ticket]]:
+    """Effort `number` and its tickets, as GitHub has them now."""
     nodes: list[dict[str, Any]] = []
     after: str | None = None
     while True:
@@ -98,7 +201,14 @@ async def read_effort(
             break
         after = page["pageInfo"]["endCursor"]
     tickets = [_ticket(node, auto_merge=auto_merge) for node in nodes]
-    return Effort(number=issue["number"], title=issue["title"], tickets=tickets)
+    effort = Effort(
+        kind="effort",
+        id=f"effort:{number}",
+        number=issue["number"],
+        title=issue["title"],
+        tickets=[ticket.id for ticket in tickets],
+    )
+    return effort, tickets
 
 
 def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
@@ -108,6 +218,8 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
     return Ticket(
+        kind="ticket",
+        id=f"ticket:{number}",
         number=number,
         title=node["title"],
         state=derive_state(

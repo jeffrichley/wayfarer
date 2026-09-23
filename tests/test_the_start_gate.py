@@ -7,16 +7,18 @@ environment Wayfarer was started from is the only place a credential comes from.
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from conftest import Launcher, build_layer, commit_layer, get
+from conftest import Launcher, Stream, build_layer, commit_layer, get, post
 from wayfarer.gate import API_KEY, OAUTH_TOKEN, SESSION_GH_TOKEN, StartGate
 from wayfarer.image import Images
 from wayfarer.settings import Settings
+from wayfarer.stream import Store
 
 pytestmark = pytest.mark.git
 
@@ -52,10 +54,10 @@ def _identify(clone: Path) -> None:
 
 
 def _gate(url: str) -> dict[str, Any]:
-    response = get(f"{url}api/gate")
-    assert response.status_code == 200
-    gate: dict[str, Any] = response.json()
-    return gate
+    """What a newly opened page is told of the gate, once it asks for a read."""
+    with Stream(url) as page:
+        post(f"{url}api/gate/read")
+        return page.item("gate")
 
 
 def _checks(gate: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -130,7 +132,7 @@ def test_no_credential_ever_leaves_the_process(
 ) -> None:
     url = wayfarer.start(env=launched).url()
 
-    assert SECRET not in get(f"{url}api/gate").text
+    assert SECRET not in json.dumps(_gate(url))
     assert SECRET not in get(f"{url}openapi.json").text
 
 
@@ -201,7 +203,9 @@ def test_an_image_nobody_has_built_fails_the_image_check_saying_so(
 ) -> None:
     commit_layer(clone, "FROM wayfarer-base\nRUN echo never-built-4c1d\n")
     url = wayfarer.start(env=launched).url()
-    tag = get(f"{url}api/image").json()["tag"]
+    with Stream(url) as page:
+        post(f"{url}api/image/read")
+        tag = page.item("image")["tag"]
 
     checks = _checks(_gate(url))
 
@@ -238,7 +242,7 @@ def test_ten_tickets_refused_at_once_raise_one_item_not_ten(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone), Settings())
+    gate = StartGate(clone, Images(clone, Store(Settings().stream_backlog)), Settings())
 
     refusals = _admit_many(gate, 10)
 
@@ -251,7 +255,7 @@ def test_the_item_says_in_plain_words_which_check_failed(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone), Settings())
+    gate = StartGate(clone, Images(clone, Store(Settings().stream_backlog)), Settings())
 
     [refusal] = _admit_many(gate, 1)
 
@@ -265,7 +269,7 @@ def test_the_gate_reads_the_environment_again_before_every_start(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _without_credential(monkeypatch)
-    gate = StartGate(clone, Images(clone), Settings())
+    gate = StartGate(clone, Images(clone, Store(Settings().stream_backlog)), Settings())
     [first] = _admit_many(gate, 1)
 
     monkeypatch.setenv(API_KEY, SECRET)
@@ -285,7 +289,7 @@ def test_a_ready_clone_passes_all_six_checks(
 ) -> None:
     _identify(clone)
     url = wayfarer.start(env=launched).url()
-    _, finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo gate-ready\n")
+    finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo gate-ready\n").finished
     built_tags.append(finished["tag"])
 
     gate = _gate(url)
@@ -299,7 +303,7 @@ def test_an_image_that_failed_its_probe_is_named_as_the_reason(
     wayfarer: Launcher, clone: Path, launched: dict[str, str | None], built_tags: list[str]
 ) -> None:
     url = wayfarer.start(env=launched).url()
-    _, finished = build_layer(url, clone, "FROM wayfarer-base\nUSER root\n")
+    finished = build_layer(url, clone, "FROM wayfarer-base\nUSER root\n").finished
     built_tags.append(finished["tag"])
 
     check = _checks(_gate(url))["the session image passed its probe"]
@@ -318,7 +322,7 @@ def test_once_the_gate_passes_again_its_item_is_cleared(
 ) -> None:
     _identify(clone)
     url = wayfarer.start(env=launched).url()
-    _, finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo gate-clears\n")
+    finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo gate-clears\n").finished
     built_tags.append(finished["tag"])
     for variable, value in launched.items():
         if value is None:
@@ -326,7 +330,7 @@ def test_once_the_gate_passes_again_its_item_is_cleared(
         else:
             monkeypatch.setenv(variable, value)
     monkeypatch.delenv(SESSION_GH_TOKEN)
-    gate = StartGate(clone, Images(clone), Settings())
+    gate = StartGate(clone, Images(clone, Store(Settings().stream_backlog)), Settings())
     [refused] = _admit_many(gate, 1)
 
     monkeypatch.setenv(SESSION_GH_TOKEN, "github_pat_not-a-real-token")

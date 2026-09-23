@@ -34,6 +34,9 @@ class Settings:
     answered by then is as good as down, and a wedged one must not hang every start."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
+    stream_backlog: int = 1000
+    """Changes kept for a page that reconnects. One that missed more is sent a snapshot
+    instead, which costs it nothing but bytes, so this only bounds memory."""
     poll_active: float = 10.0
     """Seconds between polls of GitHub while a cascade is armed or a page is open (ADR-0003)."""
     poll_idle: float = 60.0
