@@ -42,10 +42,10 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 
 ### Cards (`ticket-card-<n>`)
 - **Placement:** by the [layout rules](#layout-rules).
-- **Size:** 184 wide. A full card is 128 tall; a name-only card is 56.
+- **Size:** 184 wide. A full card is 128 tall; a name-only card is 56. Those are floors: a name longer than its clamp grows the card, and is never cut off (#48).
 - **Card anatomy:**
   - **Top line** (mono, uppercase): glyph, state word, and the id on the right.
-  - **Name:** serif, clamped to three lines.
+  - **Name:** serif, sized for three lines (two on a name-only card), and wrapped whole past them.
   - **Foot:** the most useful fact for that state:
 
     | State | Foot |

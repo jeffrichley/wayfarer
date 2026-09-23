@@ -1,0 +1,36 @@
+/* A ticket's card on the graph, ported from the ticket graph's layout prototype
+   (wayfarer#23, branch prototype/ticket-graph-layout), which settled the two
+   sizes, Asked and Held, and every foot after ticket-graph.html froze. Where
+   the card departs from it, the comment says which ticket decided. */
+.card {
+  width: 184px; padding: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 3px; text-align: left; cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.card:hover { background: var(--hover); border-color: var(--line); }
+.card[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+
+/* State by the edge's shape and tone, never hue: blocked is dashed on the page
+   colour (not yet real); takeable, asked and held carry an ink edge (ready to
+   pick up, or waiting on you). Each outranks the pointer's edge, as the
+   prototype's do. */
+.card.blocked { background: var(--bg); border-style: dashed; border-color: var(--line); }
+/* A blocked card answers the pointer as ticket-graph.html's does. */
+.card.blocked:hover { background: var(--hover); }
+.card.takeable, .card.asked, .card.held { border-color: var(--fg); }
+
+/* The heights the layout sizes a card for (docs/screens/ticket-graph.md). They
+   are floors, not caps: a name longer than its clamp grows the card rather than
+   being cut off, where the prototype clamped it with an ellipsis (#48). */
+.full { min-height: 128px; }
+.top { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.top :global(.id) { margin-left: auto; letter-spacing: 0; }
+.name { font-family: var(--font-display); font-size: 15.5px; line-height: 1.25; color: var(--fg); }
+/* The foot wraps rather than cutting off the blocker it names (#48). */
+.foot { font-size: 11.5px; color: var(--muted); }
+.asked .foot, .held .foot { color: var(--fg); }
+
+.name-only { min-height: 56px; display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; }
+.name-only :global(.st) { margin-top: 3px; }
+.name-only .name { font-size: 14px; flex: 1; min-width: 0; }
+.name-only :global(.id) { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
