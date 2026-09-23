@@ -1,0 +1,68 @@
+<style>
+  /* The ticket graph's cards from its layout prototype (wayfarer#23,
+     branch prototype/ticket-graph-layout): its full and name-only forms, verbatim
+     but for the canvas's motion. */
+  .card {
+    position: absolute; padding: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 5px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px; text-align: left; cursor: pointer;
+    transition: opacity .3s ease, background-color .15s ease, border-color .15s ease;
+  }
+  .card:hover { background: var(--hover); border-color: var(--line); }
+  .card[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+  .card.k-blocked { background: var(--bg); border-style: dashed; border-color: var(--line); }
+  .card.k-takeable, .card.k-asked, .card.k-held { border-color: var(--fg); }
+  .card .c-top { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+  .card .c-top .id { margin-left: auto; letter-spacing: 0; }
+  .card .c-name { font-family: var(--font-display); font-size: 15.5px; line-height: 1.25; color: var(--fg); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .card .c-foot { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.k-asked .c-foot, .card.k-held .c-foot { color: var(--fg); }
+  .card.chip-f { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+  .card.chip-f { align-items: flex-start; padding: 9px 10px; }
+  .card.chip-f .st { margin-top: 3px; }
+  .card.chip-f .c-name { font-size: 14px; line-height: 1.25; flex: 1; min-width: 0; -webkit-line-clamp: 2; }
+  .card.chip-f .id { margin-top: 2px; }
+  .card.chip-f .id { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  /* A blocked card answers the pointer, as ticket-graph.html's does. */
+  .card.k-blocked:hover { background: var(--hover); }
+  /* The canvas places a card and sizes it, 184 wide and 128 or 56 tall; a
+     specimen is the card alone. */
+  .card { position: relative; width: 184px; }
+  .card.card-f { height: 128px; }
+  .card.chip-f { height: 56px; }
+  /* #48: a name is never cut off. It is not clamped, the foot naming a
+     blocker wraps, and a card's height is a floor the name can grow past. */
+  .card .c-name { display: block; overflow: visible; }
+  .card .c-foot { white-space: normal; overflow: visible; }
+  .card.card-f, .card.chip-f { height: auto; }
+  .card.card-f { min-height: 128px; }
+  .card.chip-f { min-height: 56px; }
+</style>
+
+<!-- cardHTML from the layout prototype (wayfarer#23), a full card for each
+     state a ticket shows a card in, then one selected. -->
+<section aria-label="Ticket cards">
+  <div data-specimen="full-landing"><button type="button" class="card card-f k-landing" aria-pressed="false" aria-label="Flag peaks above −3 dB, Landing"><span class="c-top"><span class="st st-review" aria-hidden="true"></span>Landing<span class="id">#127</span></span><span class="c-name">Flag peaks above −3 dB</span><span class="c-foot">In the merge queue</span></button></div>
+  <div data-specimen="full-building"><button type="button" class="card card-f k-building" aria-pressed="false" aria-label="Flag a noise floor above −60 dB, Building"><span class="c-top"><span class="st st-building" aria-hidden="true"></span>Building<span class="id">#128</span></span><span class="c-name">Flag a noise floor above −60 dB</span><span class="c-foot">Working · 12 min</span></button></div>
+  <div data-specimen="full-asked"><button type="button" class="card card-f k-asked" aria-pressed="false" aria-label="Check room tone, Asked"><span class="c-top"><span class="st st-ask" aria-hidden="true"></span>Asked<span class="id">#130</span></span><span class="c-name">Check room tone</span><span class="c-foot">Asked you a question</span></button></div>
+  <div data-specimen="full-held"><button type="button" class="card card-f k-held" aria-pressed="false" aria-label="Warn when no retail sample is chosen, Held"><span class="c-top"><span class="st st-held" aria-hidden="true"></span>Held<span class="id">#129</span></span><span class="c-name">Warn when no retail sample is chosen</span><span class="c-foot">Held · a blocking finding</span></button></div>
+  <div data-specimen="full-takeable"><button type="button" class="card card-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Nobody on it yet</span></button></div>
+  <div data-specimen="full-takeable-at-cap"><button type="button" class="card card-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Starts when a slot frees</span></button></div>
+  <div data-specimen="full-blocked-on-one"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Explain a failing chapter, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#131</span></span><span class="c-name">Explain a failing chapter</span><span class="c-foot">Waiting on Check room tone</span></button></div>
+  <div data-specimen="full-blocked-on-many"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Block ACX export, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#133</span></span><span class="c-name">Block ACX export</span><span class="c-foot">Waiting on 5 tickets</span></button></div>
+  <div data-specimen="full-long-name"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#134</span></span><span class="c-name">Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens</span><span class="c-foot">Waiting on Normalise loudness to the ACX range on request</span></button></div>
+  <div data-specimen="full-selected"><button type="button" class="card card-f k-takeable" aria-pressed="true" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Nobody on it yet</span></button></div>
+</section>
+
+<!-- The name-only card, as the layout prototype draws a ticket further out. -->
+<section aria-label="Name-only ticket cards">
+  <div data-specimen="name-only-landing"><button type="button" class="card chip-f k-landing" aria-pressed="false" aria-label="Flag peaks above −3 dB, Landing"><span class="st st-review" aria-hidden="true"></span><span class="c-name">Flag peaks above −3 dB <span class="id">#127</span></span></button></div>
+  <div data-specimen="name-only-building"><button type="button" class="card chip-f k-building" aria-pressed="false" aria-label="Flag a noise floor above −60 dB, Building"><span class="st st-building" aria-hidden="true"></span><span class="c-name">Flag a noise floor above −60 dB <span class="id">#128</span></span></button></div>
+  <div data-specimen="name-only-asked"><button type="button" class="card chip-f k-asked" aria-pressed="false" aria-label="Check room tone, Asked"><span class="st st-ask" aria-hidden="true"></span><span class="c-name">Check room tone <span class="id">#130</span></span></button></div>
+  <div data-specimen="name-only-held"><button type="button" class="card chip-f k-held" aria-pressed="false" aria-label="Warn when no retail sample is chosen, Held"><span class="st st-held" aria-hidden="true"></span><span class="c-name">Warn when no retail sample is chosen <span class="id">#129</span></span></button></div>
+  <div data-specimen="name-only-takeable"><button type="button" class="card chip-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+  <div data-specimen="name-only-takeable-at-cap"><button type="button" class="card chip-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+  <div data-specimen="name-only-blocked-on-one"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Explain a failing chapter, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Explain a failing chapter <span class="id">#131</span></span></button></div>
+  <div data-specimen="name-only-blocked-on-many"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Block ACX export, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Block ACX export <span class="id">#133</span></span></button></div>
+  <div data-specimen="name-only-long-name"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens <span class="id">#134</span></span></button></div>
+  <div data-specimen="name-only-selected"><button type="button" class="card chip-f k-takeable" aria-pressed="true" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+</section>

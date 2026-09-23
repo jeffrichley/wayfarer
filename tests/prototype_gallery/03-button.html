@@ -1,0 +1,30 @@
+<style>
+  /* #70 mutes a disabled secondary or ghost button, as the prototype mutes
+     only a disabled primary, so each reads as unavailable at rest. */
+  .btn-secondary[aria-disabled="true"], .btn-ghost[aria-disabled="true"] { color: var(--muted); }
+</style>
+
+<!-- Every variant in every state. A disabled link is a disabled button: it
+     goes nowhere, so it is not drawn as a link. -->
+<section aria-label="Buttons">
+  <div data-specimen="button-primary"><button type="button" class="btn btn-primary">Arm the cascade</button></div>
+  <div data-specimen="button-primary-disabled"><button type="button" class="btn btn-primary" aria-disabled="true">Arm the cascade</button></div>
+  <div data-specimen="button-primary-small"><button type="button" class="btn btn-primary btn-sm">Arm the cascade</button></div>
+  <div data-specimen="button-primary-small-disabled"><button type="button" class="btn btn-primary btn-sm" aria-disabled="true">Arm the cascade</button></div>
+  <div data-specimen="button-primary-arrow"><button type="button" class="btn btn-primary btn-arrow">Arm the cascade</button></div>
+  <div data-specimen="button-primary-arrow-disabled"><button type="button" class="btn btn-primary btn-arrow" aria-disabled="true">Arm the cascade</button></div>
+  <div data-specimen="button-secondary"><button type="button" class="btn btn-secondary">Review PR #141</button></div>
+  <div data-specimen="button-secondary-disabled"><button type="button" class="btn btn-secondary" aria-disabled="true">Review PR #141</button></div>
+  <div data-specimen="button-secondary-small"><button type="button" class="btn btn-secondary btn-sm">Review PR #141</button></div>
+  <div data-specimen="button-secondary-small-disabled"><button type="button" class="btn btn-secondary btn-sm" aria-disabled="true">Review PR #141</button></div>
+  <div data-specimen="button-secondary-arrow"><button type="button" class="btn btn-secondary btn-arrow">Review PR #141</button></div>
+  <div data-specimen="button-secondary-arrow-disabled"><button type="button" class="btn btn-secondary btn-arrow" aria-disabled="true">Review PR #141</button></div>
+  <div data-specimen="button-ghost"><button type="button" class="btn btn-ghost">Queue an agent</button></div>
+  <div data-specimen="button-ghost-disabled"><button type="button" class="btn btn-ghost" aria-disabled="true">Queue an agent</button></div>
+  <div data-specimen="button-ghost-small"><button type="button" class="btn btn-ghost btn-sm">Queue an agent</button></div>
+  <div data-specimen="button-ghost-small-disabled"><button type="button" class="btn btn-ghost btn-sm" aria-disabled="true">Queue an agent</button></div>
+  <div data-specimen="button-ghost-arrow"><button type="button" class="btn btn-ghost btn-arrow">Queue an agent</button></div>
+  <div data-specimen="button-ghost-arrow-disabled"><button type="button" class="btn btn-ghost btn-arrow" aria-disabled="true">Queue an agent</button></div>
+  <div data-specimen="button-link"><a class="btn btn-secondary btn-arrow" href="#desk">Open the desk</a></div>
+  <div data-specimen="button-link-disabled"><button type="button" class="btn btn-secondary btn-arrow" aria-disabled="true">Open the desk</button></div>
+</section>

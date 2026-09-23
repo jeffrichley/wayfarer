@@ -1,0 +1,52 @@
+<style>
+  /* Held's hollow diamond was settled after the prototype froze, in the
+     ticket graph's layout prototype (wayfarer#23, branch
+     prototype/ticket-graph-layout). This is that rule, verbatim. */
+  .st-held { width: 9px; height: 9px; margin: 1.5px; border-radius: 1px; border: 1.5px solid var(--fg); transform: rotate(45deg); }
+  /* The large size, as .st-ask.st-lg sizes Asked's diamond. */
+  .st-held.st-lg { width: 12px; height: 12px; margin: 2px; }
+
+  /* A glyph beside its word, as the prototype's legends set one (index.html). */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+  /* The test rhythm's strip, from live-build.html; its margin below belongs to
+     the strip, with the meta line under it, not to the sequence. */
+  .rhythm { display: flex; flex-wrap: wrap; gap: 4px; }
+  .rhythm .tr { width: 14px; height: 14px; }
+</style>
+
+<section class="legend" aria-label="Status glyphs">
+  <div data-specimen="glyph-done"><span><span class="st st-done" aria-hidden="true"></span>Landed</span></div>
+  <div data-specimen="glyph-review"><span><span class="st st-review" aria-hidden="true"></span>Landing</span></div>
+  <div data-specimen="glyph-building"><span><span class="st st-building" aria-hidden="true"></span>Building</span></div>
+  <div data-specimen="glyph-ask"><span><span class="st st-ask" aria-hidden="true"></span>Asked</span></div>
+  <div data-specimen="glyph-held"><span><span class="st st-held" aria-hidden="true"></span>Held</span></div>
+  <div data-specimen="glyph-take"><span><span class="st st-take" aria-hidden="true"></span>Takeable</span></div>
+  <div data-specimen="glyph-blocked"><span><span class="st st-blocked" aria-hidden="true"></span>Blocked</span></div>
+  <div data-specimen="glyph-pending"><span><span class="st st-pending" aria-hidden="true"></span>Not reached yet</span></div>
+  <div data-specimen="glyph-out"><span><span class="st st-out" aria-hidden="true"></span>Out of scope</span></div>
+</section>
+
+<section class="legend" aria-label="Status glyphs, large">
+  <div data-specimen="glyph-done-lg"><span><span class="st st-done st-lg" aria-hidden="true"></span>Landed</span></div>
+  <div data-specimen="glyph-review-lg"><span><span class="st st-review st-lg" aria-hidden="true"></span>Landing</span></div>
+  <div data-specimen="glyph-building-lg"><span><span class="st st-building st-lg" aria-hidden="true"></span>Building</span></div>
+  <div data-specimen="glyph-ask-lg"><span><span class="st st-ask st-lg" aria-hidden="true"></span>Asked</span></div>
+  <div data-specimen="glyph-held-lg"><span><span class="st st-held st-lg" aria-hidden="true"></span>Held</span></div>
+  <div data-specimen="glyph-take-lg"><span><span class="st st-take st-lg" aria-hidden="true"></span>Takeable</span></div>
+  <div data-specimen="glyph-blocked-lg"><span><span class="st st-blocked st-lg" aria-hidden="true"></span>Blocked</span></div>
+  <div data-specimen="glyph-pending-lg"><span><span class="st st-pending st-lg" aria-hidden="true"></span>Not reached yet</span></div>
+  <div data-specimen="glyph-out-lg"><span><span class="st st-out st-lg" aria-hidden="true"></span>Out of scope</span></div>
+</section>
+
+<!-- live-build.html's evidence rail -->
+<section class="legend" aria-label="Test runs">
+  <div data-specimen="run-red"><span><span class="tr tr-red" aria-hidden="true"></span>Failing</span></div>
+  <div data-specimen="run-green"><span><span class="tr tr-green" aria-hidden="true"></span>Passing</span></div>
+</section>
+
+<!-- live-build.html's test rhythm: runs in order, a red before every green. -->
+<section aria-label="Test run sequence">
+  <div data-specimen="runs"><div class="rhythm" aria-label="5 test runs"><span class="tr tr-red"></span><span class="tr tr-green"></span><span class="tr tr-red"></span><span class="tr tr-red"></span><span class="tr tr-green"></span></div></div>
+</section>

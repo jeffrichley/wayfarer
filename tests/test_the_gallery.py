@@ -1,6 +1,7 @@
 """The gallery: every primitive in every state on one page, drawn as the frozen prototype draws it.
 
-The reference is `prototype_gallery.html`: the prototype's own stylesheet and
+The reference is `prototype_gallery.html` with each widget's fragment from
+`prototype_gallery/` gathered into it: the prototype's own stylesheet and
 markup. Both pages render in the same browser and each specimen is compared
 pixel for pixel, so there are no stored images to drift between machines.
 """
@@ -9,14 +10,15 @@ from __future__ import annotations
 
 import io
 import re
+import shutil
 from itertools import combinations
 from pathlib import Path
 
 import pytest
 from PIL import Image, ImageChops
-from playwright.sync_api import Page
+from playwright.sync_api import Browser, Page
 
-from specimens import THEMES, choose, disagreements, set_theme
+from specimens import FRAGMENTS, THEMES, VIEWPORT, choose, disagreements, reference_page, set_theme
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
 
@@ -111,6 +113,23 @@ def test_a_gallery_specimen_with_nothing_to_compare_against_fails_the_check(
     )
 
     assert disagreements(gallery, reference) == ["widget-new: not in the prototype"]
+
+
+def test_a_widgets_prototype_fragment_joins_the_reference_as_a_file_of_its_own(
+    gallery: Page, browser: Browser, tmp_path: Path
+) -> None:
+    fragments = shutil.copytree(FRAGMENTS, tmp_path / "fragments")
+    (fragments / "widget.html").write_text(
+        '<section><div data-specimen="widget-new">New</div></section>'
+    )
+    reference = browser.new_page(viewport=VIEWPORT)
+    try:
+        reference.goto(reference_page(tmp_path, fragments).as_uri())
+        found = disagreements(gallery, reference)
+    finally:
+        reference.close()
+
+    assert found == ["widget-new: not in the gallery"]
 
 
 def test_every_state_glyph_sits_beside_its_word(gallery: Page) -> None:

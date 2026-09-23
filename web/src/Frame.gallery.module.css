@@ -1,0 +1,3 @@
+/* A frame fills its specimen's box, not the viewport. */
+.frame { width: 720px; height: 280px; }
+.frame > :global(.app) { height: 100%; }
