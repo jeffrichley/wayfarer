@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image, ImageChops
-from playwright.sync_api import Browser, Page
+from playwright.sync_api import Browser, Page, ViewportSize
 
 from conftest import Launcher
 
@@ -26,11 +26,13 @@ PROTOTYPE_CSS = Path(__file__).parents[1] / "prototype" / "assets" / "wayfarer.c
 
 GLYPHS = ["done", "review", "building", "ask", "held", "take", "blocked", "pending", "out"]
 THEMES = ["light", "dark"]
+# The size every screen is checked at first (docs/design/visual-language.md).
+VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
 
 
 @pytest.fixture
 def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
-    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    page = browser.new_page(viewport=VIEWPORT)
     page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
     page.wait_for_selector("[data-specimen]")
     yield page
@@ -39,7 +41,7 @@ def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
 
 @pytest.fixture
 def reference(browser: Browser) -> Iterator[Page]:
-    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    page = browser.new_page(viewport=VIEWPORT)
     page.goto(REFERENCE.as_uri())
     yield page
     page.close()
@@ -50,7 +52,6 @@ def _choose(gallery: Page, theme: str) -> None:
     gallery.get_by_role(
         "button", name={"light": "The chart", "dark": "The night chart"}[theme]
     ).click()
-    gallery.mouse.move(1439, 899)
 
 
 def _theme(page: Page, theme: str) -> None:
@@ -85,6 +86,8 @@ _SET_DOWN = """(element, before) => {
 def _specimens(page: Page) -> dict[str, Image.Image]:
     """Each specimen on the page, by name, as it is drawn now. The spinning ring
     is caught at its first frame, so a screenshot is the same every time."""
+    # The pointer rests where specimens are lifted to, and would hover them.
+    page.mouse.move(VIEWPORT["width"] - 1, VIEWPORT["height"] - 1)
     shots: dict[str, Image.Image] = {}
     for element in page.locator("[data-specimen]").all():
         name = element.get_attribute("data-specimen")

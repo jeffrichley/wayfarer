@@ -164,7 +164,10 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Launcher]:
     launcher.close()
 
 
-@pytest.fixture(scope="session")
+# Per module, not per session: Playwright's sync API holds an event loop open on
+# this thread while it runs, and `asyncio.run` in a later module refuses to start
+# inside it.
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     """Chromium, as the person's browser; the browser tier skips, saying why, without it."""
     with sync_playwright() as playwright:
