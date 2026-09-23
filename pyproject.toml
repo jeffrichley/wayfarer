@@ -47,6 +47,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# One star re-export per area, each module naming its shapes in `__all__`, so a new
+# area adds one sorted line and never touches another's (#92).
+"src/wayfarer/models/__init__.py" = ["F403"]
+
 [tool.mypy]
 strict = true
 files = ["src", "tests", "hatch_build.py"]
