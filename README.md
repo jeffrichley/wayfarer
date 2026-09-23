@@ -63,7 +63,7 @@ and [just](https://just.systems/).
 | `just browser` | install the Chromium the browser tests drive, once per machine |
 | `just types` | regenerate `web/src/api.gen.ts` from the Python models; CI fails if it drifts |
 | `just build` | build the sdist and wheel; the wheel carries the built page, so users need no Node |
-| `corepack pnpm --dir web dev` | the Vite dev server, proxying `/api` to a running `wayfarer` |
+| `cd web && corepack pnpm dev` | the Vite dev server, proxying `/api` to a running `wayfarer` |
 
 Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`.
 Change one, run `just types`, and commit both.

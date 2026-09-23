@@ -38,6 +38,61 @@
     /* #70 drops the criterion's tick box, so the mark's column goes with it. */
     .crit li { grid-template-columns: 1fr; }
 
+    /* The session's story, from live-build.html. These are its rules, verbatim. */
+    .beats-pane { padding: 8px 32px 28px; }
+    .beats { max-width: 760px; }
+    .chap { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; padding: 22px 0 8px; }
+    .chap .c-label { grid-column: 2; font-family: var(--font-display); font-size: 17.5px; line-height: 1.3; }
+    .chap .c-label .kicker { display: block; margin-bottom: 2px; }
+    .beat { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 7px 0; align-items: start; animation: rise .35s ease both; }
+    .beat time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+    .beat .mk { display: grid; place-items: center; height: 21px; }
+    .beat .txt { font-size: 14.5px; line-height: 1.55; }
+    .mk-read { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+    .mk-note { width: 9px; height: 1.5px; background: var(--fg); }
+    .mk-refactor { width: 10px; height: 10px; border: 1.5px solid var(--fg); }
+    .toggle { background: none; border: 0; padding: 2px 0; margin-top: 2px; cursor: pointer; font-size: 12.5px; color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    .toggle:hover { text-decoration-color: var(--fg); }
+    pre.out { margin: 8px 0 2px; padding: 10px 12px; background: var(--wash); border: 1px solid var(--border); border-radius: 3px; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+    .working { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 9px 0; color: var(--ink-2); font-size: 14px; }
+    .working .mk { display: grid; place-items: center; height: 21px; }
+    .working .num { color: var(--muted); font-size: 12px; margin-left: 6px; }
+    @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    /* #49 rises only a beat that arrives while the pane is open, so the story
+       it opens on is drawn at rest. */
+    .beat { animation: none; }
+    /* The prototype has no outcome beat; its ringed dot is #49's. */
+    .mk-outcome { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--fg); background: radial-gradient(circle, var(--fg) 0 2px, transparent 2.5px); }
+    /* #49 names a cycle by number, not by the criterion it serves, which no beat
+       knows; the markup is the prototype's chapter all the same. */
+
+    /* Home's Needs you list, verbatim from index.html. */
+    .needs-list li { border-top: 1px solid var(--border); }
+    .needs-list li:last-child { border-bottom: 1px solid var(--border); }
+    .need { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 12px; padding: 14px 8px 14px 4px; text-decoration: none; align-items: start; }
+    .need:hover { background: var(--hover); }
+    .need .st { margin-top: 5px; }
+    .need .n-kind { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    .need .n-name { display: block; font-family: var(--font-display); font-size: 16px; line-height: 1.3; margin-top: 2px; }
+    .need .n-ask { display: block; font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+    .need .n-unblocks { font-size: 12px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+
+    /* The desk's queue items, verbatim from review-desk.html. */
+    .item {
+      display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 3px 11px; width: 100%;
+      padding: 13px 20px 14px; text-align: left; background: none; border: 0; border-top: 1px solid var(--border); cursor: pointer;
+      transition: background-color .15s ease;
+    }
+    .item:hover { background: var(--hover); }
+    .item[aria-pressed="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); }
+    .item:focus-visible { outline-offset: -2px; }
+    .item .st { margin-top: 4px; }
+    .item .i-kind { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .item .i-name { grid-column: 2; font-family: var(--font-display); font-size: 16px; line-height: 1.3; }
+    .item .i-ask { grid-column: 2; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+    .item .i-unblocks { grid-column: 2; font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .item.resolved .i-name { color: var(--ink-2); }
+
     /* The ticket graph's cards from its layout prototype (wayfarer#23,
        branch prototype/ticket-graph-layout): its full and name-only forms, verbatim
        but for the canvas's motion. */
@@ -247,6 +302,16 @@
     <div data-specimen="thread"><div style="width: 340px"><ol class="thread"><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/wayfinder</span><div class="t-name"><a class="nm" href="#112">ACX compliance before delivery</a></div><div class="t-meta">What does ACX reject? · How should a failing chapter explain itself?</div></div></li><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/to-spec</span><div class="t-name"><a class="nm" href="#124">Pre-delivery compliance checks</a></div><div class="t-meta">Story 5</div></div></li><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/to-tickets</span><div class="t-name"><a class="nm" href="#128">Flag a noise floor above −60 dB</a><span class="id">#128</span></div><div class="t-meta">After Flag loudness</div></div></li><li class=" next-pending"><span class="t-mark"><span class="st st-building" aria-hidden="true"></span></span><div><span class="t-skill">/tdd</span><div class="t-name"><a class="nm" href="#wt">wt/noise-floor</a></div><div class="t-meta">Claude Code · running now</div></div></li><li class="pending next-pending"><span class="t-mark"><span class="st st-pending" aria-hidden="true"></span></span><div><span class="t-skill">/code-review</span><div class="t-name">No PR yet</div></div></li><li class="pending"><span class="t-mark"><span class="st st-pending" aria-hidden="true"></span></span><div><span class="t-skill">merge</span><div class="t-name">Not landed</div></div></li></ol></div></div>
   </section>
 
+  <!-- live-build.html's session story: an Orient and two cycles closed by an
+       outcome, and a live one with a call in flight, as #49 names each chapter. -->
+  <section aria-label="Beats">
+    <div data-specimen="beats"><div style="display: grid; width: 824px"><div class="pane beats-pane"><ol class="beats" aria-live="polite"><li class="chap"><span class="c-label"><span class="kicker">Before any test</span>Orient</span></li><li class="beat"><time>09:05</time><span class="mk"><span class="mk-read" aria-label="Read"></span></span><div class="txt">Read ISSUE.md, CONTEXT.md and beats.py</div></li><li class="beat"><time>09:08</time><span class="mk"><span class="mk-note" aria-label="Remark"></span></span><div class="txt">The analysis pass already runs astats, so the noise floor can join it.</div></li><li class="chap"><span class="c-label"><span class="kicker">Red → green</span>Cycle 1</span></li><li class="beat"><time>09:11</time><span class="mk"><span class="tr tr-red" aria-label="Failing test"></span></span><div class="txt">1 failing: measures the noise floor<div><button type="button" class="toggle" aria-expanded="false">Show test output</button><pre class="out" hidden>FAILED tests/test_noise_floor.py::test_measures_the_noise_floor
+  expected a noise floor, got None
+
+1 failed, 11 passed</pre></div></div></li><li class="beat"><time>09:15</time><span class="mk"><span class="tr tr-green" aria-label="Passing test"></span></span><div class="txt">12 passing</div></li><li class="beat"><time>09:17</time><span class="mk"><span class="mk-refactor" aria-label="Refactor"></span></span><div class="txt">Refactored limits.py; still 12 passing</div></li><li class="chap"><span class="c-label"><span class="kicker">Red → green</span>Cycle 2</span></li><li class="beat"><time>09:19</time><span class="mk"><span class="tr tr-red" aria-label="Failing test"></span></span><div class="txt">1 failing: flags the hiss fixture<div><button type="button" class="toggle" aria-expanded="false">Show test output</button><pre class="out" hidden>FAILED tests/test_noise_floor.py::test_flags_the_hiss_fixture</pre></div></div></li><li class="beat"><time>09:24</time><span class="mk"><span class="tr tr-green" aria-label="Passing test"></span></span><div class="txt">13 passing</div></li><li class="beat"><time>09:26</time><span class="mk"><span class="mk-outcome" aria-label="Outcome"></span></span><div class="txt">Every criterion passes, and the full suite with them.</div></li></ol></div></div></div>
+    <div data-specimen="beats-working"><div style="display: grid; width: 824px; height: 300px"><div class="pane beats-pane"><ol class="beats" aria-live="polite"><li class="chap"><span class="c-label"><span class="kicker">Before any test</span>Orient</span></li><li class="beat"><time>09:40</time><span class="mk"><span class="mk-read" aria-label="Read"></span></span><div class="txt">Read ISSUE.md and CONTEXT.md</div></li><li class="beat"><time>09:41</time><span class="mk"><span class="mk-note" aria-label="Remark"></span></span><div class="txt">Running the suite before the first test.</div></li><li class="working"><span></span><span class="mk"><span class="st st-building" aria-hidden="true"></span></span><span>Running the full suite<span class="num">12s</span></span></li></ol></div></div></div>
+  </section>
+
   <!-- cardHTML from the layout prototype (wayfarer#23), a full card for each
        state a ticket shows a card in, then one selected. -->
   <section aria-label="Ticket cards">
@@ -279,6 +344,37 @@
   <!-- WS.criteriaList(128), with what #70 drops: no tick box, no test name. -->
   <section aria-label="Acceptance criteria">
     <div data-specimen="criteria"><div style="width: 340px"><ul class="crit"><li><span class="c-text">Measure the noise floor of every chapter</span></li><li><span class="c-text">Chapters above −60 dB fail the check</span></li><li><span class="c-text">Failures explain the value, the limit, and the timestamp</span></li><li><span class="c-text">The clean fixture passes</span></li></ul></div></div>
+  </section>
+  <!-- review-desk.html's queue item markup and rules, filled with one item of
+       each kind #50 renders: the prototype drew only reviews, questions and
+       grillings, and said "Unblocks", so the words are the ticket's and only the
+       shape is the prototype's. The effort rides beside the kind as home names
+       it. Then the item open on the desk, and a resolved one saying what
+       happened. -->
+  <section aria-label="Needs you on the desk">
+    <div data-specimen="desk-environment"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-blocked" aria-hidden="true"></span><span class="i-kind">Environment · Every effort</span><span class="i-name">Every cascade is paused</span><span class="i-ask">Docker stopped answering; two tickets went back on the frontier</span></button></div></div>
+    <div data-specimen="desk-question"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Question · ACX compliance</span><span class="i-name">Require opening and closing credits<span class="id">#130</span></span><span class="i-ask">Should DOCX books without credits fail or warn?</span><span class="i-unblocks">Holds up 4 tickets · 2 start the moment it lands</span></button></div></div>
+    <div data-specimen="desk-held"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-held" aria-hidden="true"></span><span class="i-kind">Held · ACX compliance</span><span class="i-name">Check room tone at the head and tail of each chapter<span class="id">#131</span></span><span class="i-ask">/code-review found a gap against the spec that blocks landing</span><span class="i-unblocks">Holds up 3 tickets · 1 starts the moment it lands</span></button></div></div>
+    <div data-specimen="desk-review"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-review" aria-hidden="true"></span><span class="i-kind">In review · ACX compliance</span><span class="i-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="i-ask">Clean and green, waiting on your approval</span><span class="i-unblocks">Holds up 1 ticket</span></button></div></div>
+    <div data-specimen="desk-drafts"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Drafts · Retail sample</span><span class="i-name">Retail sample suggestions</span><span class="i-ask">6 tickets drafted, waiting on your check</span></button></div></div>
+    <div data-specimen="desk-ship"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-take" aria-hidden="true"></span><span class="i-kind">Ship the effort · Voice casting</span><span class="i-name">Per-chapter voice casting</span><span class="i-ask">Every ticket landed · one review to ship it</span></button></div></div>
+    <div data-specimen="desk-orphan"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Leftover container · ACX compliance</span><span class="i-name">Flag a noise floor above −60 dB<span class="id">#128</span></span><span class="i-ask">Its container outlived its session</span></button></div></div>
+    <div data-specimen="desk-closed"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-building" aria-hidden="true"></span><span class="i-kind">Closed with a live session · ACX compliance</span><span class="i-name">Flag chapters longer than 120 minutes<span class="id">#129</span></span><span class="i-ask">Closed on GitHub while its session runs</span></button></div></div>
+    <div data-specimen="desk-selected"><div style="width: 350px"><button type="button" class="item" aria-pressed="true"><span class="st st-review" aria-hidden="true"></span><span class="i-kind">In review · ACX compliance</span><span class="i-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="i-ask">Clean and green, waiting on your approval</span><span class="i-unblocks">Holds up 1 ticket</span></button></div></div>
+    <div data-specimen="desk-resolved"><div style="width: 350px"><button type="button" class="item resolved" aria-pressed="false"><span class="st st-done" aria-hidden="true"></span><span class="i-kind">Question · ACX compliance</span><span class="i-name">Require opening and closing credits<span class="id">#130</span></span><span class="i-ask">Should DOCX books without credits fail or warn?</span><span class="i-unblocks">Answered · the session resumed</span></button></div></div>
+  </section>
+
+  <!-- index.html's Needs you row markup and rules, one row of each kind, filled
+       the same way. -->
+  <section aria-label="Needs you at home">
+    <div data-specimen="need-environment"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-environment"><span class="st st-blocked" aria-hidden="true"></span><span><span class="n-kind">Environment · Every effort</span><span class="n-name">Every cascade is paused</span><span class="n-ask">Docker stopped answering; two tickets went back on the frontier</span></span></a></li></ul></div></div>
+    <div data-specimen="need-question"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-question"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Question · ACX compliance</span><span class="n-name">Require opening and closing credits<span class="id">#130</span></span><span class="n-ask">Should DOCX books without credits fail or warn?</span></span><span class="n-unblocks">Holds up 4 tickets</span></a></li></ul></div></div>
+    <div data-specimen="need-held"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-held"><span class="st st-held" aria-hidden="true"></span><span><span class="n-kind">Held · ACX compliance</span><span class="n-name">Check room tone at the head and tail of each chapter<span class="id">#131</span></span><span class="n-ask">/code-review found a gap against the spec that blocks landing</span></span><span class="n-unblocks">Holds up 3 tickets</span></a></li></ul></div></div>
+    <div data-specimen="need-review"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-review"><span class="st st-review" aria-hidden="true"></span><span><span class="n-kind">In review · ACX compliance</span><span class="n-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="n-ask">Clean and green, waiting on your approval</span></span><span class="n-unblocks">Holds up 1 ticket</span></a></li></ul></div></div>
+    <div data-specimen="need-drafts"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-drafts"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Drafts · Retail sample</span><span class="n-name">Retail sample suggestions</span><span class="n-ask">6 tickets drafted, waiting on your check</span></span></a></li></ul></div></div>
+    <div data-specimen="need-ship"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-ship"><span class="st st-take" aria-hidden="true"></span><span><span class="n-kind">Ship the effort · Voice casting</span><span class="n-name">Per-chapter voice casting</span><span class="n-ask">Every ticket landed · one review to ship it</span></span></a></li></ul></div></div>
+    <div data-specimen="need-orphan"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-orphan"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Leftover container · ACX compliance</span><span class="n-name">Flag a noise floor above −60 dB<span class="id">#128</span></span><span class="n-ask">Its container outlived its session</span></span></a></li></ul></div></div>
+    <div data-specimen="need-closed"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-closed"><span class="st st-building" aria-hidden="true"></span><span><span class="n-kind">Closed with a live session · ACX compliance</span><span class="n-name">Flag chapters longer than 120 minutes<span class="id">#129</span></span><span class="n-ask">Closed on GitHub while its session runs</span></span></a></li></ul></div></div>
   </section>
 
   <!-- index.html's chronicle lines, one of each kind. #22 puts the effort's name

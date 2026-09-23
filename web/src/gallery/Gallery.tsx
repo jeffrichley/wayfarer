@@ -1,11 +1,13 @@
 import { type ReactNode, useState } from "react";
 
-import type { ChronicleLine, Mention } from "../api";
+import type { Beat, BeatKind, ChronicleLine, Mention } from "../api";
+import { Beats } from "../Beats";
 import { Button, type ButtonProps } from "../Button";
 import { Chronicle, Line as ChronicleEntry } from "../Chronicle";
 import { Criteria } from "../Criteria";
 import { Diff, type FileDiff, type Line } from "../Diff";
 import { Frame, Pane, Split } from "../Frame";
+import { type Need, NeedRow, NeedsList, QueueItem } from "../NeedsYou";
 import { Route, type RouteProps } from "../Route";
 import { type Question, QuestionCard } from "../Question";
 import { type Glyph, State, TestRun, TestRuns } from "../State";
@@ -85,6 +87,97 @@ const CRITERIA = [
   "The clean fixture passes",
 ];
 
+// A beat of session `s` at 09:mm:ss on 15 September 2026, the reader's own
+// clock, a little before the gallery's clock stands still in the tests.
+function beat(
+  seq: number,
+  kind: BeatKind,
+  [mm, ss]: [number, number],
+  chapter: number,
+  text: string,
+  output: string | null = null,
+): Beat {
+  return {
+    kind: "beat",
+    id: `beat:s:${seq}`,
+    session: "s",
+    seq,
+    beat: kind,
+    at: new Date(2026, 8, 15, 9, mm, ss).toISOString(),
+    chapter,
+    text,
+    run: null,
+    output,
+  };
+}
+
+// A finished session: an Orient, two cycles and the outcome that closed it,
+// every kind of beat but a call in flight.
+const STORY: Beat[] = [
+  beat(1, "read", [5, 0], 0, "Read ISSUE.md, CONTEXT.md and beats.py"),
+  beat(4, "remark", [8, 0], 0, "The analysis pass already runs astats, so the noise floor can join it."),
+  beat(
+    6,
+    "red",
+    [11, 0],
+    1,
+    "1 failing: measures the noise floor",
+    "FAILED tests/test_noise_floor.py::test_measures_the_noise_floor\n  expected a noise floor, got None\n\n1 failed, 11 passed",
+  ),
+  beat(8, "green", [15, 0], 1, "12 passing"),
+  beat(9, "refactor", [17, 0], 1, "Refactored limits.py; still 12 passing"),
+  beat(12, "red", [19, 0], 2, "1 failing: flags the hiss fixture", "FAILED tests/test_noise_floor.py::test_flags_the_hiss_fixture"),
+  beat(14, "green", [24, 0], 2, "13 passing"),
+  beat(16, "outcome", [26, 0], 2, "Every criterion passes, and the full suite with them."),
+];
+
+// A session still going, with a call that has not answered yet. The call's seq
+// is far past the rest, so beats the gallery adds sort in above it.
+const LIVE: Beat[] = [
+  beat(1, "read", [40, 0], 0, "Read ISSUE.md and CONTEXT.md"),
+  beat(2, "remark", [41, 0], 0, "Running the suite before the first test."),
+  beat(1000, "working", [41, 48], 0, "Running the full suite"),
+];
+
+// One item of each kind Needs you has in this slice, across three efforts. The
+// question is also shown resolved, and the review open on the desk.
+const QUESTION: Need = {
+  kind: "question",
+  effort: "ACX compliance",
+  ticket: { name: "Require opening and closing credits", id: 130 },
+  question: "Should DOCX books without credits fail or warn?",
+  holdsUp: 4,
+  starts: 2,
+};
+const REVIEW: Need = {
+  kind: "review",
+  effort: "ACX compliance",
+  ticket: { name: "Flag peaks above −3 dB", id: 127 },
+  holdsUp: 1,
+  starts: 0,
+};
+const NEEDS: Need[] = [
+  { kind: "environment", reason: "Docker stopped answering; two tickets went back on the frontier" },
+  QUESTION,
+  {
+    kind: "held",
+    effort: "ACX compliance",
+    ticket: { name: "Check room tone at the head and tail of each chapter", id: 131 },
+    reason: "/code-review found a gap against the spec that blocks landing",
+    holdsUp: 3,
+    starts: 1,
+  },
+  REVIEW,
+  { kind: "drafts", effort: "Retail sample", spec: "Retail sample suggestions", drafted: 6 },
+  { kind: "ship", effort: "Voice casting", name: "Per-chapter voice casting" },
+  { kind: "orphan", effort: "ACX compliance", ticket: { name: "Flag a noise floor above −60 dB", id: 128 } },
+  {
+    kind: "closed",
+    effort: "ACX compliance",
+    ticket: { name: "Flag chapters longer than 120 minutes", id: 129 },
+  },
+];
+
 // A ticket in every state it shows a card in, with what its foot needs. The two
 // blocked forms and waiting on a slot are states of their own here, since each
 // foot says something different (#48).
@@ -116,6 +209,7 @@ const CARDS: [string, Card][] = [
   ],
 ];
 const CARD_SIZES = ["full", "name-only"] as const;
+
 // The chronicle's sample effort and tickets, from the prototype's ACX effort.
 const COMPLIANCE_CHECKS: Mention = { number: 124, title: "Pre-delivery compliance checks" };
 const ANALYSIS: Mention = { number: 125, title: "Extract the audio analysis pass from the render worker" };
@@ -566,6 +660,29 @@ function setTheme(theme: "light" | "dark") {
   }
 }
 
+// The live story, and a control beside it that adds a beat as a session would,
+// so the pane can be seen to follow along or stay put.
+function LiveBeats() {
+  const [beats, setBeats] = useState(LIVE);
+  const add = () => {
+    const n = beats.length - LIVE.length + 1;
+    const seq = LIVE.length - 1 + n; // after the live story's last beat, before the call
+    setBeats([...beats, beat(seq, "remark", [41, 0], 0, `A later beat, number ${n}.`)]);
+  };
+  return (
+    <div className={styles.row}>
+      <Specimen name="beats-working">
+        <div className={styles.story} style={{ height: 300 }}>
+          <Beats beats={beats} />
+        </div>
+      </Specimen>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={add}>
+        Add a beat
+      </button>
+    </div>
+  );
+}
+
 export function Gallery() {
   return (
     <main className={styles.page} data-piece="gallery">
@@ -824,6 +941,52 @@ export function Gallery() {
             <Thread steps={THREAD} />
           </div>
         </Specimen>
+      </Section>
+
+      <Section title="Beats">
+        <div className={styles.row}>
+          <Specimen name="beats">
+            <div className={styles.story}>
+              <Beats beats={STORY} />
+            </div>
+          </Specimen>
+        </div>
+        <LiveBeats />
+      </Section>
+
+      <Section title="Needs you">
+        <div className={styles.row} style={{ alignItems: "start" }}>
+          <div className={styles.column}>
+            {NEEDS.map((need) => (
+              <Specimen key={need.kind} name={`desk-${need.kind}`}>
+                <div style={{ width: 350 }}>
+                  <QueueItem need={need} />
+                </div>
+              </Specimen>
+            ))}
+            <Specimen name="desk-selected">
+              <div style={{ width: 350 }}>
+                <QueueItem need={REVIEW} pressed />
+              </div>
+            </Specimen>
+            <Specimen name="desk-resolved">
+              <div style={{ width: 350 }}>
+                <QueueItem need={QUESTION} resolved="Answered · the session resumed" />
+              </div>
+            </Specimen>
+          </div>
+          <div className={styles.column}>
+            {NEEDS.map((need) => (
+              <Specimen key={need.kind} name={`need-${need.kind}`}>
+                <div style={{ width: 400 }}>
+                  <NeedsList>
+                    <NeedRow need={need} href={`#desk-${need.kind}`} />
+                  </NeedsList>
+                </div>
+              </Specimen>
+            ))}
+          </div>
+        </div>
       </Section>
 
       <Section title="Ticket cards">

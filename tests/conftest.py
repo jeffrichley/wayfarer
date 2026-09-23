@@ -34,7 +34,7 @@ from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
-from specimens import REFERENCE, VIEWPORT
+from specimens import GALLERY_CLOCK, REFERENCE, VIEWPORT
 from wayfarer.stream import Store
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
@@ -259,6 +259,7 @@ def browser() -> Iterator[Browser]:
 def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
     """The app's /gallery: every primitive in every state on one page."""
     page = browser.new_page(viewport=VIEWPORT)
+    page.clock.set_fixed_time(GALLERY_CLOCK)
     page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
     page.wait_for_selector("[data-specimen]")
     yield page
@@ -386,8 +387,16 @@ def _has(item: dict[str, Any] | None, fields: dict[str, Any]) -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip the docker tier, saying why, where no daemon answers (GitHub's macOS runners)."""
+    """Run the docker tier on one worker, one test after another; and skip it, saying
+    why, where no daemon answers (GitHub's macOS runners).
+
+    The suite runs in parallel (`-n auto`, pyproject.toml), but every image build
+    starts `FROM wayfarer-base`, and two layers alike share a tag, so builds side by
+    side would race to build the base, and one's cleanup could remove another's tag.
+    """
     needing = [item for item in items if "docker" in item.keywords]
+    for item in needing:
+        item.add_marker(pytest.mark.xdist_group("docker"))
     if not needing or _docker_answers():
         return
     for item in needing:

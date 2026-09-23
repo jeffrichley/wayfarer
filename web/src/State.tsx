@@ -31,6 +31,12 @@ export function State({
   );
 }
 
+// A glyph standing alone, where its word is said elsewhere on the line: the
+// word rides as its label for a person who cannot see the shape.
+export function Mark({ glyph, word }: { glyph: Glyph; word: string }) {
+  return <span className={`st st-${glyph}`} role="img" aria-label={word} />;
+}
+
 export type RunResult = "red" | "green";
 
 // A test run: hatched when it went red, solid when it went green.
