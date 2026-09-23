@@ -34,6 +34,8 @@ from wayfarer.store import Purpose, SessionRow, Store
 
 pytestmark = pytest.mark.git
 
+_DONE = {"status": "done", "summary": "Added the widget.", "open_findings": [], "assumptions": []}
+
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
@@ -128,7 +130,7 @@ def test_a_session_is_given_the_bare_slash_command_and_nothing_else(
     assert spec.prompt == "/mattpocock-skills:implement 7"
     [row] = store.sessions()
     started = read_events(row.event_file)[0]
-    assert started.kind == "run_start"
+    assert started.kind == "session_start"
     assert started.prompt == "/mattpocock-skills:implement 7"
     assert isinstance(result, RunSucceeded)
 
@@ -241,7 +243,7 @@ def test_every_event_is_written_to_the_sessions_own_file_with_nobody_watching(
     assert seven.event_file != eight.event_file
     events = read_events(seven.event_file)
     assert [event.kind for event in events] == [
-        "run_start",
+        "session_start",
         "text",
         "tool_use",
         "tool_result",
@@ -250,7 +252,7 @@ def test_every_event_is_written_to_the_sessions_own_file_with_nobody_watching(
         "outcome",
         "usage",
         "agent_end",
-        "run_end",
+        "session_end",
     ]
     assert [event.seq for event in events] == list(range(len(events)))
     assert [event.at for event in events] == sorted(event.at for event in events)
@@ -272,6 +274,3 @@ def test_every_event_is_written_to_the_sessions_own_file_with_nobody_watching(
     assert outcome.model_dump(include={"raw"}) == {"raw": _DONE}
     assert "Reading ticket 8." in eight.event_file.read_text()
     assert "Reading ticket 7." not in eight.event_file.read_text()
-
-
-_DONE = {"status": "done", "summary": "Added the widget.", "open_findings": [], "assumptions": []}

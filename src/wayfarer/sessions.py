@@ -53,100 +53,86 @@ from wayfarer.store import Purpose, Store
 __all__ = ["SessionEvent", "Sessions", "read_events"]
 
 
-# Each event is stamped with `seq`, its place in the file, and `at`, when
-# Wayfarer received it. They are normalised events, never beats: beats are
-# derived from them, and never stored.
+class _Event(BaseModel):
+    """A normalised event, never a beat: beats are derived from these and never stored."""
+
+    seq: int = Field(description="Its place in the session's file, counting from 0.")
+    at: datetime = Field(description="When Wayfarer received it.")
 
 
-class RunStarted(BaseModel):
+class SessionStarted(_Event):
     """The session began, handed `prompt`."""
 
-    kind: Literal["run_start"] = "run_start"
-    seq: int
-    at: datetime
+    kind: Literal["session_start"] = "session_start"
     ticket: int
     prompt: str
 
 
-class Text(BaseModel):
+class Text(_Event):
     """Something the agent said."""
 
     kind: Literal["text"] = "text"
-    seq: int
-    at: datetime
     text: str
 
 
-class ToolUse(BaseModel):
+class ToolUse(_Event):
     """A tool the agent called. `id` pairs it with its `tool_result`."""
 
     kind: Literal["tool_use"] = "tool_use"
-    seq: int
-    at: datetime
     id: str
     name: str
     tool: AgentToolKind = Field(description="What the tool does, whichever agent it is.")
     input: dict[str, Any]
 
 
-class ToolResult(BaseModel):
+class ToolResult(_Event):
     """What a tool the agent called returned."""
 
     kind: Literal["tool_result"] = "tool_result"
-    seq: int
-    at: datetime
     id: str
     is_error: bool
     text: str
 
 
-class OutcomeSaid(BaseModel):
+class OutcomeSaid(_Event):
     """The Outcome the agent reported, as it said it, before it was validated."""
 
     kind: Literal["outcome"] = "outcome"
-    seq: int
-    at: datetime
     raw: Any
 
 
-class Usage(BaseModel):
+class Usage(_Event):
     """What the agent reported spending so far."""
 
     kind: Literal["usage"] = "usage"
-    seq: int
-    at: datetime
     input_tokens: int
     output_tokens: int
     turns: int | None
 
 
-class AgentEnded(BaseModel):
+class AgentEnded(_Event):
     """The agent stopped: `exit_code` is -1 when it was stopped rather than exited."""
 
     kind: Literal["agent_end"] = "agent_end"
-    seq: int
-    at: datetime
     exit_code: int
     hanging: bool
     cancelled: bool
 
 
-class RunEnded(BaseModel):
+class SessionEnded(_Event):
     """The session ended, and how: `succeeded`, `conflicted` or `failed`.
 
     A cancelled session has no end: Waystation reports nothing for it.
     """
 
-    kind: Literal["run_end"] = "run_end"
-    seq: int
-    at: datetime
+    kind: Literal["session_end"] = "session_end"
     result: Literal["succeeded", "conflicted", "failed"]
     stage: str | None = Field(description="Where a failed session failed; null otherwise.")
     failure: str | None = Field(description="How a failed session failed; null otherwise.")
 
 
 SessionEvent = Annotated[
-    RunStarted | Text | ToolUse | ToolResult | OutcomeSaid | Usage | AgentEnded | RunEnded,
+    SessionStarted | Text | ToolUse | ToolResult | OutcomeSaid | Usage | AgentEnded | SessionEnded,
     Field(discriminator="kind"),
 ]
 
@@ -226,11 +212,10 @@ class _Recorder(HookBundle):
 
     @override
     def on_run_start(self, ctx: RunContext) -> None:
-        self._file = self._store.directory / "sessions" / f"{ctx.run_id}.jsonl"
-        self._file.parent.mkdir(parents=True, exist_ok=True)
+        self._file = self._store.event_file(ctx.run_id)
         started = _now()
         self._store.session_started(ctx.run_id, self._ticket, self._purpose, started, self._file)
-        self._write(RunStarted(seq=0, at=started, ticket=self._ticket, prompt=ctx.prompt))
+        self._write(SessionStarted(seq=0, at=started, ticket=self._ticket, prompt=ctx.prompt))
 
     @override
     def on_agent_output(self, ctx: RunContext, line: AgentLine) -> None:
@@ -250,7 +235,7 @@ class _Recorder(HookBundle):
             )
         )
 
-    def _normalised(self, event: AgentEvent, at: datetime) -> BaseModel:
+    def _normalised(self, event: AgentEvent, at: datetime) -> _Event:
         seq = self._seq
         match event:
             case AgentText(text=text):
@@ -274,7 +259,7 @@ class _Recorder(HookBundle):
     def on_run_end(self, ctx: RunContext, result: RunResult[Any]) -> None:
         ended = _now()
         if isinstance(result, RunFailed):
-            event = RunEnded(
+            event = SessionEnded(
                 seq=self._seq,
                 at=ended,
                 result="failed",
@@ -286,12 +271,12 @@ class _Recorder(HookBundle):
             kind: Literal["succeeded", "conflicted"] = (
                 "conflicted" if isinstance(result, RunConflicted) else "succeeded"
             )
-            event = RunEnded(seq=self._seq, at=ended, result=kind, stage=None, failure=None)
+            event = SessionEnded(seq=self._seq, at=ended, result=kind, stage=None, failure=None)
             outcome = result.outcome
         self._write(event)
         self._store.session_ended(ctx.run_id, ended, outcome)
 
-    def _write(self, event: BaseModel) -> None:
+    def _write(self, event: _Event) -> None:
         assert self._file is not None
         with self._file.open("a", encoding="utf-8") as file:
             file.write(event.model_dump_json() + "\n")

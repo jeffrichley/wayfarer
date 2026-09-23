@@ -31,7 +31,7 @@ def store(tmp_path: Path) -> Iterator[Store]:
 
 
 def _in_image(store: Store, settings: Settings) -> Sessions:
-    return Sessions.in_image(store.directory, store, Repo("octo", "widgets"), _TAG, settings)
+    return Sessions.in_image(Path("clone"), store, Repo("octo", "widgets"), _TAG, settings)
 
 
 def test_a_session_runs_claude_code_in_the_session_image(store: Store) -> None:

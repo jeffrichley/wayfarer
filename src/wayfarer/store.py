@@ -77,6 +77,12 @@ class Store:
         """The store for `repo`, keyed by its owner and name under `data_dir`."""
         return cls.open(data_dir / repo.owner / repo.name)
 
+    def event_file(self, run_id: str) -> Path:
+        """Where session `run_id` writes its events, beside the store."""
+        sessions = self.directory / "sessions"
+        sessions.mkdir(exist_ok=True)
+        return sessions / f"{run_id}.jsonl"
+
     def close(self) -> None:
         self._db.close()
 
