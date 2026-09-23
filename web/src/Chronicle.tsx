@@ -1,6 +1,6 @@
 import { Fragment, type ReactElement, type ReactNode } from "react";
 
-import type { ChronicleLine, Mention } from "./api";
+import type { ChronicleLine, Mention, Someone } from "./api";
 import { Button } from "./Button";
 import { effortHref, ticketHref } from "./links";
 import type { Glyph } from "./State";
@@ -42,7 +42,7 @@ function count(n: number): string {
 // text differently from the same words split across several.
 type Part = string | ReactElement;
 
-function draw(parts: Part[]): ReactNode {
+function joinWords(parts: Part[]): ReactNode {
   const joined: Part[] = [];
   for (const part of parts) {
     const last = joined.at(-1);
@@ -57,15 +57,15 @@ function draw(parts: Part[]): ReactNode {
 }
 
 // "A", "A and B", "A, B, and C".
-function list(items: Part[]): Part[] {
+function listed(items: Part[]): Part[] {
   return items.flatMap((item, i) =>
     i === 0 ? [item] : [items.length === 2 ? " and " : i === items.length - 1 ? ", and " : ", ", item],
   );
 }
 
 // Who did it, for a kind a person can do: you, or anyone else by their login.
-function who(by: "you" | "someone", login: string | null): string {
-  return by === "you" ? "You" : (login ?? "Someone");
+function who(by: "you" | Someone): string {
+  return by === "you" ? "You" : by.login;
 }
 
 function sentence(line: ChronicleLine): Part[] {
@@ -81,18 +81,18 @@ function sentence(line: ChronicleLine): Part[] {
     const agents = started.length === 1 ? "An agent" : "Agents";
     if (freed.length === 0) {
       // Only an arming starts sessions without freeing anything.
-      return started.length === 0 ? [] : [` ${agents} took `, ...list(started.map(ticket)), "."];
+      return started.length === 0 ? [] : [` ${agents} took `, ...listed(started.map(ticket)), "."];
     }
     if (started.length === 0) {
-      return [" ", ...list(freed.map(ticket)), " reached the frontier."];
+      return [" ", ...listed(freed.map(ticket)), " reached the frontier."];
     }
     // Sessions start only on what the line freed, so when all of them started
     // they are named already.
     const them =
       started.length < freed.length
-        ? list(started.map(ticket))
+        ? listed(started.map(ticket))
         : [{ 1: "it", 2: "both" }[freed.length] ?? `all ${count(freed.length)}`];
-    return [" ", ...list(freed.map(ticket)), ` reached the frontier, and ${agents.toLowerCase()} took `, ...them, "."];
+    return [" ", ...listed(freed.map(ticket)), ` reached the frontier, and ${agents.toLowerCase()} took `, ...them, "."];
   };
 
   const moved = line.moved;
@@ -100,11 +100,11 @@ function sentence(line: ChronicleLine): Part[] {
     case "taken":
       return moved.by === "wayfarer"
         ? [ticket(moved.ticket), " was taken."]
-        : [`${who(moved.by, moved.login)} took `, ticket(moved.ticket), "."];
+        : [`${who(moved.by)} took `, ticket(moved.ticket), "."];
     case "asked":
       return [ticket(moved.ticket), ` stopped to ask: “${moved.gist}”`];
     case "answered":
-      return [`${who(moved.by, moved.login)} answered `, ticket(moved.ticket), ", and its session resumed."];
+      return [`${who(moved.by)} answered `, ticket(moved.ticket), ", and its session resumed."];
     case "held":
       return [ticket(moved.ticket), ` was held. ${moved.reason}`];
     case "retried":
@@ -117,11 +117,11 @@ function sentence(line: ChronicleLine): Part[] {
       return [
         ...(moved.by === "wayfarer"
           ? [ticket(moved.ticket), " landed."]
-          : [`${who(moved.by, moved.login)} landed `, ticket(moved.ticket), " by hand, not re-tested."]),
+          : [`${who(moved.by)} landed `, ticket(moved.ticket), " by hand, not re-tested."]),
         ...caused(moved.freed, moved.started),
       ];
     case "closed":
-      return [`${who(moved.by, moved.login)} closed `, ticket(moved.ticket), " without landing it."];
+      return [`${who(moved.by)} closed `, ticket(moved.ticket), " without landing it."];
     case "armed":
       return ["You armed the cascade on ", theEffort, ".", ...caused([], moved.started)];
     case "published":
@@ -150,7 +150,8 @@ export function Line({ line }: { line: ChronicleLine }) {
     <li className={styles.entry}>
       <time dateTime={`${date}T${time}`}>{time}</time>
       <span className={`st st-${GLYPHS[line.moved.kind]}`} aria-hidden="true" />
-      <p>{draw(sentence(line))}</p>
+      <p>{joinWords(sentence(line))}</p>
+      {/* The effort's name, in the place and look the prototype gave the skill (#22). */}
       <span className="skill">{line.effort.title}</span>
     </li>
   );
@@ -162,13 +163,22 @@ function dayOf(at: Date): number {
 }
 
 const LONG = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
+const LONGER = new Intl.DateTimeFormat("en-GB", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
+// A shipped effort's lines outlive the year they were written in (#22), so a day
+// from another year says which.
 function heading(day: number, now: Date): string {
   const today = dayOf(now);
   if (day === today) {
     return "Today";
   }
-  const date = LONG.format(day).replace(",", "");
+  const format = new Date(day).getFullYear() === now.getFullYear() ? LONG : LONGER;
+  const date = format.format(day).replace(",", "");
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   return day === yesterday.getTime() ? `Yesterday · ${date}` : date;

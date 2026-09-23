@@ -12,6 +12,8 @@ import re
 import pytest
 from playwright.sync_api import Locator, Page
 
+from specimens import specimen
+
 pytestmark = [pytest.mark.git, pytest.mark.browser]
 
 MINUS = "\N{MINUS SIGN}"
@@ -59,10 +61,6 @@ SENTENCES = {
 }
 
 
-def _specimen(page: Page, name: str) -> Locator:
-    return page.locator(f'[data-specimen="{name}"]')
-
-
 def _sentence(line: Locator) -> str:
     """The line's sentence as it reads: an id rides after its name, set apart by
     its margin rather than a space."""
@@ -82,11 +80,11 @@ def test_every_kind_of_line_is_written_from_its_template(gallery: Page) -> None:
     )
 
     assert sorted(names) == sorted(SENTENCES)
-    assert {name: _sentence(_specimen(gallery, name)) for name in SENTENCES} == SENTENCES
+    assert {name: _sentence(specimen(gallery, name)) for name in SENTENCES} == SENTENCES
 
 
 def test_a_line_carries_its_time_and_its_efforts_name(gallery: Page) -> None:
-    line = _specimen(gallery, "line-landed").get_by_role("listitem")
+    line = specimen(gallery, "line-landed").get_by_role("listitem")
 
     assert line.locator("time").inner_text() == "07:48"
     assert line.locator("time").get_attribute("datetime") == "2026-09-15T07:48"
@@ -96,7 +94,7 @@ def test_a_line_carries_its_time_and_its_efforts_name(gallery: Page) -> None:
 
 
 def test_things_are_named_by_name_as_links_with_their_ids_after(gallery: Page) -> None:
-    sentence = _specimen(gallery, "line-landed-folded").locator("p")
+    sentence = specimen(gallery, "line-landed-folded").locator("p")
     links = sentence.get_by_role("link")
 
     named = [
@@ -107,13 +105,13 @@ def test_things_are_named_by_name_as_links_with_their_ids_after(gallery: Page) -
     # No link's text is an id.
     assert not any(re.fullmatch(r"#\d+", text) for text in links.all_inner_texts())
 
-    effort = _specimen(gallery, "line-shipped").locator("p").get_by_role("link")
+    effort = specimen(gallery, "line-shipped").locator("p").get_by_role("link")
     assert effort.inner_text() == "Pre-delivery compliance checks"
     assert effort.evaluate("a => a.nextElementSibling.textContent") == "#124"
 
 
 def test_a_folded_line_is_one_event_with_what_it_caused(gallery: Page) -> None:
-    line = _specimen(gallery, "line-landed-folded")
+    line = specimen(gallery, "line-landed-folded")
 
     assert line.get_by_role("listitem").count() == 1
     assert line.locator("time").count() == 1
@@ -124,7 +122,7 @@ def test_a_folded_line_is_one_event_with_what_it_caused(gallery: Page) -> None:
 
 
 def test_lines_group_under_their_days_newest_first(gallery: Page) -> None:
-    chronicle = _specimen(gallery, "chronicle")
+    chronicle = specimen(gallery, "chronicle")
     days = chronicle.locator("[data-day]")
 
     assert days.locator(".kicker").all_text_contents() == [
@@ -136,7 +134,7 @@ def test_lines_group_under_their_days_newest_first(gallery: Page) -> None:
 
 
 def test_earlier_days_load_one_day_at_a_time(gallery: Page) -> None:
-    chronicle = _specimen(gallery, "chronicle")
+    chronicle = specimen(gallery, "chronicle")
     earlier = chronicle.get_by_role("button", name="Earlier")
 
     earlier.click()
@@ -148,5 +146,11 @@ def test_earlier_days_load_one_day_at_a_time(gallery: Page) -> None:
 
     earlier.click()
     assert chronicle.locator("[data-day] .kicker").all_text_contents()[-1] == "Friday 11 September"
+
+    earlier.click()
+    # A day from another year says which, since a shipped effort's lines stay.
+    assert chronicle.locator("[data-day] .kicker").all_text_contents()[-1] == (
+        "Wednesday 31 December 2025"
+    )
     # There is nothing earlier than the first line, so nothing more to load.
     assert earlier.count() == 0

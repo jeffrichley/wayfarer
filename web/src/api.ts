@@ -18,6 +18,7 @@ export type BuildOutput = Schemas["BuildOutput"];
 export type BuildFinished = Schemas["BuildFinished"];
 export type ChronicleLine = Schemas["ChronicleLine"];
 export type Mention = Schemas["Mention"];
+export type Someone = Schemas["Someone"];
 
 // Everything the page's one stream carries, and the items it holds by id.
 export type Snapshot = Schemas["Snapshot"];

@@ -91,29 +91,37 @@ const CREDITS: Mention = { number: 130, title: "Require opening and closing cred
 const ROOM_TONE: Mention = { number: 131, title: "Check room tone at the head and tail of each chapter" };
 const MY_BOOKS: Mention = { number: 132, title: "Show compliance status on My Books" };
 
-// A line at a local time in September 2026, so it reads the same in any timezone.
-function line(id: string, day: number, time: string, moved: ChronicleLine["moved"]): ChronicleLine {
+const MIRA = { login: "mira" };
+
+// A line at a local time, in September 2026 unless it says otherwise, so it reads
+// the same in any timezone.
+function line(
+  id: string,
+  day: number,
+  time: string,
+  moved: ChronicleLine["moved"],
+  [year, month] = [2026, 8],
+): ChronicleLine {
   const [hours, minutes] = time.split(":").map(Number);
-  const at = new Date(2026, 8, day, hours, minutes).toISOString();
+  const at = new Date(year, month, day, hours, minutes).toISOString();
   return { kind: "chronicle_line", id, at, effort: EFFORT, moved };
 }
 
 // Every kind of line, in every voice and every shape of what it caused.
 const LINES: ChronicleLine[] = [
-  line("line-taken", 15, "09:41", { kind: "taken", ticket: NOISE_FLOOR, by: "wayfarer", login: null }),
-  line("line-taken-you", 15, "09:41", { kind: "taken", ticket: CREDITS, by: "you", login: null }),
-  line("line-taken-someone", 15, "09:41", { kind: "taken", ticket: CREDITS, by: "someone", login: "mira" }),
+  line("line-taken", 15, "09:41", { kind: "taken", ticket: NOISE_FLOOR, by: "wayfarer" }),
+  line("line-taken-you", 15, "09:41", { kind: "taken", ticket: CREDITS, by: "you" }),
+  line("line-taken-someone", 15, "09:41", { kind: "taken", ticket: CREDITS, by: MIRA }),
   line("line-asked", 15, "09:18", {
     kind: "asked",
     ticket: CREDITS,
     gist: "Should DOCX books without credits fail or warn?",
   }),
-  line("line-answered", 15, "09:30", { kind: "answered", ticket: CREDITS, by: "you", login: null }),
+  line("line-answered", 15, "09:30", { kind: "answered", ticket: CREDITS, by: "you" }),
   line("line-answered-someone", 15, "09:30", {
     kind: "answered",
     ticket: CREDITS,
-    by: "someone",
-    login: "mira",
+    by: MIRA,
   }),
   line("line-held", 15, "08:12", {
     kind: "held",
@@ -126,7 +134,6 @@ const LINES: ChronicleLine[] = [
     kind: "landed",
     ticket: PEAKS,
     by: "wayfarer",
-    login: null,
     freed: [],
     started: [],
   }),
@@ -134,7 +141,6 @@ const LINES: ChronicleLine[] = [
     kind: "landed",
     ticket: ANALYSIS,
     by: "wayfarer",
-    login: null,
     freed: [LOUDNESS, PEAKS],
     started: [],
   }),
@@ -142,7 +148,6 @@ const LINES: ChronicleLine[] = [
     kind: "landed",
     ticket: LOUDNESS,
     by: "wayfarer",
-    login: null,
     freed: [NOISE_FLOOR, LONG_CHAPTERS, CREDITS],
     started: [NOISE_FLOOR, LONG_CHAPTERS],
   }),
@@ -150,7 +155,6 @@ const LINES: ChronicleLine[] = [
     kind: "landed",
     ticket: PEAKS,
     by: "wayfarer",
-    login: null,
     freed: [MY_BOOKS],
     started: [MY_BOOKS],
   }),
@@ -158,20 +162,18 @@ const LINES: ChronicleLine[] = [
     kind: "landed",
     ticket: PEAKS,
     by: "you",
-    login: null,
     freed: [],
     started: [],
   }),
   line("line-landed-by-someone", 15, "07:48", {
     kind: "landed",
     ticket: PEAKS,
-    by: "someone",
-    login: "mira",
+    by: MIRA,
     freed: [],
     started: [],
   }),
-  line("line-closed", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: "you", login: null }),
-  line("line-closed-someone", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: "someone", login: "mira" }),
+  line("line-closed", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: "you" }),
+  line("line-closed-someone", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: MIRA }),
   line("line-armed", 13, "15:30", { kind: "armed", started: [NOISE_FLOOR, LONG_CHAPTERS] }),
   line("line-armed-idle", 13, "15:30", { kind: "armed", started: [] }),
   line("line-published", 14, "10:20", { kind: "published", tickets: 9, freed: [ANALYSIS], started: [ANALYSIS] }),
@@ -187,11 +189,16 @@ function sample(id: string): ChronicleLine {
   return found;
 }
 
-// Home's chronicle on Tuesday 15 September: today and yesterday, with two earlier
-// days, a gap between them, to load one at a time.
+// Home's chronicle on Tuesday 15 September: today and yesterday, with three
+// earlier days, gaps between them and the last in the year before, to load one
+// at a time.
 const NOW = new Date(2026, 8, 15, 10, 0);
 const RECENT = ["line-taken", "line-asked", "line-landed", "line-landed-folded", "line-landed-freed", "line-published"];
-const EARLIER = [[sample("line-armed")], [line("friday", 11, "11:05", { kind: "taken", ticket: ANALYSIS, by: "you", login: null })]];
+const EARLIER = [
+  [sample("line-armed")],
+  [line("friday", 11, "11:05", { kind: "taken", ticket: ANALYSIS, by: "you" })],
+  [line("last-year", 31, "16:00", { kind: "published", tickets: 9, freed: [], started: [] }, [2025, 11])],
+];
 
 function ChronicleSpecimen() {
   const [loaded, setLoaded] = useState(0);

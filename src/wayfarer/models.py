@@ -18,7 +18,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 __all__ = [
-    "Actor",
     "Answered",
     "Armed",
     "Asked",
@@ -47,6 +46,7 @@ __all__ = [
     "Retried",
     "Shipped",
     "Snapshot",
+    "Someone",
     "Taken",
     "TestRun",
     "Ticket",
@@ -282,16 +282,17 @@ class Beat(BaseModel):
     output: str | None = Field(description="What a red run printed; null for every other beat.")
 
 
-class Actor(StrEnum):
-    """Who moved a ticket, read from the kind of event rather than the timeline's
-    actor, since Wayfarer writes with the person's own token (#22)."""
+class Someone(BaseModel):
+    """Anyone but you, whom a line names by their login (#22)."""
 
-    WAYFARER = "wayfarer"
-    """Wayfarer or a session did it, and the line reads passively."""
-    YOU = "you"
-    """The person running Wayfarer did it, and the line reads "You"."""
-    SOMEONE = "someone"
-    """Anyone else did it, and the line names their login."""
+    login: str
+
+
+# Who moved a ticket is read from the kind of event, not the timeline's actor,
+# since Wayfarer writes with the person's own token (#22). "wayfarer" reads
+# passively, "you" reads "You", and anyone else is named.
+Wayfarer = Literal["wayfarer"]
+You = Literal["you"]
 
 
 class Mention(BaseModel):
@@ -306,8 +307,9 @@ class Taken(BaseModel):
 
     kind: Literal["taken"]
     ticket: Mention
-    by: Actor
-    login: str | None = Field(description="Who took it, when it was someone else; else null.")
+    by: Wayfarer | You | Someone = Field(
+        description="Wayfarer when a session the cascade started took it; a person otherwise."
+    )
 
 
 class Asked(BaseModel):
@@ -315,7 +317,10 @@ class Asked(BaseModel):
 
     kind: Literal["asked"]
     ticket: Mention
-    gist: str = Field(description="The question's gist, quoted as the session wrote it.")
+    gist: str = Field(
+        description="The question's gist, quoted as the session wrote it: one sentence, "
+        "since a line is at most two (#22)."
+    )
 
 
 class Answered(BaseModel):
@@ -323,8 +328,7 @@ class Answered(BaseModel):
 
     kind: Literal["answered"]
     ticket: Mention
-    by: Literal[Actor.YOU, Actor.SOMEONE]
-    login: str | None = Field(description="Who answered, when it was someone else; else null.")
+    by: You | Someone
 
 
 class Held(BaseModel):
@@ -332,11 +336,14 @@ class Held(BaseModel):
 
     kind: Literal["held"]
     ticket: Mention
-    reason: str = Field(description="The plain-words Held reason, quoted, as a sentence.")
+    reason: str = Field(
+        description="The plain-words Held reason, quoted: one sentence, since a line is at "
+        "most two (#22)."
+    )
 
 
 class Retried(BaseModel):
-    """You retried a Held ticket (#20)."""
+    """You retried a Held ticket (#20). Only Wayfarer starts a session, so only you retry."""
 
     kind: Literal["retried"]
     ticket: Mention
@@ -351,11 +358,10 @@ class Landed(BaseModel):
 
     kind: Literal["landed"]
     ticket: Mention
-    by: Actor = Field(
-        description="Wayfarer for a landing through the merge queue; a person for a "
-        "merge by hand on GitHub, which was not re-tested."
+    by: Wayfarer | You | Someone = Field(
+        description="Wayfarer for a landing through the merge queue; a person for a merge "
+        "by hand on GitHub, which lands untested and the line says so (#21)."
     )
-    login: str | None = Field(description="Who merged it, when it was someone else; else null.")
     freed: list[Mention] = Field(description="The tickets its landing made takeable.")
     started: list[Mention] = Field(description="Those of them the cascade started a session on.")
 
@@ -365,12 +371,12 @@ class Closed(BaseModel):
 
     kind: Literal["closed"]
     ticket: Mention
-    by: Literal[Actor.YOU, Actor.SOMEONE]
-    login: str | None = Field(description="Who closed it, when it was someone else; else null.")
+    by: You | Someone
 
 
 class Armed(BaseModel):
-    """You armed the effort's cascade, with the sessions it started straight away."""
+    """You armed the effort's cascade, with the sessions it started straight away. The
+    cascade is Wayfarer's, so only you arm it (#14)."""
 
     kind: Literal["armed"]
     started: list[Mention]

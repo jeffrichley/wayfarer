@@ -123,37 +123,23 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * Actor
-         * @description Who moved a ticket, read from the kind of event rather than the timeline's
-         *     actor, since Wayfarer writes with the person's own token (#22).
-         * @enum {string}
-         */
-        Actor: "wayfarer" | "you" | "someone";
-        /**
          * Answered
          * @description A person answered a ticket's question, and its session resumed.
          */
         Answered: {
-            /**
-             * By
-             * @enum {string}
-             */
-            by: "you" | "someone";
+            /** By */
+            by: "you" | components["schemas"]["Someone"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "answered";
-            /**
-             * Login
-             * @description Who answered, when it was someone else; else null.
-             */
-            login: string | null;
             ticket: components["schemas"]["Mention"];
         };
         /**
          * Armed
-         * @description You armed the effort's cascade, with the sessions it started straight away.
+         * @description You armed the effort's cascade, with the sessions it started straight away. The
+         *     cascade is Wayfarer's, so only you arm it (#14).
          */
         Armed: {
             /**
@@ -171,7 +157,7 @@ export interface components {
         Asked: {
             /**
              * Gist
-             * @description The question's gist, quoted as the session wrote it.
+             * @description The question's gist, quoted as the session wrote it: one sentence, since a line is at most two (#22).
              */
             gist: string;
             /**
@@ -329,21 +315,13 @@ export interface components {
          * @description A person closed a ticket without landing it.
          */
         Closed: {
-            /**
-             * By
-             * @enum {string}
-             */
-            by: "you" | "someone";
+            /** By */
+            by: "you" | components["schemas"]["Someone"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "closed";
-            /**
-             * Login
-             * @description Who closed it, when it was someone else; else null.
-             */
-            login: string | null;
             ticket: components["schemas"]["Mention"];
         };
         /**
@@ -484,7 +462,7 @@ export interface components {
             kind: "held";
             /**
              * Reason
-             * @description The plain-words Held reason, quoted, as a sentence.
+             * @description The plain-words Held reason, quoted: one sentence, since a line is at most two (#22).
              */
             reason: string;
             ticket: components["schemas"]["Mention"];
@@ -532,8 +510,11 @@ export interface components {
          * @description A ticket landed on its effort branch, with what that directly caused (#22).
          */
         Landed: {
-            /** @description Wayfarer for a landing through the merge queue; a person for a merge by hand on GitHub, which was not re-tested. */
-            by: components["schemas"]["Actor"];
+            /**
+             * By
+             * @description Wayfarer for a landing through the merge queue; a person for a merge by hand on GitHub, which lands untested and the line says so (#21).
+             */
+            by: "wayfarer" | "you" | components["schemas"]["Someone"];
             /**
              * Freed
              * @description The tickets its landing made takeable.
@@ -544,11 +525,6 @@ export interface components {
              * @enum {string}
              */
             kind: "landed";
-            /**
-             * Login
-             * @description Who merged it, when it was someone else; else null.
-             */
-            login: string | null;
             /**
              * Started
              * @description Those of them the cascade started a session on.
@@ -653,7 +629,7 @@ export interface components {
         };
         /**
          * Retried
-         * @description You retried a Held ticket (#20).
+         * @description You retried a Held ticket (#20). Only Wayfarer starts a session, so only you retry.
          */
         Retried: {
             /**
@@ -693,21 +669,28 @@ export interface components {
             kind: "snapshot";
         };
         /**
+         * Someone
+         * @description Anyone but you, whom a line names by their login (#22).
+         */
+        Someone: {
+            /** Login */
+            login: string;
+        };
+        /**
          * Taken
          * @description A ticket was taken: by a session the cascade started, or by a person's hand.
          */
         Taken: {
-            by: components["schemas"]["Actor"];
+            /**
+             * By
+             * @description Wayfarer when a session the cascade started took it; a person otherwise.
+             */
+            by: "wayfarer" | "you" | components["schemas"]["Someone"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "taken";
-            /**
-             * Login
-             * @description Who took it, when it was someone else; else null.
-             */
-            login: string | null;
             ticket: components["schemas"]["Mention"];
         };
         /**
