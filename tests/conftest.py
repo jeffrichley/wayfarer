@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Generator, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -169,20 +169,6 @@ def commit_layer(clone: Path, dockerfile: str) -> None:
     (layer / "Dockerfile").write_text(dockerfile)
 
 
-def build_layer(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
-    """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
-    commit_layer(clone, dockerfile)
-
-    assert post(f"{url}api/image/build").status_code == 202
-    output: list[str] = []
-    for kind, event in events(f"{url}api/image/build"):
-        if kind == "output":
-            output.append(event["line"])
-        else:
-            return output, event
-    pytest.fail("the build stream ended without saying how the build finished")
-
-
 @pytest.fixture
 def built_tags() -> Iterator[list[str]]:
     """Tags a test built, removed afterwards so runs do not pile images up."""
@@ -200,30 +186,76 @@ def post(url: str) -> httpx.Response:
     return httpx.post(url, timeout=5.0)
 
 
-def events(url: str, timeout: float = 900.0) -> Iterator[tuple[str, Any]]:
-    """Each server-sent event at `url` as (kind, payload), until the server ends it.
+Items = dict[str, dict[str, Any]]
 
-    The timeout is per read, and generous because a stream may carry a whole
-    image build, which pauses while Docker downloads.
+
+class Stream:
+    """One page's stream, applied as the browser applies it: replaced by id, never merged.
+
+    `timeout` is per read; a stream carrying an image build needs a generous one,
+    because a build pauses while Docker downloads.
     """
-    with httpx.stream("GET", url, timeout=timeout) as response:
+
+    def __init__(self, url: str, last_event_id: str | None = None, timeout: float = 20.0) -> None:
+        headers = {} if last_event_id is None else {"Last-Event-ID": last_event_id}
+        self._opened = httpx.stream("GET", f"{url}api/events", headers=headers, timeout=timeout)
+        response = self._opened.__enter__()
         response.raise_for_status()
-        for line in response.iter_lines():
+        self._lines = response.iter_lines()
+        self.items: Items = {}
+        self.received: list[dict[str, Any]] = []
+        self.ids: list[str] = []
+
+    def __enter__(self) -> Stream:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Drop the connection, as a closed tab or a lost network does."""
+        self._opened.__exit__(None, None, None)
+
+    @property
+    def last_event_id(self) -> str:
+        return self.ids[-1]
+
+    def next(self) -> dict[str, Any]:
+        """The next event, once it is applied."""
+        event: dict[str, Any] | None = None
+        for line in self._lines:
             if line.startswith("data:"):
-                payload = json.loads(line.removeprefix("data:"))
-                yield payload["kind"], payload
+                event = json.loads(line.removeprefix("data:"))
+            elif line.startswith("id:"):
+                self.ids.append(line.removeprefix("id:").strip())
+            elif not line and event is not None:
+                break
+        else:
+            pytest.fail("the stream ended")
+        if event["kind"] == "snapshot":
+            self.items = {item["id"]: item for item in event["items"]}
+        elif event["kind"] == "upsert":
+            self.items[event["item"]["id"]] = event["item"]
+        else:
+            del self.items[event["id"]]
+        self.received.append(event)
+        return event
+
+    def until(self, arrived: Callable[[Items], bool]) -> list[dict[str, Any]]:
+        """Read until `arrived` holds of what the page holds; the events that took."""
+        start = len(self.received)
+        while not arrived(self.items):
+            self.next()
+        return self.received[start:]
+
+    def item(self, id: str, **fields: Any) -> dict[str, Any]:
+        """The item with `id`, once it has arrived with every one of `fields`."""
+        self.until(lambda items: _has(items.get(id), fields))
+        return self.items[id]
 
 
-def stream(url: str, timeout: float = 10.0) -> Generator[Any]:
-    """Each server-sent event's payload at `url`, read while the stream stays open.
-
-    Close the iterator to hang up, as a page does when it goes away.
-    """
-    with httpx.stream("GET", url, timeout=timeout) as response:
-        response.raise_for_status()
-        for line in response.iter_lines():
-            if line.startswith("data:"):
-                yield json.loads(line.removeprefix("data:"))
+def _has(item: dict[str, Any] | None, fields: dict[str, Any]) -> bool:
+    return item is not None and all(item.get(k) == v for k, v in fields.items())
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -241,3 +273,34 @@ def _docker_answers() -> bool:
         return subprocess.run(["docker", "info"], capture_output=True, timeout=30).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+# Per read of the stream: a build pauses while Docker downloads.
+BUILD_TIMEOUT = 900.0
+
+
+@dataclass
+class Built:
+    """What the page was told of one build, once the image says it is over."""
+
+    output: list[str]
+    finished: dict[str, Any]
+    image: dict[str, Any]
+
+
+def build_layer(url: str, clone: Path, dockerfile: str) -> Built:
+    """Commit `dockerfile` as the layer, click Build, and watch the stream to its end."""
+    commit_layer(clone, dockerfile)
+    with Stream(url, timeout=BUILD_TIMEOUT) as page:
+        assert post(f"{url}api/image/build").status_code == 202
+        # Started, which clears any earlier build's output and ending from the page.
+        page.item("image", building=True)
+        finished = page.item("build_finished")
+        image = page.item("image", building=False)
+        return Built(build_output(page.items), finished, image)
+
+
+def build_output(items: Items) -> list[str]:
+    """The last build's output, in the order Docker printed it."""
+    lines = [item for item in items.values() if item["kind"] == "build_output"]
+    return [item["line"] for item in sorted(lines, key=lambda item: item["number"])]

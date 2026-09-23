@@ -64,7 +64,11 @@ class StartGate:
         """The six checks, run now. Looking raises nothing; only a refused start does."""
         checks = await self.check()
         return GateStatus(
-            checks=checks, passed=all(check.passed for check in checks), raised=self.raised
+            kind="gate",
+            id="gate",
+            checks=checks,
+            passed=all(check.passed for check in checks),
+            raised=self.raised,
         )
 
     async def admit(self) -> EnvironmentFailure | None:

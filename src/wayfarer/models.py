@@ -3,6 +3,10 @@
 FastAPI publishes these as OpenAPI, and `web/src/api.gen.ts` is generated from
 that schema (`pnpm gen:types`), so the browser's types never drift from these
 (ADR-0004).
+
+Everything the browser holds is an `Item`: a shape with a `kind` and an `id`
+unique across every kind. It reaches the browser only as a `WireEvent` on the
+page's one stream, which the browser applies by id without folding anything.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ __all__ = [
     "BuildOutput",
     "Checks",
     "Effort",
+    "EffortUnreadable",
     "EnvironmentFailure",
     "GateCheck",
     "GateStatus",
@@ -24,8 +29,11 @@ __all__ = [
     "ImageStatus",
     "ProbeCheck",
     "PullRequest",
+    "Removal",
+    "Snapshot",
     "Ticket",
     "TicketState",
+    "Upsert",
 ]
 
 
@@ -85,6 +93,8 @@ class PullRequest(BaseModel):
 class Ticket(BaseModel):
     """One ticket in an effort, as GitHub has it now."""
 
+    kind: Literal["ticket"]
+    id: str
     number: int
     title: str
     state: TicketState
@@ -99,14 +109,27 @@ class Ticket(BaseModel):
 class Effort(BaseModel):
     """An effort's whole ticket graph: its spec issue, and every ticket under it."""
 
+    kind: Literal["effort"]
+    id: str
     number: int
     title: str
-    tickets: list[Ticket]
+    tickets: list[str] = Field(description="The ids of its tickets, each an item of its own.")
+
+
+class EffortUnreadable(BaseModel):
+    """An effort Wayfarer was asked to read and could not. It stands in the effort's place."""
+
+    kind: Literal["effort_unreadable"]
+    id: str
+    number: int
+    reason: str = Field(description="Why, in words for the person.")
 
 
 class ImageStatus(BaseModel):
     """The image this repo's sessions run in: Wayfarer's base plus the repo's layer (ADR-0005)."""
 
+    kind: Literal["image"]
+    id: Literal["image"]
     layer: str = Field(description="Where the repo's layer lives, relative to the clone.")
     refusal: str | None = Field(
         description="Why no image can be built for this repo, in words for the person; "
@@ -128,23 +151,23 @@ class ProbeCheck(BaseModel):
 
 
 class BuildOutput(BaseModel):
-    """One line of a build's output, as Docker printed it."""
+    """One line of the last build's output, as Docker printed it."""
 
-    kind: Literal["output"]
+    kind: Literal["build_output"]
+    id: str
+    number: int = Field(description="Where the line falls in the output, counting from 0.")
     line: str
 
 
 class BuildFinished(BaseModel):
-    """How a build ended. The last event of its stream."""
+    """How the last build ended."""
 
-    kind: Literal["finished"]
+    kind: Literal["build_finished"]
+    id: Literal["build_finished"]
     tag: str
     ready: bool = Field(description="Built and passed its probe, so sessions may use it.")
     error: str | None = Field(description="Why the build itself failed; null when it built.")
     checks: list[ProbeCheck] = Field(description="The probe's checks; empty when it never built.")
-
-
-BuildEvent = Annotated[BuildOutput | BuildFinished, Field(discriminator="kind")]
 
 
 class GateCheck(BaseModel):
@@ -170,9 +193,43 @@ class EnvironmentFailure(BaseModel):
 class GateStatus(BaseModel):
     """The start gate as it stands now: all six checks, run afresh."""
 
+    kind: Literal["gate"]
+    id: Literal["gate"]
     checks: list[GateCheck]
     passed: bool = Field(description="Every check passed, so a session may start.")
     raised: EnvironmentFailure | None = Field(
         description="The item the gate raised when it last refused a start; null when it has "
         "not refused one, or has admitted one since."
     )
+
+
+Item = Annotated[
+    ImageStatus | BuildOutput | BuildFinished | Effort | EffortUnreadable | Ticket | GateStatus,
+    Field(discriminator="kind"),
+]
+"""Anything the browser holds, keyed by its `id`."""
+
+
+class Snapshot(BaseModel):
+    """Everything there is, replacing whatever the browser held."""
+
+    kind: Literal["snapshot"]
+    items: list[Item]
+
+
+class Upsert(BaseModel):
+    """One item, new or replacing the one with its id."""
+
+    kind: Literal["upsert"]
+    item: Item
+
+
+class Removal(BaseModel):
+    """The item with this id is gone."""
+
+    kind: Literal["removal"]
+    id: str
+
+
+WireEvent = Annotated[Snapshot | Upsert | Removal, Field(discriminator="kind")]
+"""Every event on the page's stream (ADR-0004)."""
