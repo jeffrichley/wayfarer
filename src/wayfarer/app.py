@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
+from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
 from wayfarer.models import Health, WireEvent
@@ -51,6 +52,7 @@ def create_app(
     app = FastAPI(title="Wayfarer", version=running)
     images = Images(repo, store)
     efforts = Efforts(github, store, settings)
+    gate = StartGate(repo, images, settings)
     # A command's work outlives its request, and asyncio keeps only a weak
     # reference to a task, so each is held here until it is done.
     working: set[asyncio.Task[None]] = set()
@@ -88,6 +90,15 @@ def create_app(
     async def read_image() -> Response:
         """Read what the session image would be now (ADR-0005)."""
         return accept(images.read())
+
+    @app.post("/api/gate/read", status_code=202)
+    async def read_gate() -> Response:
+        """Run the start gate's six checks afresh. Looking raises nothing for a person."""
+
+        async def read() -> None:
+            store.upsert(await gate.status())
+
+        return accept(read())
 
     @app.post("/api/image/build", status_code=202)
     async def build_image() -> Response:

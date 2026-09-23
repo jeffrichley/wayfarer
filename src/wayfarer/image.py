@@ -21,7 +21,7 @@ import hashlib
 import json
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -120,7 +120,12 @@ class Build:
         self.tag = tag
         self._store = store
         self._lines = 0
-        self.finished = False
+        self.outcome: BuildFinished | None = None
+        """How it finished; None while it is still running."""
+
+    @property
+    def finished(self) -> bool:
+        return self.outcome is not None
 
     def output(self, line: str) -> None:
         self._store.upsert(
@@ -135,7 +140,7 @@ class Build:
 
     def finish(self, finished: BuildFinished) -> None:
         self._store.upsert(finished)
-        self.finished = True
+        self.outcome = finished
 
     def clear(self) -> None:
         """Take its output and ending off the stream, as a new build replaces it."""
@@ -151,19 +156,23 @@ class Images:
         self._layer = (repo / LAYER).parent
         self._store = store
         self._recipe = recipe
-        self._last_build: Build | None = None
-        self._running: asyncio.Task[None] | None = None
+        self.last_build: Build | None = None
 
     @property
     def building(self) -> bool:
-        return self._last_build is not None and not self._last_build.finished
+        return self.last_build is not None and not self.last_build.finished
 
     async def read(self) -> None:
         """Read what the image would be now, from the layer on disk and Docker's tags."""
-        self._store.upsert(await self._status())
+        self._store.upsert(await self.status())
 
-    async def _status(self) -> ImageStatus:
-        if not _has_layer(self._layer):
+    def current(self) -> str | None:
+        """The tag an image of the current inputs has, without asking Docker; None if refused."""
+        return tag(self._layer, self._recipe) if _has_layer(self._layer) else None
+
+    async def status(self) -> ImageStatus:
+        current = self.current()
+        if current is None:
             return ImageStatus(
                 kind="image",
                 id="image",
@@ -173,7 +182,6 @@ class Images:
                 ready=False,
                 building=self.building,
             )
-        current = tag(self._layer, self._recipe)
         return ImageStatus(
             kind="image",
             id="image",
@@ -184,27 +192,25 @@ class Images:
             building=self.building,
         )
 
-    async def build(self) -> None:
-        """Start a build of the current inputs, unless one is already running.
+    def build(self) -> Coroutine[None, None, None]:
+        """Take the layer as it is at the click, and return the work of building it.
 
-        Builds happen only when a person asks: nothing else calls this. A repo with
-        no layer is refused, which the page already reads in the image's status, so
-        a refused click is only a fresh read of it.
+        Builds happen only when a person asks: nothing else calls this. A click while
+        a build runs joins it. A repo with no layer is refused, which the page reads
+        in the image's status, so a refused click is only a fresh read of it.
         """
-        if not _has_layer(self._layer):
-            await self.read()
-            return
-        if self.building:
-            return
-        # Hashed and built from one copy taken now, so editing the layer while it
-        # builds cannot tag an image under a hash of other inputs.
+        if not _has_layer(self._layer) or self.building:
+            return self.read()
+        # Hashed and built from one copy taken now, before the click is answered,
+        # so editing the layer while it builds cannot tag an image under a hash of
+        # other inputs.
         snapshot = Path(tempfile.mkdtemp(prefix="wayfarer-layer-"))
         shutil.copytree(self._layer, snapshot, dirs_exist_ok=True)
-        if self._last_build is not None:
-            self._last_build.clear()
+        if self.last_build is not None:
+            self.last_build.clear()
         build = Build(tag(snapshot, self._recipe), self._store)
-        self._last_build = build
-        self._running = asyncio.create_task(self._build(build, snapshot))
+        self.last_build = build
+        return self._build(build, snapshot)
 
     async def _build(self, build: Build, layer: Path) -> None:
         await self.read()

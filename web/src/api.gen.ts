@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gate/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Gate
+         * @description Run the start gate's six checks afresh. Looking raises nothing for a person.
+         */
+        post: operations["read_gate_api_gate_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -203,6 +223,72 @@ export interface components {
              */
             reason: string;
         };
+        /**
+         * EnvironmentFailure
+         * @description The one Needs you item a failed start gate raises, however many starts it refused.
+         */
+        EnvironmentFailure: {
+            /** Failed */
+            failed: components["schemas"]["GateCheck"][];
+            /**
+             * Id
+             * @description Stays the same while the gate keeps failing, so it is one item.
+             */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "environment";
+            /**
+             * Reason
+             * @description Which checks failed and why, in plain words.
+             */
+            reason: string;
+        };
+        /**
+         * GateCheck
+         * @description One of the start gate's six checks, and what it found.
+         */
+        GateCheck: {
+            /**
+             * Detail
+             * @description What was found, in plain words, saying how to fix it when it failed. Names a credential's variable, never its value.
+             */
+            detail: string;
+            /**
+             * Name
+             * @description What must hold, in plain words.
+             */
+            name: string;
+            /** Passed */
+            passed: boolean;
+        };
+        /**
+         * GateStatus
+         * @description The start gate as it stands now: all six checks, run afresh.
+         */
+        GateStatus: {
+            /** Checks */
+            checks: components["schemas"]["GateCheck"][];
+            /**
+             * Id
+             * @constant
+             */
+            id: "gate";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "gate";
+            /**
+             * Passed
+             * @description Every check passed, so a session may start.
+             */
+            passed: boolean;
+            /** @description The item the gate raised when it last refused a start; null when it has not refused one, or has admitted one since. */
+            raised: components["schemas"]["EnvironmentFailure"] | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -300,7 +386,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -348,7 +434,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -435,6 +521,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_gate_api_gate_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

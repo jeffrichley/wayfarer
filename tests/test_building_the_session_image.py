@@ -7,56 +7,23 @@ download and the plugin clone), and every later one reuses Docker's cache.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
-from conftest import Items, Launcher, Stream, commit_layer, post
+from conftest import (
+    BUILD_TIMEOUT,
+    Launcher,
+    Stream,
+    build_layer,
+    build_output,
+    commit_layer,
+    post,
+)
 
 pytestmark = pytest.mark.docker
-
-
-@pytest.fixture
-def built_tags() -> Iterator[list[str]]:
-    """Tags a test built, removed afterwards so runs do not pile images up."""
-    tags: list[str] = []
-    yield tags
-    for built in tags:
-        subprocess.run(["docker", "image", "rm", built], capture_output=True)
-
-
-# Per read of the stream: a build pauses while Docker downloads.
-_BUILD_TIMEOUT = 900.0
-
-
-@dataclass
-class _Built:
-    """What the page was told of one build, once the image says it is over."""
-
-    output: list[str]
-    finished: dict[str, Any]
-    image: dict[str, Any]
-
-
-def _build(url: str, clone: Path, dockerfile: str) -> _Built:
-    """Commit `dockerfile` as the layer, click Build, and watch the stream to its end."""
-    commit_layer(clone, dockerfile)
-    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
-        assert post(f"{url}api/image/build").status_code == 202
-        # Started, which clears any earlier build's output and ending from the page.
-        page.item("image", building=True)
-        finished = page.item("build_finished")
-        image = page.item("image", building=False)
-        return _Built(_output(page.items), finished, image)
-
-
-def _output(items: Items) -> list[str]:
-    lines = [item for item in items.values() if item["kind"] == "build_output"]
-    return [item["line"] for item in sorted(lines, key=lambda item: item["number"])]
 
 
 def _checks(finished: dict[str, Any]) -> dict[str, bool]:
@@ -74,7 +41,7 @@ def test_a_repo_with_a_layer_gets_an_image_built_on_click_with_output_streamed(
 
     # Unique, so the step really runs and its own output, not a cache hit, streams.
     marker = uuid4().hex
-    built = _build(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
+    built = build_layer(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
     finished = built.finished
     built_tags.append(finished["tag"])
 
@@ -98,7 +65,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
 ) -> None:
     url = wayfarer.start().url()
 
-    finished = _build(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n").finished
+    finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n").finished
     built_tags.append(finished["tag"])
 
     assert set(_checks(finished)) == {
@@ -123,7 +90,7 @@ def test_an_image_that_fails_its_probe_is_never_tagged_for_a_session(
 ) -> None:
     url = wayfarer.start().url()
 
-    built = _build(url, clone, f"FROM wayfarer-base\n{layer}")
+    built = build_layer(url, clone, f"FROM wayfarer-base\n{layer}")
     finished = built.finished
     built_tags.append(finished["tag"])
 
@@ -138,7 +105,7 @@ def test_a_layer_that_does_not_build_says_so_and_leaves_no_tag(
 ) -> None:
     url = wayfarer.start().url()
 
-    built = _build(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
+    built = build_layer(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
     finished = built.finished
 
     assert finished["ready"] is False
@@ -155,7 +122,7 @@ def test_a_second_click_while_building_joins_the_build_rather_than_starting_anot
     # Unique, so Docker's cache cannot make it quick enough to finish between clicks.
     commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {uuid4()}\n")
 
-    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
+    with Stream(url, timeout=BUILD_TIMEOUT) as page:
         assert post(f"{url}api/image/build").status_code == 202
         page.item("image", building=True)
         assert post(f"{url}api/image/build").status_code == 202
@@ -164,7 +131,7 @@ def test_a_second_click_while_building_joins_the_build_rather_than_starting_anot
 
     # A second build would have replaced the first one's output with its own.
     assert not [event for event in page.received if event["kind"] == "removal"]
-    assert sum("RUN sleep 3" in line for line in _output(page.items)) == 1
+    assert sum("RUN sleep 3" in line for line in build_output(page.items)) == 1
 
 
 def test_a_new_click_replaces_the_last_builds_output_with_its_own(
@@ -173,13 +140,13 @@ def test_a_new_click_replaces_the_last_builds_output_with_its_own(
     url = wayfarer.start().url()
     # Far longer than the second, so a line of it left behind would show.
     before = uuid4().hex
-    first = _build(
+    first = build_layer(
         url, clone, f"FROM wayfarer-base\nRUN for i in $(seq 200); do echo {before}; done\n"
     )
     built_tags.append(first.finished["tag"])
 
     after = uuid4().hex
-    second = _build(url, clone, f"FROM wayfarer-base\nRUN echo {after}\n")
+    second = build_layer(url, clone, f"FROM wayfarer-base\nRUN echo {after}\n")
     built_tags.append(second.finished["tag"])
 
     assert any(before in line for line in first.output)
@@ -194,7 +161,7 @@ def test_editing_the_layer_mid_build_does_not_change_what_the_build_is_tagged(
     marker = uuid4().hex
     commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {marker} > /tmp/built\n")
 
-    with Stream(url, timeout=_BUILD_TIMEOUT) as page:
+    with Stream(url, timeout=BUILD_TIMEOUT) as page:
         post(f"{url}api/image/read")
         clicked = page.item("image")["tag"]
         assert post(f"{url}api/image/build").status_code == 202
