@@ -66,11 +66,6 @@ class _Telling:
         for row in sessions:
             if row.purpose is Purpose.BUILD:
                 self._builds[row.ticket].append(row.started)
-        self._closed = {
-            number: closes[0].at
-            for number, timeline in self._timelines.items()
-            if (closes := [e for e in timeline if e.kind == "ClosedEvent"])
-        }
         # Takings told inside the line of the close that freed them.
         self._folded: set[tuple[int, datetime]] = set()
 
@@ -94,7 +89,7 @@ class _Telling:
         ticket = self._ticket(number)
         match e.kind, e.subject:
             case "AssignedEvent", _ if (number, e.at) not in self._folded:
-                if self._builds[number]:
+                if self._cascade_took(number, e):
                     return self._line(number, e, Movement.TAKEN, [ticket, _words(" was taken.")])
                 who = self._who(e.subject)
                 return self._line(
@@ -136,9 +131,9 @@ class _Telling:
                 ticket,
                 _words(" without landing it."),
             ]
-        freed = [t.number for t in self._tickets if number in t.blocked_by and self._freed(t, e.at)]
+        freed = [t.number for t in self._tickets if number in t.blocked_by and self._freed(t, e)]
         if freed:
-            taken = [n for n in freed if self._taken_after(n, e.at)]
+            taken = [n for n in freed if self._taken_after(n, e, timeline)]
             parts += [_words(" "), *self._names(freed), _words(" reached the frontier")]
             if taken == freed:
                 parts.append(_words(" and was taken." if len(taken) == 1 else " and were taken."))
@@ -150,32 +145,37 @@ class _Telling:
         return self._line(number, e, movement, parts)
 
     def _marked(self, close: Event, timeline: list[Event]) -> bool:
-        """Whether a landing comment came after the ticket's last close and before this one."""
-        since = [e for e in timeline if e.at < close.at]
-        before = [e for e in since if e.kind == "ClosedEvent"]
-        after = before[-1].at if before else None
-        return any(
-            e.kind == "IssueComment" and LANDED_MARKER in (e.body or "")
-            for e in since
-            if after is None or e.at > after
-        )
+        """Whether a landing comment came after the ticket's last close and before this one.
 
-    def _freed(self, ticket: Ticket, at: datetime) -> bool:
-        """Whether the close at `at` put `ticket` on the frontier: its last blocker to
+        Judged by the timeline's order, not its times: Wayfarer comments and closes
+        back to back, and GitHub stamps both to the same second."""
+        marked = False
+        for e in timeline:
+            if e is close:
+                return marked
+            if e.kind == "ClosedEvent":
+                marked = False
+            elif e.kind == "IssueComment" and LANDED_MARKER in (e.body or ""):
+                marked = True
+        return marked
+
+    def _freed(self, ticket: Ticket, close: Event) -> bool:
+        """Whether `close` put `ticket` on the frontier: the last of its blockers to
         close, while it was open and nobody was on it."""
-        blockers = [self._closed.get(b) for b in ticket.blocked_by]
-        # A blocker outside the effort, or still open, leaves it blocked as far as
-        # this effort's timelines can tell.
-        if any(closed is None for closed in blockers):
-            return False
-        if max(closed for closed in blockers if closed is not None) != at:
-            return False
-        closed = self._closed.get(ticket.number)
-        if closed is not None and closed <= at:
+        for blocker in ticket.blocked_by:
+            timeline = self._timelines.get(blocker)
+            # A blocker outside the effort leaves it blocked as far as this
+            # effort's timelines can tell.
+            if timeline is None:
+                return False
+            closing = any(e is close for e in timeline)
+            if not closing and not self._closed(blocker, close.at, before=True):
+                return False
+        if self._closed(ticket.number, close.at, before=False):
             return False
         on: set[str] = set()
         for e in self._timelines[ticket.number]:
-            if e.at >= at:
+            if e.at >= close.at:
                 break
             if e.kind == "AssignedEvent" and e.subject:
                 on.add(e.subject)
@@ -183,13 +183,47 @@ class _Telling:
                 on.discard(e.subject or "")
         return not on
 
-    def _taken_after(self, number: int, at: datetime) -> bool:
-        """Whether the cascade took `number` as the first thing after `at`, and if so
-        fold that taking into the line of the close at `at`."""
-        taking = next(
-            (e for e in self._timelines[number] if e.kind == "AssignedEvent" and e.at > at), None
+    def _closed(self, number: int, at: datetime, *, before: bool) -> bool:
+        """Whether `number` stood closed just before `at`, or at `at` itself."""
+        closed = False
+        for e in self._timelines[number]:
+            if e.at > at or (before and e.at == at):
+                break
+            if e.kind == "ClosedEvent":
+                closed = True
+            elif e.kind == "ReopenedEvent":
+                closed = False
+        return closed
+
+    def _cascade_took(self, number: int, taking: Event) -> bool:
+        """Whether the cascade made `taking`: a build started on the ticket after it,
+        and before anyone was put on it again. Otherwise a person took it."""
+        again = next(
+            (
+                e.at
+                for e in self._timelines[number]
+                if e.kind == "AssignedEvent" and e.at > taking.at
+            ),
+            None,
         )
-        if taking is None or not self._builds[number]:
+        return any(
+            taking.at <= started and (again is None or started < again)
+            for started in self._builds[number]
+        )
+
+    def _taken_after(self, number: int, close: Event, closer: list[Event]) -> bool:
+        """Whether the cascade took `number` as the first thing after `close`, before
+        the ticket it closed was reopened; if so, that taking folds into its line."""
+        reopened = next(
+            (e.at for e in closer if e.kind == "ReopenedEvent" and e.at > close.at), None
+        )
+        taking = next(
+            (e for e in self._timelines[number] if e.kind == "AssignedEvent" and e.at > close.at),
+            None,
+        )
+        if taking is None or (reopened is not None and taking.at > reopened):
+            return False
+        if not self._cascade_took(number, taking):
             return False
         self._folded.add((number, taking.at))
         return True

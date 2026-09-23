@@ -90,6 +90,7 @@ enum IssueTimelineItemsItemType {
   CROSS_REFERENCED_EVENT
   ISSUE_COMMENT
   LABELED_EVENT
+  REOPENED_EVENT
   UNASSIGNED_EVENT
   UNLABELED_EVENT
 }
@@ -151,6 +152,7 @@ type UnassignedEvent { createdAt: DateTime! actor: Actor assignee: Assignee }
 type LabeledEvent { createdAt: DateTime! actor: Actor label: Label! }
 type UnlabeledEvent { createdAt: DateTime! actor: Actor label: Label! }
 type ClosedEvent { createdAt: DateTime! actor: Actor stateReason: IssueStateReason }
+type ReopenedEvent { createdAt: DateTime! actor: Actor }
 type IssueComment { createdAt: DateTime! author: Actor body: String! }
 union IssueTimelineItems =
     CrossReferencedEvent
@@ -159,6 +161,7 @@ union IssueTimelineItems =
   | LabeledEvent
   | UnlabeledEvent
   | ClosedEvent
+  | ReopenedEvent
   | IssueComment
 type IssueTimelineItemsConnection { nodes: [IssueTimelineItems] }
 """)
@@ -182,6 +185,7 @@ _ITEM_TYPES = {
     "LabeledEvent": "LABELED_EVENT",
     "UnlabeledEvent": "UNLABELED_EVENT",
     "ClosedEvent": "CLOSED_EVENT",
+    "ReopenedEvent": "REOPENED_EVENT",
     "IssueComment": "ISSUE_COMMENT",
 }
 
@@ -324,6 +328,12 @@ class GitHub:
         issue.state = "CLOSED"
         issue.state_reason = reason
         self._happened(issue, "ClosedEvent", by, stateReason=reason)
+
+    def reopen(self, issue: Issue, by: str | None = None) -> None:
+        with self._lock:
+            issue.state = "OPEN"
+            issue.state_reason = "REOPENED"
+            self._happened(issue, "ReopenedEvent", by or self.viewer)
 
     def assign(self, issue: Issue, login: str, by: str | None = None) -> None:
         """`login` put on the issue, as a person or the cascade claims it."""

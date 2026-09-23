@@ -60,10 +60,10 @@ async def _serve(lock: InstanceLock, repo: Path) -> None:
     url = f"http://{_HOST}:{port}/"
 
     store = Store(settings.stream_backlog)
-    github = repo_of(repo)
+    origin = repo_of(repo)
     # Opened on the loop's own thread, which is the only one that reads it.
-    sessions = Sessions.for_repo(settings.data_dir, github) if github else None
-    app = create_app(repo, settings, GitHub(github, settings), store, sessions)
+    sessions = Sessions.for_repo(settings.data_dir, origin) if origin else None
+    app = create_app(repo, settings, GitHub(origin, settings), store, sessions)
     server = _Server(uvicorn.Config(app, log_level="warning"), store)
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     try:

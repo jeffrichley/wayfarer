@@ -98,6 +98,7 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
               LABELED_EVENT
               UNLABELED_EVENT
               CLOSED_EVENT
+              REOPENED_EVENT
               ISSUE_COMMENT
             ]
             last: 100
@@ -113,6 +114,7 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
               ... on LabeledEvent { createdAt actor { login } label { name } }
               ... on UnlabeledEvent { createdAt actor { login } label { name } }
               ... on ClosedEvent { createdAt actor { login } stateReason }
+              ... on ReopenedEvent { createdAt actor { login } }
               ... on IssueComment { createdAt author { login } body }
             }
           }

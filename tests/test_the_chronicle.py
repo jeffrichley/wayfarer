@@ -80,8 +80,11 @@ def _chronicle(url: str, effort: Issue, expected: list[str]) -> list[dict[str, A
 
 
 def _land(github: GitHub, ticket: Issue) -> None:
-    """Closed with the marked comment, as Wayfarer closes a ticket that landed."""
+    """Closed with the marked comment, as Wayfarer closes a ticket that landed: back to
+    back, so GitHub stamps both to the same second."""
+    at = github.now
     github.comment(ticket, f"Landed on `{_EFFORT_BRANCH}` at {'a' * 40}.\n\n{LANDED_MARKER}")
+    github.now = at
     github.close(ticket)
 
 
@@ -163,17 +166,20 @@ def test_only_a_ticket_moving_earns_a_line_never_a_stage_a_pull_request_or_a_res
 def test_who_acted_is_read_from_the_kind_of_event_and_never_from_the_token(
     wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
 ) -> None:
-    names = ["Taken", "Mine", "Theirs", "Asked", "Asked them", "Held", "Dropped", "Done"]
+    names = ["Taken", "Mine", "Theirs", "Rebuilt", "Asked", "Asked them", "Held", "Dropped", "Done"]
     spec, tickets = github.effort("Widgets", tickets=len(names))
     for ticket, name in zip(tickets, names, strict=True):
         ticket.title = name
-    taken, mine, theirs, asked, asked_them, held, dropped, done = tickets
+    taken, mine, theirs, rebuilt, asked, asked_them, held, dropped, done = tickets
 
     # Every write Wayfarer makes wears the person's login, as it does on GitHub.
     github.assign(taken, github.viewer)
     _session(store, github, taken)
     github.assign(mine, github.viewer)
+    # A session once ran on it, but none started when it was taken this time.
+    _session(store, github, rebuilt)
     github.assign(theirs, "octocat", by="octocat")
+    github.assign(rebuilt, "octocat", by="octocat")
     github.label(asked, ASKED)
     github.unlabel(asked, ASKED)
     _session(store, github, asked)
@@ -193,6 +199,7 @@ def test_who_acted_is_read_from_the_kind_of_event_and_never_from_the_token(
             "Taken was taken.",
             "You took Mine.",
             "octocat took Theirs.",
+            "octocat took Rebuilt.",
             "Asked asked a question.",
             "You answered Asked, and its session resumed.",
             "Asked them asked a question.",
@@ -228,3 +235,26 @@ def test_the_chronicle_rebuilds_identically_after_a_restart(
     after = _chronicle(wayfarer.start(env=_env(data_dir)).url(), spec, expected)
 
     assert after == before
+
+
+def test_a_reopened_ticket_frees_what_it_blocks_each_time_it_closes(
+    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.block(meter, by=flag)
+    github.close(flag, by="octocat")
+    github.reopen(flag, by="octocat")
+    _land(github, flag)
+    github.assign(meter, github.viewer)
+    _session(store, github, meter)
+    url = wayfarer.start(env=_env(data_dir)).url()
+
+    _chronicle(
+        url,
+        spec,
+        [
+            "octocat closed Flag loudness. Meter peaks reached the frontier.",
+            "Flag loudness landed. Meter peaks reached the frontier and was taken.",
+        ],
+    )
