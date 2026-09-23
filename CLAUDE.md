@@ -34,10 +34,12 @@ left sitting is the ticket unfinished.
 
 ## Rules that live nowhere else
 
-- **Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`**,
-  and `web/src/api.gen.ts` is regenerated from it (`just types`) in the same
-  commit (ADR-0004). CI fails on drift, and a test fails for a model the schema
-  does not carry.
+- **Every shape the browser sees is a pydantic model in the `wayfarer.models`
+  package** (`src/wayfarer/models/`), one module per area, each re-exported
+  from the package by one sorted line; a new area adds a module and its line.
+  `web/src/api.gen.ts` is regenerated from it (`just types`) in the same commit
+  (ADR-0004). CI fails on drift, and a test fails for a model the schema does
+  not carry or the package does not re-export.
 - **Every bound is a named setting.** Waystation defaults every timeout to
   unbounded, so Wayfarer is where the spec's caps are set; a number no ticket
   asked for is a setting or it is a comment saying why it must exist.
