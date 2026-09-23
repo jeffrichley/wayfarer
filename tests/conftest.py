@@ -10,6 +10,7 @@ launched from, as a person's would be.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
@@ -19,6 +20,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -160,5 +162,47 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Launcher]:
     launcher.close()
 
 
+def commit_layer(clone: Path, dockerfile: str) -> None:
+    """Give the repo its own layer of the session image."""
+    layer = clone / ".wayfarer"
+    layer.mkdir(exist_ok=True)
+    (layer / "Dockerfile").write_text(dockerfile)
+
+
 def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
+
+
+def post(url: str) -> httpx.Response:
+    return httpx.post(url, timeout=5.0)
+
+
+def events(url: str, timeout: float = 900.0) -> Iterator[tuple[str, Any]]:
+    """Each server-sent event at `url` as (kind, payload), until the server ends it.
+
+    The timeout is per read, and generous because a stream may carry a whole
+    image build, which pauses while Docker downloads.
+    """
+    with httpx.stream("GET", url, timeout=timeout) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                payload = json.loads(line.removeprefix("data:"))
+                yield payload["kind"], payload
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip the docker tier, saying why, where no daemon answers (GitHub's macOS runners)."""
+    needing = [item for item in items if "docker" in item.keywords]
+    if not needing or _docker_answers():
+        return
+    for item in needing:
+        item.add_marker(pytest.mark.skip(reason="no reachable Docker daemon"))
+
+
+def _docker_answers() -> bool:
+    try:
+        # Bounded so a wedged daemon skips the tier rather than hanging collection.
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False

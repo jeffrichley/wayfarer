@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterable
 from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
-from wayfarer.models import Effort, Health
+from wayfarer.image import Build, Images, NoLayer
+from wayfarer.models import BuildEvent, Effort, Health, ImageStatus
 from wayfarer.read_model import read_effort
 from wayfarer.settings import Settings
 
@@ -29,12 +33,28 @@ or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 """
 
 
-def create_app(settings: Settings | None = None, github: GitHub | None = None) -> FastAPI:
-    """The app, reading GitHub through `github`; without one, every read says so."""
+async def _last_build(request: Request) -> Build:
+    # A dependency, so a missing build is a 404 before its stream starts.
+    images: Images = request.app.state.images
+    if images.last_build is None:
+        raise HTTPException(status_code=404, detail="No build has been asked for.")
+    return images.last_build
+
+
+LastBuild = Annotated[Build, Depends(_last_build)]
+
+
+def create_app(
+    repo: Path, settings: Settings | None = None, github: GitHub | None = None
+) -> FastAPI:
+    """The app for the clone whose working tree is `repo`, reading GitHub through
+    `github`; without one, every read of GitHub says so."""
     settings = settings or Settings()
     github = github or GitHub(None, settings)
     running = version("wayfarer")
     app = FastAPI(title="Wayfarer", version=running)
+    images = Images(repo)
+    app.state.images = images
 
     # Handlers are async so they run on the loop every agent run shares (ADR-0001),
     # not in a thread pool beside it.
@@ -60,6 +80,27 @@ def create_app(settings: Settings | None = None, github: GitHub | None = None) -
             raise HTTPException(status_code=404, detail=str(error)) from error
         except GitHubError as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
+
+    @app.get("/api/image")
+    async def image() -> ImageStatus:
+        return await images.status()
+
+    @app.post("/api/image/build", status_code=202, responses={409: {"description": "No layer"}})
+    async def build_image() -> None:
+        """Build the session image. Builds happen only here, when a person clicks."""
+        try:
+            images.build()
+        except NoLayer as refusal:
+            raise HTTPException(status_code=409, detail=str(refusal)) from None
+
+    # The build's output, from its first line. Until the page's one stream lands
+    # (#31), a build streams on its own (ADR-0004).
+    @app.get("/api/image/build", response_class=EventSourceResponse)
+    async def build_output(
+        build: LastBuild,
+    ) -> AsyncIterable[BuildEvent]:
+        async for event in build.events():
+            yield event
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

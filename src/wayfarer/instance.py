@@ -19,7 +19,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Self
 
-__all__ = ["AlreadyRunning", "InstanceLock", "NotAClone", "find_clone"]
+__all__ = ["AlreadyRunning", "InstanceLock", "NotAClone", "find_clone", "find_worktree"]
 
 _LOCK_NAME = "wayfarer.lock"
 
@@ -40,8 +40,17 @@ class AlreadyRunning(Exception):
 
 def find_clone(cwd: Path) -> Path:
     """The git directory shared by every worktree of the clone `cwd` is in."""
+    return _rev_parse(cwd, "--path-format=absolute", "--git-common-dir")
+
+
+def find_worktree(cwd: Path) -> Path:
+    """The top of the working tree `cwd` is in, where the repo's files are."""
+    return _rev_parse(cwd, "--show-toplevel")
+
+
+def _rev_parse(cwd: Path, *args: str) -> Path:
     result = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        ["git", "rev-parse", *args],
         cwd=cwd,
         capture_output=True,
         text=True,

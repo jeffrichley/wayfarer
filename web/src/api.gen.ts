@@ -38,10 +38,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Image */
+        get: operations["image_api_image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/image/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Build Output */
+        get: operations["build_output_api_image_build_get"];
+        put?: never;
+        /**
+         * Build Image
+         * @description Build the session image. Builds happen only here, when a person clicks.
+         */
+        post: operations["build_image_api_image_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * BuildFinished
+         * @description How a build ended. The last event of its stream.
+         */
+        BuildFinished: {
+            /**
+             * Checks
+             * @description The probe's checks; empty when it never built.
+             */
+            checks: components["schemas"]["ProbeCheck"][];
+            /**
+             * Error
+             * @description Why the build itself failed; null when it built.
+             */
+            error: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "finished";
+            /**
+             * Ready
+             * @description Built and passed its probe, so sessions may use it.
+             */
+            ready: boolean;
+            /** Tag */
+            tag: string;
+        };
+        /**
+         * BuildOutput
+         * @description One line of a build's output, as Docker printed it.
+         */
+        BuildOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "output";
+            /** Line */
+            line: string;
+        };
         /**
          * Checks
          * @description A pull request's checks, rolled up. A PR with no checks has none of these.
@@ -72,6 +151,46 @@ export interface components {
         Health: {
             /** Version */
             version: string;
+        };
+        /**
+         * ImageStatus
+         * @description The image this repo's sessions run in: Wayfarer's base plus the repo's layer (ADR-0005).
+         */
+        ImageStatus: {
+            /** Building */
+            building: boolean;
+            /**
+             * Layer
+             * @description Where the repo's layer lives, relative to the clone.
+             */
+            layer: string;
+            /**
+             * Ready
+             * @description That tag exists, so it was built and passed its probe.
+             */
+            ready: boolean;
+            /**
+             * Refusal
+             * @description Why no image can be built for this repo, in words for the person; null when one can.
+             */
+            refusal: string | null;
+            /**
+             * Tag
+             * @description The tag an image of the current inputs has; null when refused.
+             */
+            tag: string | null;
+        };
+        /**
+         * ProbeCheck
+         * @description One thing the probe proved, or failed to prove, about a newly built image.
+         */
+        ProbeCheck: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Passed */
+            passed: boolean;
         };
         /**
          * PullRequest
@@ -186,6 +305,73 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Health"];
                 };
+            };
+        };
+    };
+    image_api_image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageStatus"];
+                };
+            };
+        };
+    };
+    build_output_api_image_build_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+        };
+    };
+    build_image_api_image_build_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description No layer */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

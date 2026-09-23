@@ -12,7 +12,7 @@ import uvicorn
 
 from wayfarer.app import create_app
 from wayfarer.github import GitHub, repo_of
-from wayfarer.instance import AlreadyRunning, InstanceLock, NotAClone, find_clone
+from wayfarer.instance import AlreadyRunning, InstanceLock, NotAClone, find_clone, find_worktree
 from wayfarer.settings import Settings
 
 __all__ = ["main"]
@@ -36,13 +36,13 @@ def _bind() -> socket.socket:
     return sock
 
 
-async def _serve(lock: InstanceLock, clone: Path) -> None:
+async def _serve(lock: InstanceLock, repo: Path) -> None:
     sock = _bind()
     port = sock.getsockname()[1]
     url = f"http://{_HOST}:{port}/"
 
     settings = Settings.from_env()
-    app = create_app(settings, GitHub(repo_of(clone), settings))
+    app = create_app(repo, settings, GitHub(repo_of(repo), settings))
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     while not server.started and not serving.done():
@@ -58,7 +58,7 @@ def main() -> None:
     try:
         cwd = Path.cwd()
         with InstanceLock(find_clone(cwd)) as lock:
-            asyncio.run(_serve(lock, cwd))
+            asyncio.run(_serve(lock, find_worktree(cwd)))
     except (NotAClone, AlreadyRunning) as refusal:
         sys.exit(f"wayfarer: {refusal}")
     except KeyboardInterrupt:
