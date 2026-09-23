@@ -515,6 +515,11 @@ export interface components {
             open: boolean;
             /** Open Blockers */
             open_blockers: number;
+            /**
+             * Place In Line
+             * @description Its place in its effort branch's merge queue while it is Landing, 1 at the front; null when it is not in the queue. Read from GitHub, so a restart finds the same line.
+             */
+            place_in_line: number | null;
             pull_request: components["schemas"]["PullRequest"] | null;
             state: components["schemas"]["TicketState"];
             /** Title */
