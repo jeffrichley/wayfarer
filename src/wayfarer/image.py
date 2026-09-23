@@ -21,17 +21,17 @@ import hashlib
 import json
 import shutil
 import tempfile
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from wayfarer.models import BuildEvent, BuildFinished, BuildOutput, ImageStatus, ProbeCheck
+from wayfarer.models import BuildFinished, BuildOutput, ImageStatus, ProbeCheck
+from wayfarer.stream import Store
 
-__all__ = ["BASE", "LAYER", "REFUSAL", "Build", "Images", "NoLayer", "Recipe", "tag"]
+__all__ = ["BASE", "LAYER", "REFUSAL", "Build", "Images", "Recipe", "tag"]
 
 LAYER = ".wayfarer/Dockerfile"
 
@@ -82,13 +82,6 @@ BASE = Recipe(
 )
 
 
-class NoLayer(Exception):
-    """The repo has committed no layer of its own."""
-
-    def __init__(self) -> None:
-        super().__init__(REFUSAL)
-
-
 def tag(layer: Path, recipe: Recipe) -> str:
     """The tag an image built from `recipe` and the layer directory `layer` has."""
     digest = hashlib.sha256(_base_digest(recipe).encode())
@@ -121,63 +114,57 @@ def _feed(digest: Any, part: bytes) -> None:
 
 
 class Build:
-    """One build of one tag: its output so far, and how it finished."""
+    """One build of one tag, whose output and ending reach the stream as they happen."""
 
-    def __init__(self, tag: str) -> None:
+    def __init__(self, tag: str, store: Store) -> None:
         self.tag = tag
-        self._events: list[BuildOutput | BuildFinished] = []
-        self._changed = asyncio.Condition()
+        self._store = store
+        self._lines = 0
+        self.outcome: BuildFinished | None = None
+        """How it finished; None while it is still running."""
 
     @property
     def finished(self) -> bool:
         return self.outcome is not None
 
-    @property
-    def outcome(self) -> BuildFinished | None:
-        """How it finished; None while it is still running."""
-        last = self._events[-1] if self._events else None
-        return last if isinstance(last, BuildFinished) else None
+    def output(self, line: str) -> None:
+        self._store.upsert(
+            BuildOutput(
+                kind="build_output",
+                id=f"build_output:{self._lines}",
+                number=self._lines,
+                line=line,
+            )
+        )
+        self._lines += 1
 
-    async def output(self, line: str) -> None:
-        await self._emit(BuildOutput(kind="output", line=line))
+    def finish(self, finished: BuildFinished) -> None:
+        self._store.upsert(finished)
+        self.outcome = finished
 
-    async def finish(self, finished: BuildFinished) -> None:
-        await self._emit(finished)
-
-    async def events(self) -> AsyncIterator[BuildEvent]:
-        """Everything so far, then each event as it happens, ending with how it finished."""
-        seen = 0
-        while True:
-            async with self._changed:
-                await self._changed.wait_for(partial(self._beyond, seen))
-                fresh = self._events[seen:]
-            seen += len(fresh)
-            for event in fresh:
-                yield event
-                if isinstance(event, BuildFinished):
-                    return
-
-    def _beyond(self, seen: int) -> bool:
-        return len(self._events) > seen
-
-    async def _emit(self, event: BuildOutput | BuildFinished) -> None:
-        async with self._changed:
-            self._events.append(event)
-            self._changed.notify_all()
+    def clear(self) -> None:
+        """Take its output and ending off the stream, as a new build replaces it."""
+        for number in range(self._lines):
+            self._store.remove(f"build_output:{number}")
+        self._store.remove("build_finished")
 
 
 class Images:
     """One repo's session image: what it would be, and the build a person last asked for."""
 
-    def __init__(self, repo: Path, recipe: Recipe = BASE) -> None:
+    def __init__(self, repo: Path, store: Store, recipe: Recipe = BASE) -> None:
         self._layer = (repo / LAYER).parent
+        self._store = store
         self._recipe = recipe
         self.last_build: Build | None = None
-        self._running: asyncio.Task[None] | None = None
 
     @property
     def building(self) -> bool:
         return self.last_build is not None and not self.last_build.finished
+
+    async def read(self) -> None:
+        """Read what the image would be now, from the layer on disk and Docker's tags."""
+        self._store.upsert(await self.status())
 
     def current(self) -> str | None:
         """The tag an image of the current inputs has, without asking Docker; None if refused."""
@@ -187,9 +174,17 @@ class Images:
         current = self.current()
         if current is None:
             return ImageStatus(
-                layer=LAYER, refusal=REFUSAL, tag=None, ready=False, building=self.building
+                kind="image",
+                id="image",
+                layer=LAYER,
+                refusal=REFUSAL,
+                tag=None,
+                ready=False,
+                building=self.building,
             )
         return ImageStatus(
+            kind="image",
+            id="image",
             layer=LAYER,
             refusal=None,
             tag=current,
@@ -197,31 +192,36 @@ class Images:
             building=self.building,
         )
 
-    def build(self) -> None:
-        """Start a build of the current inputs, unless one is already running.
+    def build(self) -> Coroutine[None, None, None]:
+        """Take the layer as it is at the click, and return the work of building it.
 
-        Builds happen only when a person asks: nothing else calls this.
+        Builds happen only when a person asks: nothing else calls this. A click while
+        a build runs joins it. A repo with no layer is refused, which the page reads
+        in the image's status, so a refused click is only a fresh read of it.
         """
-        if not _has_layer(self._layer):
-            raise NoLayer
-        if self.building:
-            return
-        # Hashed and built from one copy taken now, so editing the layer while it
-        # builds cannot tag an image under a hash of other inputs.
+        if not _has_layer(self._layer) or self.building:
+            return self.read()
+        # Hashed and built from one copy taken now, before the click is answered,
+        # so editing the layer while it builds cannot tag an image under a hash of
+        # other inputs.
         snapshot = Path(tempfile.mkdtemp(prefix="wayfarer-layer-"))
         shutil.copytree(self._layer, snapshot, dirs_exist_ok=True)
-        build = Build(tag(snapshot, self._recipe))
+        if self.last_build is not None:
+            self.last_build.clear()
+        build = Build(tag(snapshot, self._recipe), self._store)
         self.last_build = build
-        self._running = asyncio.create_task(self._build(build, snapshot))
+        return self._build(build, snapshot)
 
     async def _build(self, build: Build, layer: Path) -> None:
+        await self.read()
         try:
             finished = await _build_and_probe(build, layer, self._recipe)
         except OSError as error:
             finished = _failed(build, f"Docker could not be run: {error}")
         finally:
             shutil.rmtree(layer, ignore_errors=True)
-        await build.finish(finished)
+        build.finish(finished)
+        await self.read()
 
 
 def _has_layer(layer: Path) -> bool:
@@ -271,11 +271,25 @@ async def _build_and_probe(build: Build, layer: Path, recipe: Recipe) -> BuildFi
     ready = all(check.passed for check in checks)
     if ready:
         await _docker("tag", image, build.tag)
-    return BuildFinished(kind="finished", tag=build.tag, ready=ready, error=None, checks=checks)
+    return BuildFinished(
+        kind="build_finished",
+        id="build_finished",
+        tag=build.tag,
+        ready=ready,
+        error=None,
+        checks=checks,
+    )
 
 
 def _failed(build: Build, error: str) -> BuildFinished:
-    return BuildFinished(kind="finished", tag=build.tag, ready=False, error=error, checks=[])
+    return BuildFinished(
+        kind="build_finished",
+        id="build_finished",
+        tag=build.tag,
+        ready=False,
+        error=error,
+        checks=[],
+    )
 
 
 async def _stream(build: Build, *args: str) -> int:
@@ -286,7 +300,7 @@ async def _stream(build: Build, *args: str) -> int:
     assert process.stdout is not None
     try:
         async for raw in process.stdout:
-            await build.output(raw.decode(errors="replace").rstrip("\r\n"))
+            build.output(raw.decode(errors="replace").rstrip("\r\n"))
         return await process.wait()
     finally:
         # Wayfarer stopping mid-build cancels this; the build must not outlive it.

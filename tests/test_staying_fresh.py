@@ -1,7 +1,8 @@
 """Staying fresh: something may have changed, so read again (ADR-0003).
 
-A page watching an effort holds its stream open, and Wayfarer sends the effort
-again whenever a re-read finds it changed. What sets off a re-read is a
+A page that has asked to read an effort holds its stream open, and Wayfarer
+reads the effort again whenever something may have changed, sending the page
+whatever the re-read found different. What sets off a re-read is a
 conditional poll of GitHub, which never supplies data itself: a `304` means
 nothing changed, and anything else only means "read again".
 
@@ -13,12 +14,13 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Generator
 from email.utils import formatdate
+from functools import partial
 from itertools import pairwise
 from typing import Any
 
 import pytest
 
-from conftest import Launcher, get, stream
+from conftest import Launcher, Stream, post
 from github_stand_in import GitHub, Logged, Refusal
 from wayfarer.read_model import HELD
 
@@ -42,7 +44,33 @@ def _polls_after(github: GitHub, count: int, path: str = "/issues") -> list[Logg
 
 
 def _watch(url: str, effort: int) -> Generator[dict[str, Any]]:
-    return stream(f"{url}api/efforts/{effort}/stream")
+    """The effort as the page holds it, tickets in place, each time that changes.
+
+    Ends when the effort can no longer be read. Close it to hang the page up.
+    """
+    with Stream(url) as page:
+        post(f"{url}api/efforts/{effort}/read")
+        shown: dict[str, Any] | None = None
+        while True:
+            page.until(partial(_changed, effort=effort, shown=shown))
+            shown = _held(page.items, effort)
+            if shown is None or shown["kind"] == "effort_unreadable":
+                return
+            yield shown
+
+
+def _changed(items: dict[str, dict[str, Any]], effort: int, shown: dict[str, Any] | None) -> bool:
+    return _held(items, effort) not in (None, shown)
+
+
+def _held(items: dict[str, dict[str, Any]], effort: int) -> dict[str, Any] | None:
+    held = items.get(f"effort:{effort}")
+    if held is None or held["kind"] != "effort":
+        return held
+    # Only once every ticket it names has arrived, as the page would draw it.
+    if any(id not in items for id in held["tickets"]):
+        return None
+    return held | {"tickets": [items[id] for id in held["tickets"]]}
 
 
 def _states(effort: dict[str, Any]) -> dict[int, str]:
@@ -211,18 +239,19 @@ def test_a_merged_pull_request_is_no_longer_checked(wayfarer: Launcher, github: 
     page.close()
 
 
-def test_watching_an_effort_that_does_not_exist_is_not_found(
+def test_watching_an_effort_that_does_not_exist_is_told_it_is_not_found(
     wayfarer: Launcher, github: GitHub
 ) -> None:
     url = wayfarer.start(env=_FAST).url()
 
-    response = get(f"{url}api/efforts/404/stream")
+    with Stream(url) as page:
+        post(f"{url}api/efforts/404/read")
+        reason = page.item("effort:404", kind="effort_unreadable")["reason"]
 
-    assert response.status_code == 404
-    assert "no issue #404" in response.json()["detail"]
+    assert "no issue #404" in reason
 
 
-def test_an_effort_deleted_while_watched_ends_its_stream(
+def test_an_effort_deleted_while_watched_is_no_longer_shown(
     wayfarer: Launcher, github: GitHub
 ) -> None:
     spec, _ = github.effort("Going", tickets=1)

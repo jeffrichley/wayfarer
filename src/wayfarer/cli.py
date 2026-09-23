@@ -14,6 +14,7 @@ from wayfarer.app import create_app
 from wayfarer.github import GitHub, repo_of
 from wayfarer.instance import AlreadyRunning, InstanceLock, NotAClone, find_clone, find_worktree
 from wayfarer.settings import Settings
+from wayfarer.stream import Store
 
 __all__ = ["main"]
 
@@ -34,14 +35,32 @@ def _bind(port: int) -> socket.socket:
     return sock
 
 
+class _Server(uvicorn.Server):
+    """uvicorn, ending every page's stream as it stops.
+
+    A stream never ends by itself, and uvicorn waits for every response to finish
+    before it stops, so an open page would otherwise hold Ctrl-C off forever.
+    sse-starlette meets the same problem by hooking uvicorn's exit.
+    """
+
+    def __init__(self, config: uvicorn.Config, store: Store) -> None:
+        super().__init__(config)
+        self._store = store
+
+    async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+        self._store.close()
+        await super().shutdown(sockets)
+
+
 async def _serve(lock: InstanceLock, repo: Path) -> None:
     settings = Settings.from_env()
     sock = _bind(settings.port)
     port = sock.getsockname()[1]
     url = f"http://{_HOST}:{port}/"
 
-    app = create_app(repo, settings, GitHub(repo_of(repo), settings))
-    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    store = Store(settings.stream_backlog)
+    app = create_app(repo, settings, GitHub(repo_of(repo), settings), store)
+    server = _Server(uvicorn.Config(app, log_level="warning"), store)
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     while not server.started and not serving.done():
         await asyncio.sleep(0.05)

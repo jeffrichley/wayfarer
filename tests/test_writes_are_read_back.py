@@ -37,8 +37,8 @@ def test_a_claim_by_wayfarer_is_read_back_straight_away(github: GitHub) -> None:
                 "POST", f"/issues/{ticket.number}/assignees", {"assignees": ["wayfarer"]}
             )
             await asyncio.wait_for(watch.changed(), timeout=1.0)
-        effort = await read_effort(client, spec.number, per_page=50, auto_merge=True)
-        return effort.tickets[0].assignees
+        _, tickets = await read_effort(client, spec.number, per_page=50, auto_merge=True)
+        return tickets[0].assignees
 
     assert asyncio.run(claim_and_read_back()) == ["wayfarer"]
 
