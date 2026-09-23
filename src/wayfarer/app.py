@@ -17,9 +17,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
+from wayfarer.gate import StartGate
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
 from wayfarer.image import Build, Images, NoLayer
-from wayfarer.models import BuildEvent, Effort, Health, ImageStatus
+from wayfarer.models import BuildEvent, Effort, GateStatus, Health, ImageStatus
 from wayfarer.poll import poll
 from wayfarer.read_model import read_effort
 from wayfarer.settings import Settings
@@ -109,6 +110,7 @@ def create_app(
     app.state.images = images
     app.state.github = github
     app.state.settings = settings
+    gate = StartGate(repo, images, settings)
 
     # Handlers are async so they run on the loop every agent run shares (ADR-0001),
     # not in a thread pool beside it.
@@ -168,6 +170,10 @@ def create_app(
     ) -> AsyncIterable[BuildEvent]:
         async for event in build.events():
             yield event
+
+    @app.get("/api/gate")
+    async def start_gate() -> GateStatus:
+        return await gate.status()
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)
