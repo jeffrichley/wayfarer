@@ -82,20 +82,20 @@ const CRITERIA = [
 // One item of each kind Needs you has in this slice, across three efforts. The
 // question is also shown resolved, and the review open on the desk.
 const QUESTION: Need = {
-    kind: "question",
-    effort: "ACX compliance",
-    ticket: { name: "Require opening and closing credits", id: 130 },
-    question: "Should DOCX books without credits fail or warn?",
-    holdsUp: 4,
-    starts: 2,
-  };
+  kind: "question",
+  effort: "ACX compliance",
+  ticket: { name: "Require opening and closing credits", id: 130 },
+  question: "Should DOCX books without credits fail or warn?",
+  holdsUp: 4,
+  starts: 2,
+};
 const REVIEW: Need = {
-    kind: "review",
-    effort: "ACX compliance",
-    ticket: { name: "Flag peaks above −3 dB", id: 127 },
-    holdsUp: 1,
-    starts: 0,
-  };
+  kind: "review",
+  effort: "ACX compliance",
+  ticket: { name: "Flag peaks above −3 dB", id: 127 },
+  holdsUp: 1,
+  starts: 0,
+};
 const NEEDS: Need[] = [
   { kind: "environment", reason: "Docker stopped answering; two tickets went back on the frontier" },
   QUESTION,

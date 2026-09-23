@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import styles from "./NeedsYou.module.css";
-import type { Glyph } from "./State";
+import { type Glyph, Mark } from "./State";
 import { Named } from "./Type";
 
 // One thing waiting on a person, of each kind this slice has
@@ -10,7 +10,8 @@ import { Named } from "./Type";
 // takeable the moment it resolves. Both are counted elsewhere (#44) and only said
 // here.
 type OnATicket = { effort: string; ticket: { name: string; id: number } };
-type HoldingUp = OnATicket & { holdsUp: number; starts: number };
+type HeldUp = { holdsUp: number; starts: number };
+type HoldingUp = OnATicket & HeldUp;
 
 export type Need =
   | { kind: "environment"; reason: string }
@@ -31,14 +32,14 @@ type Words = {
   word: string;
   name: ReactNode;
   ask: string;
-  holdsUp?: { tickets: number; starts: number };
+  heldUp?: HeldUp;
 };
 
 const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
 
 function words(need: Need): Words {
   const named = "ticket" in need && <Named name={need.ticket.name} id={need.ticket.id} />;
-  const holdsUp = "holdsUp" in need ? { tickets: need.holdsUp, starts: need.starts } : undefined;
+  const heldUp = "holdsUp" in need ? { holdsUp: need.holdsUp, starts: need.starts } : undefined;
   switch (need.kind) {
     case "environment":
       // It pauses every cascade in the repo, so it belongs to no one effort.
@@ -56,7 +57,7 @@ function words(need: Need): Words {
         word: "Asked",
         name: named,
         ask: need.question,
-        holdsUp,
+        heldUp,
       };
     case "held":
       return {
@@ -65,7 +66,7 @@ function words(need: Need): Words {
         word: "Held",
         name: named,
         ask: need.reason,
-        holdsUp,
+        heldUp,
       };
     case "review":
       return {
@@ -74,7 +75,7 @@ function words(need: Need): Words {
         word: "In review",
         name: named,
         ask: "Clean and green, waiting on your approval",
-        holdsUp,
+        heldUp,
       };
     case "drafts":
       return {
@@ -95,7 +96,9 @@ function words(need: Need): Words {
     case "orphan":
       return {
         label: `Leftover container · ${need.effort}`,
-        glyph: "out",
+        // The diamond is anything in Needs you waiting on a person's answer
+        // (docs/design/visual-language.md); here, whether to reap it.
+        glyph: "ask",
         word: "Left over",
         name: named,
         ask: "Its container outlived its session",
@@ -114,13 +117,10 @@ function words(need: Need): Words {
 // "Holds up", never "unblocks": resolving a Held ticket may start nothing yet
 // while still freeing everything behind it. The second half goes when it would
 // say zero.
-function heldUp({ tickets: n, starts }: { tickets: number; starts: number }): string {
-  const first = `Holds up ${tickets(n)}`;
-  return starts === 0 ? first : `${first} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
-}
+const holdsUp = (n: number) => `Holds up ${tickets(n)}`;
 
-function Mark({ glyph, word }: { glyph: Glyph; word: string }) {
-  return <span className={`st st-${glyph}`} role="img" aria-label={word} />;
+function holdsUpAndStarts({ holdsUp: n, starts }: HeldUp): string {
+  return starts === 0 ? holdsUp(n) : `${holdsUp(n)} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
 }
 
 // Home's list of what needs you, in live order; each row goes to its item.
@@ -131,17 +131,17 @@ export function NeedsList({ children }: { children: ReactNode }) {
 // A row of home's list. It says only how many tickets the item holds up, on the
 // right (docs/screens/the-line.md); the desk says what starts.
 export function NeedRow({ need, href }: { need: Need; href: string }) {
-  const w = words(need);
+  const says = words(need);
   return (
     <li>
       <a className={styles.need} href={href}>
-        <Mark glyph={w.glyph} word={w.word} />
+        <Mark glyph={says.glyph} word={says.word} />
         <span>
-          <span className={styles.kind}>{w.label}</span>
-          <span className={styles.name}>{w.name}</span>
-          <span className={styles.ask}>{w.ask}</span>
+          <span className={styles.kind}>{says.label}</span>
+          <span className={styles.name}>{says.name}</span>
+          <span className={styles.ask}>{says.ask}</span>
         </span>
-        {w.holdsUp && <span className={styles.holds}>{`Holds up ${tickets(w.holdsUp.tickets)}`}</span>}
+        {says.heldUp && <span className={styles.holds}>{holdsUp(says.heldUp.holdsUp)}</span>}
       </a>
     </li>
   );
@@ -162,8 +162,8 @@ export function QueueItem({
   resolved?: string;
   onSelect?: () => void;
 }) {
-  const w = words(need);
-  const last = resolved ?? (w.holdsUp && heldUp(w.holdsUp));
+  const says = words(need);
+  const closing = resolved ?? (says.heldUp && holdsUpAndStarts(says.heldUp));
   return (
     <button
       type="button"
@@ -171,11 +171,11 @@ export function QueueItem({
       aria-pressed={pressed}
       onClick={onSelect}
     >
-      {resolved === undefined ? <Mark glyph={w.glyph} word={w.word} /> : <Mark glyph="done" word="Resolved" />}
-      <span className={styles.itemKind}>{w.label}</span>
-      <span className={styles.itemName}>{w.name}</span>
-      <span className={styles.itemAsk}>{w.ask}</span>
-      {last && <span className={styles.itemHolds}>{last}</span>}
+      {resolved === undefined ? <Mark glyph={says.glyph} word={says.word} /> : <Mark glyph="done" word="Resolved" />}
+      <span className={styles.itemKind}>{says.label}</span>
+      <span className={styles.itemName}>{says.name}</span>
+      <span className={styles.itemAsk}>{says.ask}</span>
+      {closing && <span className={styles.itemHolds}>{closing}</span>}
     </button>
   );
 }
