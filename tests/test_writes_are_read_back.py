@@ -1,9 +1,8 @@
 """A write by Wayfarer is followed at once by a read of what it wrote (ADR-0003).
 
-Nothing on the HTTP surface writes to GitHub yet; the cascade's claim is the
-first command that will. Until then this holds the promise on the GitHub client
-itself, against the stand-in, with no poll running: only the write can wake the
-watch.
+The cascade's claim is read back before its session is submitted
+(`test_the_cascade.py`). This holds the promise on the GitHub client itself,
+against the stand-in, with no poll running: only the write can wake the watch.
 """
 
 from __future__ import annotations

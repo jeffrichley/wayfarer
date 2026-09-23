@@ -101,6 +101,7 @@ class GitHub:
         self.repo = repo
         self.freshness = freshness or Freshness()
         self._settings = settings
+        self._login: str | None = None
 
     def _connected(self) -> tuple[Repo, dict[str, str]]:
         if self.repo is None:
@@ -120,6 +121,16 @@ class GitHub:
             raise GitHubError(f"GitHub could not be reached: {error}") from error
         _raise_if_cancelled()
         return response
+
+    async def login(self) -> str:
+        """Who Wayfarer writes to GitHub as: the person whose token it holds."""
+        if self._login is None:
+            _, auth = self._connected()
+            response = await self._send("GET", "/user", headers=auth)
+            if response.status_code != 200:
+                raise GitHubError(f"GitHub would not say whose token this is: {response.text}")
+            self._login = str(response.json()["login"])
+        return self._login
 
     async def query(self, document: str, **variables: Any) -> dict[str, Any]:
         """The `repository` field of `document`, run with `owner` and `name` filled in."""

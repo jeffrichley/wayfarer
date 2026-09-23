@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/efforts/{number}/arm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Arm
+         * @description Arm the effort's cascade, the only way a session ever starts; or resume it.
+         */
+        post: operations["arm_api_efforts__number__arm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/efforts/{number}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause
+         * @description Start nothing new on the effort; its running sessions finish.
+         */
+        post: operations["pause_api_efforts__number__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/efforts/{number}/read": {
         parameters: {
             query?: never;
@@ -18,6 +58,23 @@ export interface paths {
          * @description Read an effort's ticket graph from GitHub afresh (ADR-0003).
          */
         post: operations["read_effort_api_efforts__number__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/efforts/{number}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_efforts__number__resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -118,6 +175,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tickets/{number}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop
+         * @description Stop the ticket's session, keeping its work, and hold the ticket.
+         */
+        post: operations["stop_api_tickets__number__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -174,6 +251,59 @@ export interface components {
              * @description Where the line falls in the output, counting from 0.
              */
             number: number;
+        };
+        /**
+         * Cascade
+         * @description An effort's cascade, armed or not: once armed, Wayfarer starts a session on every
+         *     takeable ticket, up to the cap, and on whatever each landing frees.
+         */
+        Cascade: {
+            /** Armed */
+            armed: boolean;
+            /**
+             * Cap
+             * @description How many sessions may run at once, across every cascade.
+             */
+            cap: number;
+            /** Effort */
+            effort: number;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "cascade";
+            /**
+             * Offer
+             * @description The confirmation arming asks, naming how many tickets are takeable and the cap.
+             */
+            offer: string;
+            /**
+             * Paused
+             * @description Starting nothing new, while running sessions finish.
+             */
+            paused: boolean;
+            /**
+             * Reason
+             * @description Why it paused itself, in plain words; null when a person paused it, or it is not paused.
+             */
+            reason: string | null;
+            /**
+             * Running
+             * @description Its tickets claimed or with a session running.
+             */
+            running: number;
+            /**
+             * Takeable
+             * @description Takeable tickets it would start, which leaves out any it has started once already.
+             */
+            takeable: number;
+            /**
+             * Waiting
+             * @description Armed and running, with nothing it may start and nothing under way: waiting on a person.
+             */
+            waiting: boolean;
         };
         /**
          * Checks
@@ -383,12 +513,29 @@ export interface components {
             kind: "removal";
         };
         /**
+         * ShipEffort
+         * @description The Needs you item an effort raises when every ticket in it is closed.
+         */
+        ShipEffort: {
+            /** Effort */
+            effort: number;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ship";
+            /** Title */
+            title: string;
+        };
+        /**
          * Snapshot
          * @description Everything there is, replacing whatever the browser held.
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -436,7 +583,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -465,7 +612,100 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    arm_api_efforts__number__arm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_api_efforts__number__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_effort_api_efforts__number__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_efforts__number__resume_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -603,6 +843,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    stop_api_tickets__number__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
