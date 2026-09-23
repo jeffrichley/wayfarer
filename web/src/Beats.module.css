@@ -1,6 +1,6 @@
 /* The beat list, as live build draws a session's story (prototype/live-build.html),
    its rules copied rather than re-derived: the gallery's snapshot check compares
-   it against the prototype (tests/test_the_gallery.py). */
+   it against the prototype (tests/test_the_gallery.py), as ADR-0004 decides. */
 .pane { padding: 8px 32px 28px; }
 .beats { max-width: 760px; }
 

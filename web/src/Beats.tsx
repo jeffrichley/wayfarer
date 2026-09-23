@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 
 import type { Beat, BeatKind } from "./api";
 import styles from "./Beats.module.css";
+import { Kicker } from "./Type";
 
 // A reader this close to the bottom is following the story, and the pane keeps
 // up with it; any further up and they are reading back, and it stays put. The
@@ -35,9 +36,13 @@ export function Beats({ beats }: { beats: Beat[] }) {
   const following = useRef(true);
   const drawn = useRef(false);
   const lastTop = useRef(0);
-  // The story as it stood when the pane opened is read, not watched arriving;
-  // only what comes after rises into place.
-  const [first] = useState(() => new Set(beats.map((beat) => beat.id)));
+  // The story as it was first told, which is read, not watched arriving; only
+  // what comes after rises into place. A pane opened before its story loads
+  // takes the first beats it is given as the story told, not as arrivals.
+  const [told, setTold] = useState<ReadonlySet<string> | null>(null);
+  if (told === null && beats.length > 0) {
+    setTold(new Set(beats.map((beat) => beat.id)));
+  }
 
   // Whether the reader is at the bottom is read from where they leave the pane,
   // not after a beat has arrived, which a tall beat would decide for them.
@@ -74,7 +79,7 @@ export function Beats({ beats }: { beats: Beat[] }) {
       // The first drawing lands at the bottom at once; later beats glide in.
       at.scrollTo({ top: at.scrollHeight, behavior: drawn.current ? "smooth" : "instant" });
     }
-    drawn.current = true;
+    drawn.current ||= beats.length > 0;
   }, [beats]);
 
   const story = [...beats].sort((a, b) => a.seq - b.seq);
@@ -93,7 +98,7 @@ export function Beats({ beats }: { beats: Beat[] }) {
               <Moment
                 key={beat.id}
                 beat={beat}
-                arrived={!first.has(beat.id)}
+                arrived={told !== null && !told.has(beat.id)}
                 onToggle={toggled}
               />
             ),
@@ -105,12 +110,15 @@ export function Beats({ beats }: { beats: Beat[] }) {
   );
 }
 
+// Chapter 0 is the Orient before the first red; each after it is a cycle.
 function Chapter({ chapter }: { chapter: number }) {
+  const [kicker, label] =
+    chapter === 0 ? ["Before any test", "Orient"] : ["Red → green", `Cycle ${chapter}`];
   return (
     <li className={styles.chap}>
       <span className={styles.label}>
-        <span className="kicker">{chapter === 0 ? "Before any test" : "Red → green"}</span>
-        {chapter === 0 ? "Orient" : `Cycle ${chapter}`}
+        <Kicker>{kicker}</Kicker>
+        {label}
       </span>
     </li>
   );

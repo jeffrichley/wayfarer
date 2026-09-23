@@ -13,13 +13,9 @@ from datetime import timedelta
 import pytest
 from playwright.sync_api import Locator, Page
 
-from specimens import GALLERY_CLOCK
+from specimens import GALLERY_CLOCK, specimen
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
-
-
-def _specimen(page: Page, name: str) -> Locator:
-    return page.locator(f'[data-specimen="{name}"]')
 
 
 def _rows(beats: Locator) -> list[str]:
@@ -36,7 +32,7 @@ def _rows(beats: Locator) -> list[str]:
 
 
 def test_every_kind_of_beat_carries_its_mark_in_its_chapter(gallery: Page) -> None:
-    assert _rows(_specimen(gallery, "beats")) == [
+    assert _rows(specimen(gallery, "beats")) == [
         "BEFORE ANY TEST Orient",
         "Read · 09:05 Read ISSUE.md, CONTEXT.md and beats.py",
         "Remark · 09:08 The analysis pass already runs astats, so the noise floor can join it.",
@@ -52,7 +48,7 @@ def test_every_kind_of_beat_carries_its_mark_in_its_chapter(gallery: Page) -> No
 
 
 def test_a_red_beats_output_stays_folded_until_asked_for(gallery: Page) -> None:
-    red = _specimen(gallery, "beats").get_by_role("listitem").filter(has_text="measures the noise")
+    red = specimen(gallery, "beats").get_by_role("listitem").filter(has_text="measures the noise")
     toggle = red.get_by_role("button", name="Show test output")
     output = red.locator("pre")
 
@@ -71,7 +67,7 @@ def test_a_red_beats_output_stays_folded_until_asked_for(gallery: Page) -> None:
 
 
 def test_a_call_with_no_result_yet_counts_the_seconds_it_has_taken(gallery: Page) -> None:
-    working = _specimen(gallery, "beats-working").locator(
+    working = specimen(gallery, "beats-working").locator(
         "li", has=gallery.get_by_role("img", name="Working")
     )
     counter = working.locator(".num")
@@ -83,12 +79,16 @@ def test_a_call_with_no_result_yet_counts_the_seconds_it_has_taken(gallery: Page
     gallery.wait_for_function("n => n.innerText === '1m 17s'", arg=counter.element_handle())
 
 
+# How long a pane that did not move is watched for a scroll the arrival started:
+# twice the rise, and far past any glide Chromium starts on its own.
+_QUIET_MS = 1000
+
 # At the bottom, give or take the part of a pixel a scroll position rounds away.
 _AT_THE_BOTTOM = "p => p.scrollHeight - p.scrollTop - p.clientHeight <= 1"
 
 
 def _pane(page: Page) -> Locator:
-    return _specimen(page, "beats-working").locator(".pane")
+    return specimen(page, "beats-working").locator(".pane")
 
 
 def _add_a_pane_more_than_fits(page: Page) -> None:
@@ -119,13 +119,14 @@ def test_a_reader_who_scrolled_up_is_never_pulled_back_down(gallery: Page) -> No
         "([p, n]) => p.querySelectorAll('li').length > n", arg=[pane.element_handle(), beats]
     )
 
-    # A scroll the arrival started ends, or a second passes with none: which
+    # A scroll the arrival started ends, or _QUIET_MS pass with none: which
     # arrives first is where the pane settled.
     settled = pane.evaluate(
-        """p => new Promise(done => {
+        """(p, quiet) => new Promise(done => {
             p.addEventListener("scrollend", () => done(p.scrollTop), { once: true });
-            setTimeout(() => done(p.scrollTop), 1000);
-        })"""
+            setTimeout(() => done(p.scrollTop), quiet);
+        })""",
+        _QUIET_MS,
     )
     assert settled == 0
 

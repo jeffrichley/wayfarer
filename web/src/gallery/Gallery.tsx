@@ -124,7 +124,8 @@ const STORY: Beat[] = [
   beat(16, "outcome", [26, 0], 2, "Every criterion passes, and the full suite with them."),
 ];
 
-// A session still going, with a call that has not answered yet.
+// A session still going, with a call that has not answered yet. The call's seq
+// is far past the rest, so beats the gallery adds sort in above it.
 const LIVE: Beat[] = [
   beat(1, "read", [40, 0], 0, "Read ISSUE.md and CONTEXT.md"),
   beat(2, "remark", [41, 0], 0, "Running the suite before the first test."),
@@ -198,7 +199,8 @@ function LiveBeats() {
   const [beats, setBeats] = useState(LIVE);
   const add = () => {
     const n = beats.length - LIVE.length + 1;
-    setBeats([...beats, beat(2 + n, "remark", [41, 0], 0, `A later beat, number ${n}.`)]);
+    const seq = LIVE.length - 1 + n; // after the live story's last beat, before the call
+    setBeats([...beats, beat(seq, "remark", [41, 0], 0, `A later beat, number ${n}.`)]);
   };
   return (
     <div className={styles.row}>
