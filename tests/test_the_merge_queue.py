@@ -409,7 +409,9 @@ def test_a_re_test_that_outruns_its_wall_cap_is_held_like_a_failed_one(repos: Re
     repos.pull(fine, "fine.py")
 
     async def land() -> dict[int, Ticket]:
-        driven = Driven(repos, spec, settings=Settings(landing_check_wall=0.5))
+        # Far below the slow check's 30 s, and far above the fine one's, even on a
+        # machine loaded by the suite running in parallel.
+        driven = Driven(repos, spec, settings=Settings(landing_check_wall=5.0))
         read = await driven.until("landed", fine)
         await driven.settled()
         return read
@@ -418,7 +420,7 @@ def test_a_re_test_that_outruns_its_wall_cap_is_held_like_a_failed_one(repos: Re
 
     assert read[slow.number].state == TicketState.HELD
     [why] = slow.comments
-    assert "`wf-test` ran past its 0.5 s cap and was stopped." in why
+    assert "`wf-test` ran past its 5 s cap and was stopped." in why
     assert repos.files_at(repos.effort_tip()) == {"README.md", "fine.py"}
 
 
@@ -521,7 +523,10 @@ def test_a_second_conflict_after_its_resolver_session_hands_the_ticket_to_a_pers
             await driven.settled()
         # Resolved, and before it is taken again a person changes the same file.
         repos.push_to_effort("same.py", "by hand\n")
-        return await driven.until("held", second)
+        read = await driven.until("held", second)
+        # Held is labelled before its pull request goes back to draft.
+        await driven.settled()
+        return read
 
     read = asyncio.run(land())
 
