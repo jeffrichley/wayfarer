@@ -95,6 +95,7 @@ def test_a_visual_change_makes_the_gallery_disagree_with_the_prototype(
         "glyph-held-lg: drawn differently",
         "full-held: drawn differently",
         "name-only-held: drawn differently",
+        "line-held: drawn differently",
     ]
 
 
