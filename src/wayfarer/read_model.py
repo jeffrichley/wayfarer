@@ -106,12 +106,14 @@ class Efforts:
         github: GitHub,
         store: Store,
         settings: Settings,
-        landing: Callable[[Effort, list[Ticket]], Awaitable[None]],
+        line: Callable[[Effort, list[Ticket]], Awaitable[list[Ticket]]],
     ) -> None:
+        """`line` is the merge queue's: handed each read, it gives each Landing ticket
+        its place in line."""
         self._github = github
         self._store = store
         self._settings = settings
-        self._landing = landing
+        self._line = line
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
@@ -177,11 +179,8 @@ class Efforts:
             )
         else:
             # Tickets before the effort, so it never names one the page lacks.
-            for ticket in tickets:
+            for ticket in await self._line(effort, tickets):
                 self._store.upsert(ticket)
-            # What this read found Landing lands before the effort is sent, so a
-            # page holding the effort holds a read whose landings were tried.
-            await self._landing(effort, tickets)
             self._store.upsert(effort)
         named = {
             ticket
@@ -255,6 +254,8 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],
         open_blockers=open_blockers,
         pull_request=pull_request,
+        # The merge queue's to say, from an order this read does not ask for.
+        place_in_line=None,
     )
 
 
