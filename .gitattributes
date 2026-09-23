@@ -1,0 +1,4 @@
+# Generated from the Python models (ADR-0004): a merge keeps our side instead of
+# conflicting, and `just types-drift` (locally and in CI) catches it stale. The
+# driver is configured by `just hooks`; a clone without it conflicts as before.
+web/src/api.gen.ts merge=generated

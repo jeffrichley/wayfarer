@@ -39,7 +39,10 @@ left sitting is the ticket unfinished.
   from the package by one sorted line; a new area adds a module and its line.
   `web/src/api.gen.ts` is regenerated from it (`just types`) in the same commit
   (ADR-0004). CI fails on drift, and a test fails for a model the schema does
-  not carry or the package does not re-export.
+  not carry or the package does not re-export. A merge keeps one side of
+  `api.gen.ts` rather than conflicting (once `just hooks` has run), so run
+  `just types` after every merge. GitHub's own merges know no driver: a PR it
+  calls conflicted there is merged locally.
 - **Every bound is a named setting.** Waystation defaults every timeout to
   unbounded, so Wayfarer is where the spec's caps are set; a number no ticket
   asked for is a setting or it is a comment saying why it must exist.

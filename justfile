@@ -48,9 +48,16 @@ types:
 types-drift: types
     git diff --exit-code -- web/src/api.gen.ts
 
-# Install the secret-scanning hooks (.pre-commit-config.yaml), once per clone.
-hooks:
+# Install the secret-scanning hooks (.pre-commit-config.yaml) and the merge driver, once per clone.
+hooks: merge-driver
     uv run pre-commit install
+
+# Let a merge keep our side of a generated file (.gitattributes) rather than
+# conflict: it is rebuilt from the models (ADR-0004), and `types-drift` catches it stale.
+# The same `true` driver gitattributes(5) gives as its example of keeping ours.
+merge-driver:
+    git config merge.generated.name "keep ours; regenerate with just types"
+    git config merge.generated.driver true
 
 # Build the sdist and wheel; the wheel carries the page.
 build:
