@@ -65,7 +65,8 @@ and [just](https://just.systems/).
 | `just build` | build the sdist and wheel; the wheel carries the built page, so users need no Node |
 | `cd web && corepack pnpm dev` | the Vite dev server, proxying `/api` to a running `wayfarer` |
 
-Every shape the browser sees is a pydantic model in `src/wayfarer/models.py`.
+Every shape the browser sees is a pydantic model in the `wayfarer.models` package
+(`src/wayfarer/models/`, one module per area).
 Change one, run `just types`, and commit both.
 
 `/gallery` renders every primitive in every state on one page. A widget lands
