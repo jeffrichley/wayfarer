@@ -95,7 +95,6 @@ Every glyph sits next to a word. On a canvas, the glyph's `aria-label` or the el
 | Stipple texture (`.fog`, `.fog-key`, the SVG `#stipple` pattern) | Fog: in scope, not yet specified |
 | Ring with a centre dot (`.dest-mark`, `.mini-dest`) | The destination. Dashed and empty until it's named, filled once the way is clear. |
 | Short vertical bar (`.s-flag`) | The Landed station, which is the end of the line |
-| Checkbox `box` / `box.on` / `box.part` | An acceptance criterion that is not met, met, or met but weakly asserted |
 | Beat marks: small ring, dash, outlined square, diamond | A session read something, noted something, refactored, or received a note from you |
 | Diff sign cells: solid `+`, outlined `−`, struck-through text | Added or removed lines, shown by shape so the diff works without colour |
 

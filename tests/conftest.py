@@ -24,10 +24,11 @@ from typing import Any
 
 import httpx
 import pytest
-from playwright.sync_api import Browser, sync_playwright
+from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
+from specimens import REFERENCE, VIEWPORT
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
 _GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
@@ -191,6 +192,25 @@ def browser() -> Iterator[Browser]:
             pytest.skip(f"no Chromium for Playwright; `just browser` installs it ({error.message})")
         yield chromium
         chromium.close()
+
+
+@pytest.fixture
+def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
+    """The app's /gallery: every primitive in every state on one page."""
+    page = browser.new_page(viewport=VIEWPORT)
+    page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
+    page.wait_for_selector("[data-specimen]")
+    yield page
+    page.close()
+
+
+@pytest.fixture
+def reference(browser: Browser) -> Iterator[Page]:
+    """The same specimens as the frozen prototype draws them."""
+    page = browser.new_page(viewport=VIEWPORT)
+    page.goto(REFERENCE.as_uri())
+    yield page
+    page.close()
 
 
 def commit_layer(clone: Path, dockerfile: str) -> None:
