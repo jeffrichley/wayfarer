@@ -31,8 +31,9 @@ def specimen(page: Page, name: str) -> Locator:
 
 def choose(gallery: Page, theme: str) -> None:
     """Pick a theme as a person does, with the gallery's own buttons."""
+    # Exactly: each theme toggle in the shell's specimens is named for a chart too.
     gallery.get_by_role(
-        "button", name={"light": "The chart", "dark": "The night chart"}[theme]
+        "button", name={"light": "The chart", "dark": "The night chart"}[theme], exact=True
     ).click()
 
 
