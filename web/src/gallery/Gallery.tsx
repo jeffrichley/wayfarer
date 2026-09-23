@@ -6,9 +6,11 @@ import { Chronicle, Line as ChronicleEntry } from "../Chronicle";
 import { Criteria } from "../Criteria";
 import { Diff, type FileDiff, type Line } from "../Diff";
 import { Frame, Pane, Split } from "../Frame";
+import { Route, type RouteProps } from "../Route";
 import { type Question, QuestionCard } from "../Question";
 import { type Glyph, State, TestRun, TestRuns } from "../State";
 import { type Step, Thread } from "../Thread";
+import { EffortItems, Menu, RepoItems, TopBar, type TopBarProps } from "../TopBar";
 import { Chip, Kicker, Meta, Named, Rule } from "../Type";
 import styles from "./Gallery.module.css";
 
@@ -83,7 +85,7 @@ const CRITERIA = [
 ];
 
 // The chronicle's sample effort and tickets, from the prototype's ACX effort.
-const EFFORT: Mention = { number: 124, title: "Pre-delivery compliance checks" };
+const COMPLIANCE_CHECKS: Mention = { number: 124, title: "Pre-delivery compliance checks" };
 const ANALYSIS: Mention = { number: 125, title: "Extract the audio analysis pass from the render worker" };
 const LOUDNESS: Mention = { number: 126, title: "Flag loudness outside −23 to −18 dB RMS" };
 const PEAKS: Mention = { number: 127, title: "Flag peaks above −3 dB" };
@@ -106,7 +108,7 @@ function line(
 ): ChronicleLine {
   const [hours, minutes] = time.split(":").map(Number);
   const at = new Date(year, month, day, hours, minutes).toISOString();
-  return { kind: "chronicle_line", id, at, effort: EFFORT, moved };
+  return { kind: "chronicle_line", id, at, effort: COMPLIANCE_CHECKS, moved };
 }
 
 // Every kind of line, in every voice and every shape of what it caused.
@@ -213,6 +215,98 @@ function ChronicleSpecimen() {
     />
   );
 }
+
+
+// The shell as the prototype draws it on galley, the sample repo.
+const REPOS: TopBarProps["repos"] = [
+  { name: "galley", meta: "3 efforts on the line", href: "#galley", current: true },
+  { name: "madrigal", meta: "Connected today · no maps yet", href: "#madrigal" },
+];
+const EFFORT: NonNullable<TopBarProps["effort"]> = {
+  name: "ACX compliance before delivery",
+  efforts: [
+    {
+      name: "ACX compliance before delivery",
+      meta: "Building · 2 of 9 landed · 2 building",
+      glyph: "building",
+      href: "#acx",
+      current: true,
+    },
+    {
+      name: "Per-chapter voice casting",
+      meta: "Charting the way · 3 decided, 3 patches of fog",
+      glyph: "building",
+      href: "#casting",
+    },
+    {
+      name: "Choosing the retail sample",
+      meta: "Charting the way · one ticket left, in session with you",
+      glyph: "ask",
+      href: "#sample",
+    },
+  ],
+  landed: [{ name: "Manuscript upload states", meta: "Landed 2 Sep · 6 tickets" }],
+};
+const BAR: TopBarProps = {
+  repo: "galley",
+  repos: REPOS,
+  working: { count: 3, href: "#build" },
+  needsYou: { count: 4, href: "#desk" },
+};
+
+// Where an effort is on the line: mid-build with two landed, sliced and waiting
+// to be built, and still charting the way.
+const ROUTES: [string, RouteProps][] = [
+  [
+    "route-building",
+    {
+      reached: "landed",
+      current: "build",
+      stations: {
+        wayfinder: { glyph: "done", out: "7 decisions", href: "#map" },
+        spec: { glyph: "done", out: "16 stories · 2 without a ticket", href: "#spec" },
+        tickets: { glyph: "done", out: "9 tickets · 1 takeable", href: "#tickets" },
+        build: { glyph: "ask", out: "2 building · 1 asking", href: "#build" },
+        review: { glyph: "review", out: "1 PR waiting on you", href: "#desk" },
+        landed: {
+          glyph: "flag",
+          out: "2 of 9",
+          dots: [true, true, false, false, false, false, false, false, false],
+        },
+      },
+    },
+  ],
+  [
+    "route-sliced",
+    {
+      reached: "tickets",
+      current: "tickets",
+      stations: {
+        wayfinder: { glyph: "done", out: "6 decisions · way clear", href: "#map" },
+        spec: { glyph: "done", out: "Spec #168 · 12 stories", href: "#spec" },
+        tickets: { glyph: "take", out: "5 tickets · 2 takeable", href: "#tickets" },
+        build: { glyph: "pending", out: "—", why: "Opens once a ticket is taken" },
+        review: { glyph: "pending", out: "—", why: "Opens once a ticket has a PR" },
+        landed: { glyph: "pending", out: "—" },
+      },
+    },
+  ],
+  [
+    "route-charting",
+    {
+      reached: "wayfinder",
+      current: "wayfinder",
+      stations: {
+        wayfinder: { glyph: "building", out: "3 decided · 3 patches of fog", href: "#map" },
+        spec: { glyph: "pending", out: "After the way is clear", why: "Opens once the map's way is clear" },
+        tickets: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        build: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        review: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        landed: { glyph: "pending", out: "—" },
+      },
+    },
+  ],
+];
 
 // #130's question, as the prototype asks it (WS.TICKETS in assets/wayfarer.js).
 const ASKED: Question[] = [
@@ -620,6 +714,69 @@ export function Gallery() {
               </Frame>
             </div>
           </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Top bar">
+        <div className={styles.stack}>
+          <Specimen name="topbar">
+            <div className={styles.bar}>
+              <TopBar {...BAR} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-effort">
+            <div className={styles.bar}>
+              <TopBar {...BAR} effort={EFFORT} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-nothing-waiting">
+            <div className={styles.bar}>
+              <TopBar {...BAR} effort={EFFORT} needsYou={{ count: 0, href: "#desk" }} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-quiet">
+            <div className={styles.bar}>
+              <TopBar
+                {...BAR}
+                effort={EFFORT}
+                working={{ count: 0, href: "#build" }}
+                needsYou={{ count: 0, href: "#desk" }}
+              />
+            </div>
+          </Specimen>
+        </div>
+        {/* Each switcher's menu, drawn open where it hangs beneath its button. */}
+        <div className={styles.row}>
+          <Specimen name="menu-repo">
+            <div className={styles.menuBox}>
+              <div className={styles.hang}>
+                <Menu>
+                  <RepoItems repos={REPOS} />
+                </Menu>
+              </div>
+            </div>
+          </Specimen>
+          <Specimen name="menu-effort">
+            <div className={styles.menuBox}>
+              <div className={styles.hang}>
+                <Menu wide>
+                  <EffortItems efforts={EFFORT.efforts} landed={EFFORT.landed} />
+                </Menu>
+              </div>
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Route band">
+        <div className={styles.stack}>
+          {ROUTES.map(([name, route]) => (
+            <Specimen key={name} name={name}>
+              <div className={styles.bar}>
+                <Route {...route} />
+              </div>
+            </Specimen>
+          ))}
         </div>
       </Section>
 
