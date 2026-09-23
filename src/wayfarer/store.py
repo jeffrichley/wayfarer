@@ -39,6 +39,9 @@ class Purpose(StrEnum):
 
     BUILD = "build"
     """`/implement` on the ticket."""
+    RESOLVE = "resolve"
+    """A resolver session, replaying the ticket's preserved commits onto the effort
+    branch (#40). It is landing, so it never earns a chronicle line."""
 
 
 @dataclass(frozen=True)

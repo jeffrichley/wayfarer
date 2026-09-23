@@ -116,7 +116,8 @@ class GitHub:
             raise GitHubError(f"GitHub could not be reached: {error}") from error
 
     async def query(self, document: str, **variables: Any) -> dict[str, Any]:
-        """The `repository` field of `document`, run with `owner` and `name` filled in."""
+        """The `data` of `document`, run with `owner` and `name` filled in. Its
+        `repository` is always there: a repo GitHub cannot find raises instead."""
         repo, auth = self._connected()
         response = await self._send(
             "POST",
@@ -137,7 +138,8 @@ class GitHub:
             raise GitHubError(f"GitHub refused the read: {body['errors']}")
         if repository is None:
             raise NoSuchIssue(f"{self.repo} was not found on GitHub.")
-        return repository
+        data: dict[str, Any] = body["data"]
+        return data
 
     async def conditional(
         self, path: str, etag: str | None, params: dict[str, str] | None = None

@@ -23,6 +23,7 @@ __all__ = [
     "BuildFinished",
     "BuildOutput",
     "Checks",
+    "ChronicleLine",
     "Effort",
     "EffortUnreadable",
     "EnvironmentFailure",
@@ -30,6 +31,8 @@ __all__ = [
     "GateStatus",
     "Health",
     "ImageStatus",
+    "LinePart",
+    "Movement",
     "ProbeCheck",
     "PullRequest",
     "Removal",
@@ -138,6 +141,43 @@ class EffortUnreadable(BaseModel):
     id: str
     number: int
     reason: str = Field(description="Why, in words for the person.")
+
+
+class Movement(StrEnum):
+    """What moved a ticket, and so what a chronicle line tells. Never a stage."""
+
+    TAKEN = "taken"
+    ASKED = "asked"
+    ANSWERED = "answered"
+    HELD = "held"
+    LET_LAND = "let_land"
+    """A person cleared a Held ticket to land as it is."""
+    RETRIED = "retried"
+    """A person cleared a Held ticket, and a new session started on it."""
+    LANDED = "landed"
+    CLOSED = "closed"
+    """A person closed it, as completed without landing or as not planned."""
+
+
+class LinePart(BaseModel):
+    """A run of a chronicle line's words. A ticket's part is its title, and links to it."""
+
+    text: str
+    ticket: int | None = Field(description="The ticket this part names; null for plain words.")
+
+
+class ChronicleLine(BaseModel):
+    """One line of the chronicle: one thing that moved a ticket, with what it directly
+    caused. Derived from GitHub's timelines and the session rows, never stored, so a
+    rebuild gives the same lines with the same ids."""
+
+    kind: Literal["chronicle_line"]
+    id: str = Field(description="`chronicle:<effort>:<ticket>:<movement>:<when>`, of its cause.")
+    effort: int
+    effort_title: str = Field(description="Shown on the right of the line, in place of a skill.")
+    at: datetime = Field(description="When its cause happened on GitHub; lines sort by it.")
+    movement: Movement = Field(description="What its cause was, which picks its glyph.")
+    parts: list[LinePart] = Field(description="Its one or two sentences, in order.")
 
 
 class ImageStatus(BaseModel):
@@ -276,7 +316,8 @@ Item = Annotated[
     | EffortUnreadable
     | Ticket
     | GateStatus
-    | Beat,
+    | Beat
+    | ChronicleLine,
     Field(discriminator="kind"),
 ]
 """Anything the browser holds, keyed by its `id`."""

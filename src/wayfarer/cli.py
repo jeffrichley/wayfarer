@@ -14,6 +14,7 @@ from wayfarer.app import create_app
 from wayfarer.github import GitHub, repo_of
 from wayfarer.instance import AlreadyRunning, InstanceLock, NotAClone, find_clone, find_worktree
 from wayfarer.settings import Settings
+from wayfarer.store import Store as Sessions
 from wayfarer.stream import Store
 
 __all__ = ["main"]
@@ -59,16 +60,23 @@ async def _serve(lock: InstanceLock, repo: Path) -> None:
     url = f"http://{_HOST}:{port}/"
 
     store = Store(settings.stream_backlog)
-    app = create_app(repo, settings, GitHub(repo_of(repo), settings), store)
+    github = repo_of(repo)
+    # Opened on the loop's own thread, which is the only one that reads it.
+    sessions = Sessions.for_repo(settings.data_dir, github) if github else None
+    app = create_app(repo, settings, GitHub(github, settings), store, sessions)
     server = _Server(uvicorn.Config(app, log_level="warning"), store)
     serving = asyncio.create_task(server.serve(sockets=[sock]))
-    while not server.started and not serving.done():
-        await asyncio.sleep(0.05)
-    if server.started:
-        lock.announce(url)
-        print(f"Wayfarer is serving at {url}", flush=True)
-        await asyncio.to_thread(webbrowser.open, url)
-    await serving
+    try:
+        while not server.started and not serving.done():
+            await asyncio.sleep(0.05)
+        if server.started:
+            lock.announce(url)
+            print(f"Wayfarer is serving at {url}", flush=True)
+            await asyncio.to_thread(webbrowser.open, url)
+        await serving
+    finally:
+        if sessions is not None:
+            sessions.close()
 
 
 def main() -> None:

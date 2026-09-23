@@ -241,6 +241,44 @@ export interface components {
          */
         Checks: "passing" | "pending" | "failing";
         /**
+         * ChronicleLine
+         * @description One line of the chronicle: one thing that moved a ticket, with what it directly
+         *     caused. Derived from GitHub's timelines and the session rows, never stored, so a
+         *     rebuild gives the same lines with the same ids.
+         */
+        ChronicleLine: {
+            /**
+             * At
+             * Format: date-time
+             * @description When its cause happened on GitHub; lines sort by it.
+             */
+            at: string;
+            /** Effort */
+            effort: number;
+            /**
+             * Effort Title
+             * @description Shown on the right of the line, in place of a skill.
+             */
+            effort_title: string;
+            /**
+             * Id
+             * @description `chronicle:<effort>:<ticket>:<movement>:<when>`, of its cause.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "chronicle_line";
+            /** @description What its cause was, which picks its glyph. */
+            movement: components["schemas"]["Movement"];
+            /**
+             * Parts
+             * @description Its one or two sentences, in order.
+             */
+            parts: components["schemas"]["LinePart"][];
+        };
+        /**
          * Effort
          * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
          */
@@ -405,6 +443,25 @@ export interface components {
             tag: string | null;
         };
         /**
+         * LinePart
+         * @description A run of a chronicle line's words. A ticket's part is its title, and links to it.
+         */
+        LinePart: {
+            /** Text */
+            text: string;
+            /**
+             * Ticket
+             * @description The ticket this part names; null for plain words.
+             */
+            ticket: number | null;
+        };
+        /**
+         * Movement
+         * @description What moved a ticket, and so what a chronicle line tells. Never a stage.
+         * @enum {string}
+         */
+        Movement: "taken" | "asked" | "answered" | "held" | "let_land" | "retried" | "landed" | "closed";
+        /**
          * ProbeCheck
          * @description One thing the probe proved, or failed to prove, about a newly built image.
          */
@@ -458,7 +515,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -534,7 +591,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

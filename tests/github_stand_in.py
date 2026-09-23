@@ -18,6 +18,12 @@ would, and it can be made to misbehave on purpose:
 
 Every REST request is logged in `requests`, so a test can see the poll's rhythm.
 
+Each issue keeps a timeline, as GitHub's does: every assignment, label, close and
+comment made through a person's hand (`assign`, `label`, …) or a REST write lands
+on it with who made it and when. The token belongs to `viewer`, so Wayfarer's own
+writes wear that login, as they do on GitHub. Time is the stand-in's own clock,
+which moves on a minute with every event, so two events are never simultaneous.
+
 The GraphQL schema below uses GitHub's own type and field names, and graphql-core
 validates every query against it, so a misspelt field fails here as it would on
 GitHub. Every query is also priced with GitHub's documented point formula, so a
@@ -38,6 +44,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import uvicorn
@@ -63,6 +70,7 @@ TOKEN = "stand-in-token"
 _SCHEMA = build_schema("""
 type Query {
   repository(owner: String!, name: String!): Repository
+  viewer: User!
   rateLimit: RateLimit
 }
 
@@ -76,8 +84,17 @@ enum IssueStateReason { COMPLETED NOT_PLANNED DUPLICATE REOPENED }
 enum PullRequestState { OPEN CLOSED MERGED }
 enum PullRequestReviewDecision { APPROVED CHANGES_REQUESTED REVIEW_REQUIRED }
 enum StatusState { ERROR EXPECTED FAILURE PENDING SUCCESS }
-enum IssueTimelineItemsItemType { CROSS_REFERENCED_EVENT CLOSED_EVENT }
+enum IssueTimelineItemsItemType {
+  ASSIGNED_EVENT
+  CLOSED_EVENT
+  CROSS_REFERENCED_EVENT
+  ISSUE_COMMENT
+  LABELED_EVENT
+  UNASSIGNED_EVENT
+  UNLABELED_EVENT
+}
 scalar GitObjectID
+scalar DateTime
 
 type PageInfo { hasNextPage: Boolean! endCursor: String }
 
@@ -99,7 +116,9 @@ type Issue {
 type IssueConnection { nodes: [Issue] pageInfo: PageInfo! totalCount: Int! }
 type Label { name: String! }
 type LabelConnection { nodes: [Label] }
-type User { login: String! }
+interface Actor { login: String! }
+type User implements Actor { login: String! }
+union Assignee = User
 type UserConnection { nodes: [User] }
 
 type IssueDependenciesSummary {
@@ -127,10 +146,44 @@ type PullRequest {
 
 union ReferencedSubject = Issue | PullRequest
 type CrossReferencedEvent { source: ReferencedSubject! willCloseTarget: Boolean! }
-type ClosedEvent { createdAt: String! }
-union IssueTimelineItems = CrossReferencedEvent | ClosedEvent
+type AssignedEvent { createdAt: DateTime! actor: Actor assignee: Assignee }
+type UnassignedEvent { createdAt: DateTime! actor: Actor assignee: Assignee }
+type LabeledEvent { createdAt: DateTime! actor: Actor label: Label! }
+type UnlabeledEvent { createdAt: DateTime! actor: Actor label: Label! }
+type ClosedEvent { createdAt: DateTime! actor: Actor stateReason: IssueStateReason }
+type IssueComment { createdAt: DateTime! author: Actor body: String! }
+union IssueTimelineItems =
+    CrossReferencedEvent
+  | AssignedEvent
+  | UnassignedEvent
+  | LabeledEvent
+  | UnlabeledEvent
+  | ClosedEvent
+  | IssueComment
 type IssueTimelineItemsConnection { nodes: [IssueTimelineItems] }
 """)
+
+
+@dataclass(frozen=True)
+class Happened:
+    """One event on an issue's timeline: GitHub's type name, when, who, and its fields."""
+
+    typename: str
+    at: datetime
+    actor: str
+    fields: dict[str, Any] = field(default_factory=dict)
+
+
+# The timeline item types an event of each kind is filtered by.
+_ITEM_TYPES = {
+    "CrossReferencedEvent": "CROSS_REFERENCED_EVENT",
+    "AssignedEvent": "ASSIGNED_EVENT",
+    "UnassignedEvent": "UNASSIGNED_EVENT",
+    "LabeledEvent": "LABELED_EVENT",
+    "UnlabeledEvent": "UNLABELED_EVENT",
+    "ClosedEvent": "CLOSED_EVENT",
+    "IssueComment": "ISSUE_COMMENT",
+}
 
 
 @dataclass
@@ -145,6 +198,8 @@ class Issue:
     blocked_by: list[int] = field(default_factory=list)
     # Every comment's body, oldest first.
     comments: list[str] = field(default_factory=list)
+    # What happened to it, oldest first, as its timeline shows.
+    timeline: list[Happened] = field(default_factory=list)
 
 
 @dataclass
@@ -201,6 +256,10 @@ class GitHub:
     def __init__(self, owner: str, name: str) -> None:
         self.owner = owner
         self.name = name
+        self.viewer = "ada"
+        """Whose token Wayfarer holds, and so whose login its writes wear."""
+        self.now = datetime(2026, 9, 23, 9, 0, tzinfo=UTC)
+        """When the next event happens."""
         self._live = _Repo()
         self._frozen: _Repo | None = None
         self._next_number = 1
@@ -257,9 +316,55 @@ class GitHub:
     def block(self, ticket: Issue, *, by: Issue) -> None:
         ticket.blocked_by.append(by.number)
 
-    def close(self, issue: Issue, reason: str = "COMPLETED") -> None:
+    def close(self, issue: Issue, reason: str = "COMPLETED", by: str | None = None) -> None:
+        with self._lock:
+            self._close(issue, reason, by or self.viewer)
+
+    def _close(self, issue: Issue, reason: str, by: str) -> None:
         issue.state = "CLOSED"
         issue.state_reason = reason
+        self._happened(issue, "ClosedEvent", by, stateReason=reason)
+
+    def assign(self, issue: Issue, login: str, by: str | None = None) -> None:
+        """`login` put on the issue, as a person or the cascade claims it."""
+        with self._lock:
+            self._assign(issue, login, by or self.viewer)
+
+    def _assign(self, issue: Issue, login: str, by: str) -> None:
+        if login not in issue.assignees:
+            issue.assignees.append(login)
+        self._happened(issue, "AssignedEvent", by, assignee=login)
+
+    def unassign(self, issue: Issue, login: str, by: str | None = None) -> None:
+        with self._lock:
+            issue.assignees.remove(login)
+            self._happened(issue, "UnassignedEvent", by or self.viewer, assignee=login)
+
+    def label(self, issue: Issue, name: str, by: str | None = None) -> None:
+        with self._lock:
+            self._label(issue, name, by or self.viewer)
+
+    def _label(self, issue: Issue, name: str, by: str) -> None:
+        if name not in issue.labels:
+            issue.labels.append(name)
+            self._happened(issue, "LabeledEvent", by, label=name)
+
+    def unlabel(self, issue: Issue, name: str, by: str | None = None) -> None:
+        with self._lock:
+            issue.labels.remove(name)
+            self._happened(issue, "UnlabeledEvent", by or self.viewer, label=name)
+
+    def comment(self, issue: Issue, body: str, by: str | None = None) -> None:
+        with self._lock:
+            self._comment(issue, body, by or self.viewer)
+
+    def _comment(self, issue: Issue, body: str, by: str) -> None:
+        issue.comments.append(body)
+        self._happened(issue, "IssueComment", by, body=body)
+
+    def _happened(self, issue: Issue, typename: str, actor: str, **fields: Any) -> None:
+        issue.timeline.append(Happened(typename, self.now, actor, fields))
+        self.now += timedelta(minutes=1)
 
     def delete(self, issue: Issue) -> None:
         """Gone, as an admin deletes an issue: every read says it never existed."""
@@ -380,14 +485,15 @@ class GitHub:
             body = await request.json()
             with self._lock:
                 issue = self._live.issues[number]
-                issue.labels += [n for n in body["labels"] if n not in issue.labels]
+                for label_name in body["labels"]:
+                    self._label(issue, label_name, self.viewer)
                 return JSONResponse([{"name": n} for n in issue.labels])
 
         @app.post("/repos/{owner}/{name}/issues/{number}/comments")
         async def comment(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
             with self._lock:
-                self._live.issues[number].comments.append(body["body"])
+                self._comment(self._live.issues[number], body["body"], self.viewer)
                 return JSONResponse({"body": body["body"]}, status_code=201)
 
         @app.patch("/repos/{owner}/{name}/issues/{number}")
@@ -396,8 +502,8 @@ class GitHub:
             with self._lock:
                 issue = self._live.issues[number]
                 if body.get("state") == "closed":
-                    issue.state = "CLOSED"
-                    issue.state_reason = (body.get("state_reason") or "completed").upper()
+                    reason = (body.get("state_reason") or "completed").upper()
+                    self._close(issue, reason, self.viewer)
                 return JSONResponse(_rest_issue(issue))
 
         @app.post("/repos/{owner}/{name}/pulls")
@@ -433,7 +539,8 @@ class GitHub:
             body = await request.json()
             with self._lock:
                 issue = self._live.issues[number]
-                issue.assignees += [a for a in body["assignees"] if a not in issue.assignees]
+                for login in body["assignees"]:
+                    self._assign(issue, login, self.viewer)
                 return JSONResponse(_rest_issue(issue), status_code=201)
 
         return app
@@ -529,6 +636,8 @@ def _resolve(source: Any, info: GraphQLResolveInfo, **args: Any) -> Any:
         if name == "repository":
             ours = (args["owner"], args["name"]) == (source.github.owner, source.github.name)
             return _repository(source.repo) if ours else None
+        if name == "viewer":
+            return _Node("User", {"login": source.github.viewer})
         return None
     value = source.fields[name]
     return value(**args) if callable(value) else value
@@ -583,9 +692,9 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
             )
             for p in sorted(repo.pulls.values(), key=lambda p: p.number)
             if issue.number in p.mentions
-        ]
-        if itemTypes is not None and "CROSS_REFERENCED_EVENT" not in itemTypes:
-            events = []
+        ] + [_happened(happened) for happened in issue.timeline]
+        if itemTypes is not None:
+            events = [e for e in events if _ITEM_TYPES[e.typename] in itemTypes]
         if last is not None:
             events = events[-last:]
         return _Node("Connection", {"nodes": events})
@@ -621,6 +730,22 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
     )
 
 
+def _happened(happened: Happened) -> _Node:
+    user = _Node("User", {"login": happened.actor})
+    fields: dict[str, Any] = {"createdAt": happened.at.isoformat().replace("+00:00", "Z")}
+    if happened.typename == "IssueComment":
+        fields |= {"author": user, "body": happened.fields["body"]}
+    else:
+        fields["actor"] = user
+    if "assignee" in happened.fields:
+        fields["assignee"] = _Node("User", {"login": happened.fields["assignee"]})
+    if "label" in happened.fields:
+        fields["label"] = _Node("Label", {"name": happened.fields["label"]})
+    if "stateReason" in happened.fields:
+        fields["stateReason"] = happened.fields["stateReason"]
+    return _Node(happened.typename, fields)
+
+
 def _pull_request(pull: PullRequest) -> _Node:
     return _Node(
         "PullRequest",
@@ -647,7 +772,7 @@ def _resolve_type(value: _Node, *_: Any) -> str:
     return value.typename
 
 
-for _union in ("ReferencedSubject", "IssueTimelineItems"):
+for _union in ("ReferencedSubject", "IssueTimelineItems", "Actor", "Assignee"):
     _SCHEMA.type_map[_union].resolve_type = _resolve_type  # type: ignore[attr-defined]
 
 

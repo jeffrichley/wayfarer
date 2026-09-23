@@ -102,6 +102,8 @@ class Launcher:
             # Whatever port the OS has free, so no test contends with another
             # suite on the machine for the default one.
             "WAYFARER_PORT": "0",
+            # The store and event files, kept out of the person's own data directory.
+            "WAYFARER_DATA_DIR": str(self._scratch / "data"),
             "GH_TOKEN": TOKEN,
         }
         for name, value in (env or {}).items():

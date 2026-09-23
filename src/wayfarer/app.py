@@ -17,14 +17,16 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
+from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
-from wayfarer.models import Health, WireEvent
+from wayfarer.models import ChronicleLine, Effort, Health, Ticket, WireEvent
 from wayfarer.poll import poll
 from wayfarer.pull_requests import PullRequestGate
-from wayfarer.read_model import Efforts
+from wayfarer.read_model import Efforts, History
 from wayfarer.settings import Settings
+from wayfarer.store import Store as Sessions
 from wayfarer.stream import Store
 
 __all__ = ["create_app"]
@@ -56,18 +58,24 @@ def create_app(
     settings: Settings | None = None,
     github: GitHub | None = None,
     store: Store | None = None,
+    sessions: Sessions | None = None,
 ) -> FastAPI:
     """The app for the clone whose working tree is `repo`, reading GitHub through
     `github`; without one, every read of GitHub says so. `store` is what the page's
-    stream carries, which whoever runs the server closes as it stops."""
+    stream carries, which whoever runs the server closes as it stops. `sessions` is
+    the repo's record of sessions run; without one, none has."""
     settings = settings or Settings()
     github = github or GitHub(None, settings)
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
     images = Images(repo, store)
+
     # Every ticket a read finds Landing lands (#38), until the merge queue takes
     # that over (#39).
-    efforts = Efforts(github, store, settings, landing=PullRequestGate(github).land)
+    def tell(effort: Effort, tickets: list[Ticket], history: History) -> list[ChronicleLine]:
+        return chronicle(effort, tickets, history, sessions.sessions() if sessions else [])
+
+    efforts = Efforts(github, store, settings, landing=PullRequestGate(github).land, telling=tell)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003).

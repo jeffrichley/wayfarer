@@ -62,7 +62,7 @@ def _open(github: GitHub, outcome: Outcome) -> tuple[PullRequest, TicketState]:
             effort_branch=_EFFORT_BRANCH,
             outcome=outcome,
         )
-        _, (read,) = await read_effort(client, spec.number, per_page=50, auto_merge=True)
+        _, (read,), _ = await read_effort(client, spec.number, per_page=50, auto_merge=True)
         return read.state
 
     state = asyncio.run(open_and_read())
