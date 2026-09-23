@@ -56,8 +56,9 @@ async def _serve(lock: InstanceLock, clone: Path) -> None:
 
 def main() -> None:
     try:
-        with InstanceLock(find_clone(Path.cwd())) as lock:
-            asyncio.run(_serve(lock, Path.cwd()))
+        cwd = Path.cwd()
+        with InstanceLock(find_clone(cwd)) as lock:
+            asyncio.run(_serve(lock, cwd))
     except (NotAClone, AlreadyRunning) as refusal:
         sys.exit(f"wayfarer: {refusal}")
     except KeyboardInterrupt:

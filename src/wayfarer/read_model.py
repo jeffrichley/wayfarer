@@ -83,9 +83,8 @@ async def read_effort(
     *,
     per_page: int,
     auto_merge: bool,
-    running: Collection[int] = frozenset(),
 ) -> Effort:
-    """Effort `number` as GitHub has it now. `running` is the tickets with a live session."""
+    """Effort `number` as GitHub has it now."""
     nodes: list[dict[str, Any]] = []
     after: str | None = None
     while True:
@@ -98,11 +97,11 @@ async def read_effort(
         if not page["pageInfo"]["hasNextPage"]:
             break
         after = page["pageInfo"]["endCursor"]
-    tickets = [_ticket(node, auto_merge=auto_merge, running=running) for node in nodes]
+    tickets = [_ticket(node, auto_merge=auto_merge) for node in nodes]
     return Effort(number=issue["number"], title=issue["title"], tickets=tickets)
 
 
-def _ticket(node: dict[str, Any], *, auto_merge: bool, running: Collection[int]) -> Ticket:
+def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
     number: int = node["number"]
     labels = [label["name"] for label in node["labels"]["nodes"]]
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
@@ -118,7 +117,8 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, running: Collection[int])
             assignees=assignees,
             open_blockers=open_blockers,
             pull_request=pull_request,
-            building=number in running,
+            # Nothing runs a session yet; the ticket that does feeds this in.
+            building=False,
             auto_merge=auto_merge,
         ),
         labels=labels,

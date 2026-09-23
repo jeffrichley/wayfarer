@@ -15,7 +15,7 @@ The GraphQL schema below uses GitHub's own type and field names, and graphql-cor
 validates every query against it, so a misspelt field fails here as it would on
 GitHub. Every query is also priced with GitHub's documented point formula, so a
 test can hold a read to its budget. The one check this cannot make is that the
-subset matches the real schema; `test_the_read_holds_against_real_github` does.
+subset matches the real schema; `test_real_github.py` does.
 """
 
 from __future__ import annotations

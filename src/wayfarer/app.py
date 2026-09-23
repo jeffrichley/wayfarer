@@ -42,7 +42,9 @@ def create_app(settings: Settings | None = None, github: GitHub | None = None) -
     async def health() -> Health:
         return Health(version=running)
 
-    # Read afresh on every ask; nothing is kept between reads (ADR-0002).
+    # Read afresh on every ask; nothing is kept between reads (ADR-0002). A plain
+    # GET until the SSE stream exists (#31), which then carries this as its
+    # snapshot, the only way data reaches the browser (ADR-0004).
     @app.get("/api/efforts/{number}")
     async def effort(number: int) -> Effort:
         try:

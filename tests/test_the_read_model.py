@@ -15,6 +15,7 @@ import pytest
 
 from conftest import Launcher, get
 from github_stand_in import GitHub
+from wayfarer.read_model import ASKED, HELD
 
 pytestmark = pytest.mark.git
 
@@ -75,8 +76,8 @@ def test_each_ticket_takes_the_state_its_github_facts_give_it(
     github.pull_request(merged, state="MERGED")
     github.close(completed)
     github.close(not_planned, reason="NOT_PLANNED")
-    asked.labels.append("wayfarer:asked")
-    held.labels.append("wayfarer:held")
+    asked.labels.append(ASKED)
+    held.labels.append(HELD)
     github.pull_request(ready, checks="SUCCESS")
     github.pull_request(draft, draft=True)
     github.pull_request(failing, checks="FAILURE")
@@ -113,10 +114,10 @@ def test_a_ticket_matching_two_rules_takes_the_higher_one(
 ) -> None:
     spec, tickets = github.effort("Overlaps", tickets=5)
     landed_but_labelled, asked_and_held, held_and_ready, ready_and_claimed, pending = tickets
-    landed_but_labelled.labels.append("wayfarer:held")
+    landed_but_labelled.labels.append(HELD)
     github.pull_request(landed_but_labelled, state="MERGED")
-    asked_and_held.labels += ["wayfarer:held", "wayfarer:asked"]
-    held_and_ready.labels.append("wayfarer:held")
+    asked_and_held.labels += [HELD, ASKED]
+    held_and_ready.labels.append(HELD)
     github.pull_request(held_and_ready)
     ready_and_claimed.assignees.append("wayfarer")
     github.pull_request(ready_and_claimed)
@@ -205,7 +206,7 @@ def test_nothing_is_kept_between_reads_so_a_change_on_github_shows_at_once(
     url = wayfarer.start().url()
     assert _states(url, spec.number) == {ticket.number: "takeable"}
 
-    ticket.labels.append("wayfarer:held")
+    ticket.labels.append(HELD)
 
     assert _states(url, spec.number) == {ticket.number: "held"}
     assert len(github.queries) == 2

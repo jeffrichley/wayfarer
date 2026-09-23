@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from wayfarer.read_model import _EFFORT
+from wayfarer.settings import Settings
 
 pytestmark = pytest.mark.live
 
@@ -34,10 +35,10 @@ def test_the_read_holds_against_real_github_within_its_point_budget() -> None:
                 "owner": _OWNER,
                 "name": _NAME,
                 "effort": _EFFORT_NUMBER,
-                "perPage": 50,
+                "perPage": Settings().tickets_per_page,
             },
         },
-        timeout=30,
+        timeout=Settings().github_timeout,
     )
 
     body = response.json()
