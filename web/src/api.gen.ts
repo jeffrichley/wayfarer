@@ -359,6 +359,8 @@ export interface components {
         PullRequest: {
             /** Approved */
             approved: boolean;
+            /** Branch */
+            branch: string;
             checks: components["schemas"]["Checks"] | null;
             /** Draft */
             draft: boolean;

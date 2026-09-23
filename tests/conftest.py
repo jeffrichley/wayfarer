@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -86,7 +86,7 @@ class Launcher:
         self._recorder.write_text(_RECORDER)
         self._instances: list[Instance] = []
 
-    def start(self, *args: str, env: dict[str, str | None] | None = None) -> Instance:
+    def start(self, *args: str, env: Mapping[str, str | None] | None = None) -> Instance:
         """Run `wayfarer`; `env` overrides the environment, and `None` unsets a name."""
         opened = self._scratch / f"opened-{len(self._instances)}.txt"
         environment = {

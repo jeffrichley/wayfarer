@@ -65,6 +65,7 @@ def test_one_read_returns_every_ticket_with_its_labels_assignees_blockers_and_pr
     assert tickets[third.number]["open_blockers"] == 2
     assert tickets[second.number]["pull_request"] == {
         "number": pull.number,
+        "branch": f"ticket/{second.number}-work",
         "draft": True,
         "merged": False,
         "checks": "pending",

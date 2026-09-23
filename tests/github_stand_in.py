@@ -1,15 +1,20 @@
 """A stand-in for GitHub that every test drives Wayfarer against, never a live repo.
 
-It holds one repo's issues and pull requests in memory and speaks the two things
-Wayfarer reads: GitHub's GraphQL API, over a subset of GitHub's real schema, and
-the REST issue listing the conditional poll will use (ADR-0003). A test changes
-it as a person on GitHub would, and it can be made to misbehave on purpose:
+It holds one repo's issues and pull requests in memory and speaks what Wayfarer
+reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; the
+REST issue listing and commit checks the conditional poll uses (ADR-0003); and a
+REST write. A test changes it as a person on GitHub would, and it can be made to
+misbehave on purpose:
 
 - **poked**: change an issue or a pull request, and the next read sees it;
 - **stale**: freeze what reads return while changes pile up behind it;
-- **unchanged**: the REST listing carries an ETag and answers a matching
-  `If-None-Match` with `304 Not Modified`;
+- **unchanged**: every REST read carries an ETag and answers a matching
+  `If-None-Match` with `304 Not Modified`, which spends no rate budget;
+- **rate-limited**: refuse the next REST reads with `403` or `429`, or ask for a
+  slower poll with `X-Poll-Interval`;
 - **disagreeing**: nothing stops a test closing a ticket a session is still on.
+
+Every REST request is logged in `requests`, so a test can see the poll's rhythm.
 
 The GraphQL schema below uses GitHub's own type and field names, and graphql-core
 validates every query against it, so a misspelt field fails here as it would on
@@ -147,6 +152,25 @@ class PullRequest:
     mentions: list[int] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Refusal:
+    """A REST read GitHub turned away, and the headers it gave."""
+
+    status: int
+    headers: dict[str, str] = field(default_factory=dict)
+    message: str = "API rate limit exceeded"
+
+
+@dataclass(frozen=True)
+class Logged:
+    """One REST request the stand-in answered: which, how, and when (monotonic)."""
+
+    method: str
+    path: str
+    status: int
+    at: float
+
+
 @dataclass
 class _Repo:
     issues: dict[int, Issue] = field(default_factory=dict)
@@ -165,6 +189,10 @@ class GitHub:
         self._lock = threading.Lock()
         self.queries: list[str] = []
         self.points: list[int] = []
+        self.requests: list[Logged] = []
+        self.poll_interval: int | None = None
+        self._refusals: list[Refusal] = []
+        self._forbidden: list[str] = []
         self.api = ""
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -199,7 +227,7 @@ class GitHub:
         issue.state_reason = reason
 
     def delete(self, issue: Issue) -> None:
-        """Delete it, as a repo's admin can."""
+        """Gone, as an admin deletes an issue: every read says it never existed."""
         with self._lock:
             del self._live.issues[issue.number]
 
@@ -221,8 +249,31 @@ class GitHub:
             with self._lock:
                 self._frozen = None
 
+    def refuse(self, *refusals: Refusal) -> None:
+        """Answer the next REST reads with these, one each, then serve again."""
+        with self._lock:
+            self._refusals += refusals
+
+    def forbid(self, path: str) -> None:
+        """Refuse every read of paths ending in `path`, as GitHub refuses a token
+        without the permission that path needs."""
+        with self._lock:
+            self._forbidden.append(path)
+
     def _visible(self) -> _Repo:
         return self._frozen if self._frozen is not None else self._live
+
+    # -- what Wayfarer asked -----------------------------------------------------
+
+    def polls(self, path: str = "/issues") -> list[Logged]:
+        """The REST reads of paths ending in `path`, in order."""
+        with self._lock:
+            return [r for r in self.requests if r.method == "GET" and r.path.endswith(path)]
+
+    def spent(self) -> int:
+        """REST requests that count against the rate limit: all but a `304`."""
+        with self._lock:
+            return sum(r.status != 304 for r in self.requests)
 
     # -- serving ----------------------------------------------------------------
 
@@ -250,21 +301,79 @@ class GitHub:
 
         @app.post("/graphql")
         async def graphql_endpoint(request: Request) -> Response:
-            if request.headers.get("authorization") != f"bearer {TOKEN}":
-                return JSONResponse({"message": "Bad credentials"}, status_code=401)
             body = await request.json()
             return JSONResponse(self._graphql(body["query"], body.get("variables") or {}))
+
+        @app.middleware("http")
+        async def log(request: Request, call_next: Any) -> Response:
+            # Every request needs the token, as GitHub's do.
+            response: Response
+            if request.headers.get("authorization") != f"bearer {TOKEN}":
+                response = JSONResponse({"message": "Bad credentials"}, status_code=401)
+            else:
+                response = await call_next(request)
+            if request.url.path != "/graphql":
+                with self._lock:
+                    self.requests.append(
+                        Logged(
+                            request.method, request.url.path, response.status_code, time.monotonic()
+                        )
+                    )
+            return response
 
         @app.get("/repos/{owner}/{name}/issues")
         async def list_issues(owner: str, name: str, request: Request) -> Response:
             with self._lock:
                 listing = [_rest_issue(i) for i in self._visible().issues.values()]
-            etag = '"' + hashlib.sha1(json.dumps(listing).encode()).hexdigest() + '"'
-            if request.headers.get("if-none-match") == etag:
-                return Response(status_code=304, headers={"ETag": etag})
-            return JSONResponse(listing, headers={"ETag": etag})
+            return self._conditional(request, listing)
+
+        # GitHub takes a branch as the ref, slashes and all, encoded or not.
+        @app.get("/repos/{owner}/{name}/commits/{ref:path}/check-runs")
+        async def check_runs(owner: str, name: str, ref: str, request: Request) -> Response:
+            state = self._checks_on(ref)
+            runs = [] if state is None else [_check_run(state)]
+            return self._conditional(request, {"total_count": len(runs), "check_runs": runs})
+
+        # The combined status: statuses posted by CI that does not use check runs.
+        # This stand-in's CI posts check runs only, so it is always empty.
+        @app.get("/repos/{owner}/{name}/commits/{ref:path}/status")
+        async def status(owner: str, name: str, ref: str, request: Request) -> Response:
+            return self._conditional(request, {"state": "pending", "total_count": 0})
+
+        @app.post("/repos/{owner}/{name}/issues/{number}/assignees")
+        async def assign(owner: str, name: str, number: int, request: Request) -> Response:
+            body = await request.json()
+            with self._lock:
+                issue = self._live.issues[number]
+                issue.assignees += [a for a in body["assignees"] if a not in issue.assignees]
+                return JSONResponse(_rest_issue(issue), status_code=201)
 
         return app
+
+    def _checks_on(self, ref: str) -> str | None:
+        with self._lock:
+            pulls = [p for p in self._visible().pulls.values() if p.head == ref]
+        return pulls[-1].checks if pulls else None
+
+    def _conditional(self, request: Request, body: Any) -> Response:
+        """`body` with an ETag, or a refusal or `304` as GitHub would give instead."""
+        with self._lock:
+            refusal = self._refusals.pop(0) if self._refusals else None
+            if any(request.url.path.endswith(path) for path in self._forbidden):
+                refusal = Refusal(403, message="Resource not accessible by personal access token")
+            interval = self.poll_interval
+        if refusal is not None:
+            return JSONResponse(
+                {"message": refusal.message},
+                status_code=refusal.status,
+                headers=refusal.headers,
+            )
+        headers = {"ETag": 'W/"' + hashlib.sha1(json.dumps(body).encode()).hexdigest() + '"'}
+        if interval is not None:
+            headers["X-Poll-Interval"] = str(interval)
+        if request.headers.get("if-none-match") == headers["ETag"]:
+            return Response(status_code=304, headers=headers)
+        return JSONResponse(body, headers=headers)
 
     def _graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -300,6 +409,12 @@ def _rest_issue(issue: Issue) -> dict[str, Any]:
         "labels": [{"name": n} for n in issue.labels],
         "assignees": [{"login": a} for a in issue.assignees],
     }
+
+
+def _check_run(state: str) -> dict[str, Any]:
+    if state in ("PENDING", "EXPECTED"):
+        return {"status": "in_progress", "conclusion": None}
+    return {"status": "completed", "conclusion": "success" if state == "SUCCESS" else "failure"}
 
 
 # -- resolving the schema over the in-memory repo --------------------------------

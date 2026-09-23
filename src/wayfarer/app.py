@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, Coroutine
+import contextlib
+import logging
+from collections.abc import AsyncIterable, AsyncIterator, Coroutine
+from contextlib import asynccontextmanager
 from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
@@ -18,11 +21,16 @@ from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.image import Images
 from wayfarer.models import Health, WireEvent
+from wayfarer.poll import poll
 from wayfarer.read_model import Efforts
 from wayfarer.settings import Settings
 from wayfarer.stream import Store
 
 __all__ = ["create_app"]
+
+_log = logging.getLogger(__name__)
+
+_log = logging.getLogger(__name__)
 
 # Built into the package by the hatch build hook (`hatch_build.py`), so the wheel
 # carries it and a user needs no Node toolchain (ADR-0004).
@@ -34,6 +42,14 @@ _NOT_BUILT = """\
 <p>The front end has not been built. Run <code>pnpm build</code> in <code>web/</code>,
 or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 """
+
+
+def _report_death(task: asyncio.Task[None]) -> None:
+    """A poll or a follow that died leaves every page stale while it still serves, so say so."""
+    if not task.cancelled() and task.exception() is not None:
+        _log.error(
+            "Keeping up with GitHub stopped; pages will not refresh.", exc_info=task.exception()
+        )
 
 
 def create_app(
@@ -49,9 +65,23 @@ def create_app(
     github = github or GitHub(None, settings)
     store = store or Store(settings.stream_backlog)
     running = version("wayfarer")
-    app = FastAPI(title="Wayfarer", version=running)
     images = Images(repo, store)
     efforts = Efforts(github, store, settings)
+
+    # The poll, and the re-reads it sets off, run for as long as the app serves,
+    # on the same loop (ADR-0001, ADR-0003).
+    @asynccontextmanager
+    async def keeping_up(app: FastAPI) -> AsyncIterator[None]:
+        tasks = [asyncio.create_task(poll(github, settings)), asyncio.create_task(efforts.follow())]
+        for task in tasks:
+            task.add_done_callback(_report_death)
+        yield
+        for task in tasks:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)
     gate = StartGate(repo, images, settings)
     # A command's work outlives its request, and asyncio keeps only a weak
     # reference to a task, so each is held here until it is done.
@@ -73,13 +103,15 @@ def create_app(
 
     # The only way data reaches the browser (ADR-0004). The annotation puts every
     # event's shape in the schema the browser's types come from; each goes out
-    # framed with its id, which FastAPI sends as it is.
+    # framed with its id, which FastAPI sends as it is. An open stream is an open
+    # page, which keeps the poll at its open rhythm (ADR-0003).
     @app.get("/api/events", response_class=EventSourceResponse)
     async def events(
         last_event_id: Annotated[str | None, Header()] = None,
     ) -> AsyncIterable[WireEvent]:
-        async for framed in store.events(last_event_id):
-            yield framed  # type: ignore[misc]  # a ServerSentEvent framing a WireEvent
+        with efforts.watched():
+            async for framed in store.events(last_event_id):
+                yield framed  # type: ignore[misc]  # a ServerSentEvent framing a WireEvent
 
     @app.post("/api/efforts/{number}/read", status_code=202)
     async def read_effort(number: int) -> Response:

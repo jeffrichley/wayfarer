@@ -1,7 +1,7 @@
-"""The stand-in keeps the promises later tickets test against (`github_stand_in.py`).
+"""The stand-in keeps the promises tests make of it (`github_stand_in.py`).
 
-The conditional poll is not built yet, so its half of the stand-in, the ETag'd
-issue listing, is held here directly rather than through Wayfarer.
+How Wayfarer's poll uses the ETag'd listing is held through Wayfarer
+(`test_staying_fresh.py`); what the listing itself promises is held here.
 """
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from github_stand_in import GitHub
+from github_stand_in import TOKEN, GitHub
 
 pytestmark = pytest.mark.unit
 
 
 def _listing(github: GitHub, etag: str | None = None) -> httpx.Response:
-    headers = {"If-None-Match": etag} if etag else {}
+    headers = {"Authorization": f"bearer {TOKEN}"} | ({"If-None-Match": etag} if etag else {})
     return httpx.get(f"{github.api}/repos/octo/widgets/issues", headers=headers, timeout=5.0)
 
 

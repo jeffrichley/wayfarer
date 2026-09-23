@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from typing import Any
 
+from wayfarer.freshness import Watch
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
 from wayfarer.models import (
     Checks,
@@ -92,20 +94,60 @@ _CHECKS = {
 
 
 class Efforts:
-    """The efforts a page has asked to read, each read into the stream on request."""
+    """The efforts a page has asked to read, each read into the stream on request and
+    read again whenever something may have changed (ADR-0003)."""
 
     def __init__(self, github: GitHub, store: Store, settings: Settings) -> None:
         self._github = github
         self._store = store
         self._settings = settings
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._followed: set[int] = set()
+        self._pages: set[Watch] = set()
 
     async def read(self, number: int) -> None:
-        """Read effort `number` from GitHub, and put what changed on the stream."""
+        """Read effort `number` from GitHub, put what changed on the stream, and follow it."""
+        self._followed.add(number)
         # One read of an effort at a time, taken in the order asked, so an older
         # read never lands over a newer one.
         async with self._reading[number]:
             await self._read(number)
+        self._await_open_pulls()
+
+    async def follow(self) -> None:
+        """Read every followed effort again each time the signal fires, until cancelled."""
+        # Not held as a watch: following is no reason to poll fast, and an open
+        # page, which is, holds one of its own (`watched`).
+        signal = Watch(self._github.freshness, self._github.freshness.version)
+        while True:
+            await signal.changed()
+            for number in sorted(self._followed):
+                await self.read(number)
+
+    @contextmanager
+    def watched(self) -> Iterator[None]:
+        """Held while a page is open: the poll keeps its open rhythm, and polls the
+        checks of every open pull request the page may be shown."""
+        with self._github.freshness.watch() as watch:
+            self._pages.add(watch)
+            self._await_open_pulls()
+            try:
+                yield
+            finally:
+                self._pages.discard(watch)
+
+    def _await_open_pulls(self) -> None:
+        # Checks never change the issue the poll lists, so each open PR is polled
+        # on its own (ADR-0003).
+        awaiting = frozenset(
+            item.pull_request.branch
+            for item in self._store.items()
+            if isinstance(item, Ticket)
+            and item.pull_request is not None
+            and not item.pull_request.merged
+        )
+        for page in self._pages:
+            page.awaiting = awaiting
 
     async def _read(self, number: int) -> None:
         id = f"effort:{number}"
@@ -215,6 +257,7 @@ def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | 
     rollup = chosen["statusCheckRollup"]
     return PullRequest(
         number=chosen["number"],
+        branch=chosen["headRefName"],
         draft=chosen["isDraft"],
         merged=chosen["state"] == "MERGED",
         checks=_CHECKS[rollup["state"]] if rollup else None,
