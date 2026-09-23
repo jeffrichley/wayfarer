@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from conftest import Launcher, build_layer, commit_layer, get
-from wayfarer.gate import StartGate
+from wayfarer.gate import API_KEY, OAUTH_TOKEN, SESSION_GH_TOKEN, StartGate
 from wayfarer.image import Images
 
 pytestmark = pytest.mark.git
@@ -221,6 +221,11 @@ def test_nothing_is_raised_for_a_person_just_by_looking_at_the_gate(
 # question in-process, because nothing over HTTP starts a session yet (#37).
 
 
+def _without_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(API_KEY, raising=False)
+    monkeypatch.delenv(OAUTH_TOKEN, raising=False)
+
+
 def _admit_many(gate: StartGate, times: int) -> list[Any]:
     async def admit_all() -> list[Any]:
         return list(await asyncio.gather(*(gate.admit() for _ in range(times))))
@@ -231,8 +236,7 @@ def _admit_many(gate: StartGate, times: int) -> list[Any]:
 def test_ten_tickets_refused_at_once_raise_one_item_not_ten(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    _without_credential(monkeypatch)
     gate = StartGate(clone, Images(clone))
 
     refusals = _admit_many(gate, 10)
@@ -245,8 +249,7 @@ def test_ten_tickets_refused_at_once_raise_one_item_not_ten(
 def test_the_item_says_in_plain_words_which_check_failed(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    _without_credential(monkeypatch)
     gate = StartGate(clone, Images(clone))
 
     [refusal] = _admit_many(gate, 1)
@@ -260,12 +263,11 @@ def test_the_item_says_in_plain_words_which_check_failed(
 def test_the_gate_reads_the_environment_again_before_every_start(
     clone: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    _without_credential(monkeypatch)
     gate = StartGate(clone, Images(clone))
     [first] = _admit_many(gate, 1)
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET)
+    monkeypatch.setenv(API_KEY, SECRET)
     [second] = _admit_many(gate, 1)
 
     # Still refused (this clone has no layer), but no longer for the credential,
@@ -322,11 +324,11 @@ def test_once_the_gate_passes_again_its_item_is_cleared(
             monkeypatch.delenv(variable, raising=False)
         else:
             monkeypatch.setenv(variable, value)
-    monkeypatch.delenv("WAYFARER_SESSION_GH_TOKEN")
+    monkeypatch.delenv(SESSION_GH_TOKEN)
     gate = StartGate(clone, Images(clone))
     [refused] = _admit_many(gate, 1)
 
-    monkeypatch.setenv("WAYFARER_SESSION_GH_TOKEN", "github_pat_not-a-real-token")
+    monkeypatch.setenv(SESSION_GH_TOKEN, "github_pat_not-a-real-token")
     [admitted] = _admit_many(gate, 1)
 
     assert refused is not None

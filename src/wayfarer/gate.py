@@ -1,4 +1,4 @@
-"""The start gate: what must hold before any session starts.
+"""The start gate: what must hold before any session starts (ADR-0005).
 
 Six checks, each of which would otherwise fail a session halfway through and
 waste the run: the Docker daemon is up; the image for the current layer exists;
@@ -24,7 +24,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from wayfarer.image import REFUSAL, Images
-from wayfarer.models import EnvironmentFailure, GateCheck
+from wayfarer.models import EnvironmentFailure, GateCheck, GateStatus
 
 __all__ = [
     "API_KEY",
@@ -59,9 +59,16 @@ class StartGate:
 
     async def check(self) -> list[GateCheck]:
         """All six checks, run afresh, in order. A failure never skips a later check."""
-        docker = await _docker()
+        docker = await _daemon_answers()
         built, probed = await self._image(docker.passed)
         return [docker, built, probed, _credential(), await self._identity(), _session_token()]
+
+    async def status(self) -> GateStatus:
+        """The six checks, run now. Looking raises nothing; only a refused start does."""
+        checks = await self.check()
+        return GateStatus(
+            checks=checks, passed=all(check.passed for check in checks), raised=self.raised
+        )
 
     async def admit(self) -> EnvironmentFailure | None:
         """Whether a session may start now: None when it may, or the one item raised."""
@@ -95,8 +102,8 @@ class StartGate:
                 GateCheck(name=probed, passed=False, detail=unseen),
             )
         if (await self._images.status()).ready:
-            # A tag is only ever given to an image that passed (see wayfarer.image),
-            # so its existing is the proof.
+            # A tag is only ever given to an image that passed (ADR-0005, and see
+            # wayfarer.image), so its existing is the proof.
             return (
                 GateCheck(name=built, passed=True, detail=f"{current} exists."),
                 GateCheck(
@@ -121,7 +128,9 @@ class StartGate:
         if outcome is not None and outcome.error is None:
             failing = ", ".join(check.name for check in outcome.checks if not check.passed)
             return f"{tag} was built but failed its probe: {failing}."
-        return f"{tag} has not been probed, because it has not been built."
+        # Nothing is stored about a failed probe, so after a restart this cannot
+        # tell a failed image from an unbuilt one; it says only what is certain.
+        return f"No image tagged {tag} has passed its probe. Build the session image to probe it."
 
     async def _identity(self) -> GateCheck:
         name = await _git_config(self._repo, "user.name")
@@ -142,7 +151,7 @@ class StartGate:
         )
 
 
-async def _docker() -> GateCheck:
+async def _daemon_answers() -> GateCheck:
     name = "Docker is running"
     try:
         process = await asyncio.create_subprocess_exec(
@@ -170,7 +179,7 @@ async def _docker() -> GateCheck:
             passed=False,
             detail="The Docker daemon did not answer"
             + (f": {said[-1]}" if said else ".")
-            + " Start Docker, then resume.",
+            + " Start Docker; the gate checks again before every start.",
         )
     return GateCheck(name=name, passed=True, detail="The Docker daemon answered.")
 

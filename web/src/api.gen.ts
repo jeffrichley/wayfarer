@@ -11,10 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Start Gate
-         * @description The six checks, run now. Looking raises nothing; only a refused start does.
-         */
+        /** Start Gate */
         get: operations["start_gate_api_gate_get"];
         put?: never;
         post?: never;

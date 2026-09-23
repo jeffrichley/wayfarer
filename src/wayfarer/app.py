@@ -79,11 +79,7 @@ def create_app(repo: Path) -> FastAPI:
 
     @app.get("/api/gate")
     async def start_gate() -> GateStatus:
-        """The six checks, run now. Looking raises nothing; only a refused start does."""
-        checks = await gate.check()
-        return GateStatus(
-            checks=checks, passed=all(check.passed for check in checks), raised=gate.raised
-        )
+        return await gate.status()
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)
