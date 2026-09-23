@@ -130,6 +130,11 @@ class Ticket(BaseModel):
     """Every ticket blocking this one, open or closed, from GitHub's issue dependencies."""
     open_blockers: int
     pull_request: PullRequest | None
+    place_in_line: int | None = Field(
+        description="Its place in its effort branch's merge queue while it is Landing, 1 at "
+        "the front; null when it is not in the queue. Read from GitHub, so a restart finds "
+        "the same line."
+    )
 
 
 class Effort(BaseModel):
