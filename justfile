@@ -9,6 +9,14 @@ pnpm := "corepack pnpm --dir web"
 default:
     @just --list
 
+# The process serves the page built into its package, so a change under web/ shows
+# only once it is built; this builds it first. Arguments pass through to `wayfarer`.
+# Build the page and run Wayfarer on this clone, as a person does. Ctrl-C stops it.
+run *args:
+    {{pnpm}} install --frozen-lockfile
+    {{pnpm}} build
+    uv run wayfarer {{args}}
+
 # Lint, type-check and test both halves. Fails if any step fails.
 check: web-check python-check
 

@@ -50,6 +50,7 @@ and [just](https://just.systems/).
 
 | command | what it does |
 |---|---|
+| `just run` | build the page and run Wayfarer on this clone; the gallery is at `/gallery` |
 | `just check` | lint, type-check and build the page, then lint, type-check and test the process — what CI runs |
 | `just browser` | install the Chromium the browser tests drive, once per machine |
 | `just types` | regenerate `web/src/api.gen.ts` from the Python models; CI fails if it drifts |
