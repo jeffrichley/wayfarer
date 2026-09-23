@@ -1,11 +1,16 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
+import type { ChronicleLine, Mention } from "../api";
 import { Button, type ButtonProps } from "../Button";
+import { Chronicle, Line as ChronicleEntry } from "../Chronicle";
 import { Criteria } from "../Criteria";
 import { Diff, type FileDiff, type Line } from "../Diff";
 import { Frame, Pane, Split } from "../Frame";
+import { Route, type RouteProps } from "../Route";
+import { type Question, QuestionCard } from "../Question";
 import { type Glyph, State, TestRun, TestRuns } from "../State";
 import { type Step, Thread } from "../Thread";
+import { EffortItems, Menu, RepoItems, TopBar, type TopBarProps } from "../TopBar";
 import { Chip, Kicker, Meta, Named, Rule } from "../Type";
 import styles from "./Gallery.module.css";
 
@@ -77,6 +82,282 @@ const CRITERIA = [
   "Chapters above −60 dB fail the check",
   "Failures explain the value, the limit, and the timestamp",
   "The clean fixture passes",
+];
+
+// The chronicle's sample effort and tickets, from the prototype's ACX effort.
+const COMPLIANCE_CHECKS: Mention = { number: 124, title: "Pre-delivery compliance checks" };
+const ANALYSIS: Mention = { number: 125, title: "Extract the audio analysis pass from the render worker" };
+const LOUDNESS: Mention = { number: 126, title: "Flag loudness outside −23 to −18 dB RMS" };
+const PEAKS: Mention = { number: 127, title: "Flag peaks above −3 dB" };
+const NOISE_FLOOR: Mention = { number: 128, title: "Flag a noise floor above −60 dB" };
+const LONG_CHAPTERS: Mention = { number: 129, title: "Flag chapters longer than 120 minutes" };
+const CREDITS: Mention = { number: 130, title: "Require opening and closing credits" };
+const ROOM_TONE: Mention = { number: 131, title: "Check room tone at the head and tail of each chapter" };
+const MY_BOOKS: Mention = { number: 132, title: "Show compliance status on My Books" };
+
+const MIRA = { login: "mira" };
+
+// A line at a local time, in September 2026 unless it says otherwise, so it reads
+// the same in any timezone.
+function line(
+  id: string,
+  day: number,
+  time: string,
+  moved: ChronicleLine["moved"],
+  [year, month] = [2026, 8],
+): ChronicleLine {
+  const [hours, minutes] = time.split(":").map(Number);
+  const at = new Date(year, month, day, hours, minutes).toISOString();
+  return { kind: "chronicle_line", id, at, effort: COMPLIANCE_CHECKS, moved };
+}
+
+// Every kind of line, in every voice and every shape of what it caused.
+const LINES: ChronicleLine[] = [
+  line("line-taken", 15, "09:41", { kind: "taken", ticket: NOISE_FLOOR, by: "wayfarer" }),
+  line("line-taken-you", 15, "09:41", { kind: "taken", ticket: CREDITS, by: "you" }),
+  line("line-taken-someone", 15, "09:41", { kind: "taken", ticket: CREDITS, by: MIRA }),
+  line("line-asked", 15, "09:18", {
+    kind: "asked",
+    ticket: CREDITS,
+    gist: "Should DOCX books without credits fail or warn?",
+  }),
+  line("line-answered", 15, "09:30", { kind: "answered", ticket: CREDITS, by: "you" }),
+  line("line-answered-someone", 15, "09:30", {
+    kind: "answered",
+    ticket: CREDITS,
+    by: MIRA,
+  }),
+  line("line-held", 15, "08:12", {
+    kind: "held",
+    ticket: LONG_CHAPTERS,
+    reason: "Its tests were still red when the session ended.",
+  }),
+  line("line-retried", 15, "08:20", { kind: "retried", ticket: LONG_CHAPTERS, over: false }),
+  line("line-retried-over", 15, "08:20", { kind: "retried", ticket: LONG_CHAPTERS, over: true }),
+  line("line-landed", 15, "07:48", {
+    kind: "landed",
+    ticket: PEAKS,
+    by: "wayfarer",
+    freed: [],
+    started: [],
+  }),
+  line("line-landed-freed", 14, "16:40", {
+    kind: "landed",
+    ticket: ANALYSIS,
+    by: "wayfarer",
+    freed: [LOUDNESS, PEAKS],
+    started: [],
+  }),
+  line("line-landed-folded", 14, "22:14", {
+    kind: "landed",
+    ticket: LOUDNESS,
+    by: "wayfarer",
+    freed: [NOISE_FLOOR, LONG_CHAPTERS, CREDITS],
+    started: [NOISE_FLOOR, LONG_CHAPTERS],
+  }),
+  line("line-landed-all", 15, "07:48", {
+    kind: "landed",
+    ticket: PEAKS,
+    by: "wayfarer",
+    freed: [MY_BOOKS],
+    started: [MY_BOOKS],
+  }),
+  line("line-landed-by-hand", 15, "07:48", {
+    kind: "landed",
+    ticket: PEAKS,
+    by: "you",
+    freed: [],
+    started: [],
+  }),
+  line("line-landed-by-someone", 15, "07:48", {
+    kind: "landed",
+    ticket: PEAKS,
+    by: MIRA,
+    freed: [],
+    started: [],
+  }),
+  line("line-closed", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: "you" }),
+  line("line-closed-someone", 15, "11:02", { kind: "closed", ticket: ROOM_TONE, by: MIRA }),
+  line("line-armed", 13, "15:30", { kind: "armed", started: [NOISE_FLOOR, LONG_CHAPTERS] }),
+  line("line-armed-idle", 13, "15:30", { kind: "armed", started: [] }),
+  line("line-published", 14, "10:20", { kind: "published", tickets: 9, freed: [ANALYSIS], started: [ANALYSIS] }),
+  line("line-ready", 15, "12:00", { kind: "ready_to_ship" }),
+  line("line-shipped", 15, "12:30", { kind: "shipped" }),
+];
+
+function sample(id: string): ChronicleLine {
+  const found = LINES.find((l) => l.id === id);
+  if (found === undefined) {
+    throw new Error(`no sample line ${id}`);
+  }
+  return found;
+}
+
+// Home's chronicle on Tuesday 15 September: today and yesterday, with three
+// earlier days, gaps between them and the last in the year before, to load one
+// at a time.
+const NOW = new Date(2026, 8, 15, 10, 0);
+const RECENT = ["line-taken", "line-asked", "line-landed", "line-landed-folded", "line-landed-freed", "line-published"];
+const EARLIER = [
+  [sample("line-armed")],
+  [line("friday", 11, "11:05", { kind: "taken", ticket: ANALYSIS, by: "you" })],
+  [line("last-year", 31, "16:00", { kind: "published", tickets: 9, freed: [], started: [] }, [2025, 11])],
+];
+
+function ChronicleSpecimen() {
+  const [loaded, setLoaded] = useState(0);
+  const lines = [...RECENT.map(sample), ...EARLIER.slice(0, loaded).flat()];
+  return (
+    <Chronicle
+      lines={lines}
+      now={NOW}
+      earlier={loaded < EARLIER.length ? () => setLoaded(loaded + 1) : undefined}
+    />
+  );
+}
+
+
+// The shell as the prototype draws it on galley, the sample repo.
+const REPOS: TopBarProps["repos"] = [
+  { name: "galley", meta: "3 efforts on the line", href: "#galley", current: true },
+  { name: "madrigal", meta: "Connected today · no maps yet", href: "#madrigal" },
+];
+const EFFORT: NonNullable<TopBarProps["effort"]> = {
+  name: "ACX compliance before delivery",
+  efforts: [
+    {
+      name: "ACX compliance before delivery",
+      meta: "Building · 2 of 9 landed · 2 building",
+      glyph: "building",
+      href: "#acx",
+      current: true,
+    },
+    {
+      name: "Per-chapter voice casting",
+      meta: "Charting the way · 3 decided, 3 patches of fog",
+      glyph: "building",
+      href: "#casting",
+    },
+    {
+      name: "Choosing the retail sample",
+      meta: "Charting the way · one ticket left, in session with you",
+      glyph: "ask",
+      href: "#sample",
+    },
+  ],
+  landed: [{ name: "Manuscript upload states", meta: "Landed 2 Sep · 6 tickets" }],
+};
+const BAR: TopBarProps = {
+  repo: "galley",
+  repos: REPOS,
+  working: { count: 3, href: "#build" },
+  needsYou: { count: 4, href: "#desk" },
+};
+
+// Where an effort is on the line: mid-build with two landed, sliced and waiting
+// to be built, and still charting the way.
+const ROUTES: [string, RouteProps][] = [
+  [
+    "route-building",
+    {
+      reached: "landed",
+      current: "build",
+      stations: {
+        wayfinder: { glyph: "done", out: "7 decisions", href: "#map" },
+        spec: { glyph: "done", out: "16 stories · 2 without a ticket", href: "#spec" },
+        tickets: { glyph: "done", out: "9 tickets · 1 takeable", href: "#tickets" },
+        build: { glyph: "ask", out: "2 building · 1 asking", href: "#build" },
+        review: { glyph: "review", out: "1 PR waiting on you", href: "#desk" },
+        landed: {
+          glyph: "flag",
+          out: "2 of 9",
+          dots: [true, true, false, false, false, false, false, false, false],
+        },
+      },
+    },
+  ],
+  [
+    "route-sliced",
+    {
+      reached: "tickets",
+      current: "tickets",
+      stations: {
+        wayfinder: { glyph: "done", out: "6 decisions · way clear", href: "#map" },
+        spec: { glyph: "done", out: "Spec #168 · 12 stories", href: "#spec" },
+        tickets: { glyph: "take", out: "5 tickets · 2 takeable", href: "#tickets" },
+        build: { glyph: "pending", out: "—", why: "Opens once a ticket is taken" },
+        review: { glyph: "pending", out: "—", why: "Opens once a ticket has a PR" },
+        landed: { glyph: "pending", out: "—" },
+      },
+    },
+  ],
+  [
+    "route-charting",
+    {
+      reached: "wayfinder",
+      current: "wayfinder",
+      stations: {
+        wayfinder: { glyph: "building", out: "3 decided · 3 patches of fog", href: "#map" },
+        spec: { glyph: "pending", out: "After the way is clear", why: "Opens once the map's way is clear" },
+        tickets: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        build: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        review: { glyph: "pending", out: "—", why: "Opens once the map's way is clear" },
+        landed: { glyph: "pending", out: "—" },
+      },
+    },
+  ],
+];
+
+// #130's question, as the prototype asks it (WS.TICKETS in assets/wayfarer.js).
+const ASKED: Question[] = [
+  {
+    text: "DOCX manuscripts don't mark front and back matter, so for those books I can only guess where credits would be. Should a DOCX book with no credits I can find fail like EPUB, or warn so the author can confirm?",
+    options: [
+      {
+        label: "Fail, same as EPUB",
+        consequence: "Stricter. Some DOCX books with real credits may fail until the author marks them.",
+      },
+      {
+        label: "Warn, and ask the author to confirm",
+        consequence: "Export stays unlocked for this check once they confirm credits are there.",
+      },
+    ],
+  },
+];
+
+// As many questions as one ask carries, each with as many options as it can.
+const ASKED_FOUR: Question[] = [
+  {
+    text: "Room tone at the head of a chapter can run long. Should more than one second fail the check, or only less than half a second?",
+    options: [
+      { label: "Both fail", consequence: "Matches ACX's wording. Some narrators' long heads will need trimming." },
+      { label: "Only too little fails", consequence: "Long heads pass. A later check can warn about them." },
+    ],
+  },
+  {
+    text: "Where should a failing chapter say how much tone it found?",
+    options: [
+      { label: "In the check's line", consequence: "One place to read it, beside the pass or fail." },
+      { label: "In the chapter's detail", consequence: "The check's line stays short; the number is a click away." },
+      { label: "Both", consequence: "Repeats the number, so the two must stay in step." },
+    ],
+  },
+  {
+    text: "A chapter with no audio at all: does it fail room tone, or is that another check's job?",
+    options: [
+      { label: "Fail room tone", consequence: "The author sees one more failure for the same chapter." },
+      { label: "Leave it to another check", consequence: "Room tone skips empty chapters and says so." },
+    ],
+  },
+  {
+    text: "Which chapters does the check read?",
+    options: [
+      { label: "Every chapter", consequence: "Slowest, and the only way to be sure." },
+      { label: "Changed chapters", consequence: "Fast. A chapter that never changed is never re-read." },
+      { label: "The first and last", consequence: "Fastest. Misses a bad chapter in the middle." },
+      { label: "A sample", consequence: "Quick, and says which chapters it read." },
+    ],
+  },
 ];
 
 // A file the change adds whole: every line new, numbered from 1.
@@ -436,6 +717,69 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section title="Top bar">
+        <div className={styles.stack}>
+          <Specimen name="topbar">
+            <div className={styles.bar}>
+              <TopBar {...BAR} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-effort">
+            <div className={styles.bar}>
+              <TopBar {...BAR} effort={EFFORT} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-nothing-waiting">
+            <div className={styles.bar}>
+              <TopBar {...BAR} effort={EFFORT} needsYou={{ count: 0, href: "#desk" }} />
+            </div>
+          </Specimen>
+          <Specimen name="topbar-quiet">
+            <div className={styles.bar}>
+              <TopBar
+                {...BAR}
+                effort={EFFORT}
+                working={{ count: 0, href: "#build" }}
+                needsYou={{ count: 0, href: "#desk" }}
+              />
+            </div>
+          </Specimen>
+        </div>
+        {/* Each switcher's menu, drawn open where it hangs beneath its button. */}
+        <div className={styles.row}>
+          <Specimen name="menu-repo">
+            <div className={styles.menuBox}>
+              <div className={styles.hang}>
+                <Menu>
+                  <RepoItems repos={REPOS} />
+                </Menu>
+              </div>
+            </div>
+          </Specimen>
+          <Specimen name="menu-effort">
+            <div className={styles.menuBox}>
+              <div className={styles.hang}>
+                <Menu wide>
+                  <EffortItems efforts={EFFORT.efforts} landed={EFFORT.landed} />
+                </Menu>
+              </div>
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Route band">
+        <div className={styles.stack}>
+          {ROUTES.map(([name, route]) => (
+            <Specimen key={name} name={name}>
+              <div className={styles.bar}>
+                <Route {...route} />
+              </div>
+            </Specimen>
+          ))}
+        </div>
+      </Section>
+
       <Section title="Test runs">
         <Specimen name="runs">
           <TestRuns runs={["red", "green", "red", "red", "green"]} />
@@ -450,6 +794,26 @@ export function Gallery() {
         </Specimen>
       </Section>
 
+      <Section title="Chronicle lines">
+        <div className={styles.lines}>
+          {LINES.map((l) => (
+            <Specimen key={l.id} name={l.id}>
+              <ol className={styles.chronicle}>
+                <ChronicleEntry line={l} />
+              </ol>
+            </Specimen>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Chronicle">
+        <Specimen name="chronicle">
+          <div className={styles.chronicle}>
+            <ChronicleSpecimen />
+          </div>
+        </Specimen>
+      </Section>
+
       <Section title="Acceptance criteria">
         <Specimen name="criteria">
           <div style={{ width: 340 }}>
@@ -457,6 +821,22 @@ export function Gallery() {
           </div>
         </Specimen>
       </Section>
+
+      <Section title="Question card">
+        <div className={styles.row}>
+          <Specimen name="question-1">
+            <div style={{ width: 600 }}>
+              <QuestionCard ticket={130} by="Claude Code · wt/credits · 09:18" questions={ASKED} />
+            </div>
+          </Specimen>
+          <Specimen name="question-4">
+            <div style={{ width: 600 }}>
+              <QuestionCard ticket={131} by="Claude Code · wt/room-tone · 10:02" questions={ASKED_FOUR} />
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
       <Section title="Diff">
         <div className={styles.row}>
           <Specimen name="diff">

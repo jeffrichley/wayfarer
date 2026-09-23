@@ -16,14 +16,14 @@ It answers: where am I, is anything working, and does anything need me?
 
 | Piece | `data-piece` | What it does |
 |---|---|---|
-| Wordmark | — | "Waystation" with a mark: a filled dot, a line, and an open ring. That's a small course from a landed point to the next station. It links home. |
+| Wordmark | — | "Wayfarer" with a mark: a filled dot, a line, and an open ring. That's a small course from a landed point to the next station. It links home. |
 | Repo switcher | `repo-switcher` | Mono repo name with a menu. Each repo shows a one-line state ("3 efforts on the line", "Connected today · no maps yet"). A repo with no maps opens first run. |
 | Effort switcher | `effort-switcher` | Appears on effort screens: the effort's name in serif with a menu of efforts. Each row has a status glyph and a sentence ("Building · 2 of 9 landed · 2 building"). It links to wherever that effort currently is. |
-| Agents working | `agents-working` | A spinning glyph and a count of running sessions across the repo. It links to live build. |
+| Agents working | `agents-working` | A spinning glyph and a count of running sessions across the repo. It links to live build. When nothing is running it says "No agents working" beside the still ring, since nothing running is nothing spinning. |
 | Needs you | `needs-you` | A count of everything waiting on a person. It links to the desk. The count badge is ink, not accent. When nothing is waiting it becomes a quiet grey badge with a 0, and stays in place. |
 | Theme toggle | `theme-toggle` | Switches between the chart and the night chart. See [`visual-language.md`](visual-language.md#themes). |
 
-**Menus:** open on click. Escape and an outside click close them. Only one menu is open at a time, and after Escape focus returns to its button.
+**Menus:** open on click. Escape and an outside click close them. Only one menu is open at a time. Closing puts focus back on its button, unless the person has moved focus to something else, by Tab or by the click that closed it. Each switcher is a disclosure button (`aria-expanded`) over a list of links ([#47](https://github.com/jeffrichley/wayfarer/issues/47)).
 
 **Below 920px:** the crumbs hide, the effort name truncates with an ellipsis, and the repo switcher stays visible only when there's no effort crumb.
 
@@ -47,13 +47,13 @@ This is the spine of the product. It shows six **stations** in a row, and each s
 
 **Node states:**
 - done: `st-done`
-- active: the glyph of the most urgent thing there. A question beats building, which beats idle.
+- active: the glyph of the most urgent thing there. A question beats building, which beats idle. A question's solid diamond keeps its ink on the band; the prototype drew it in the page's ground, so it vanished ([#47](https://github.com/jeffrichley/wayfarer/issues/47)).
 - next move: `st-take`
 - not reached: `st-pending`
 - skill missing (first run only): `st-blocked`
 - Landed is shown as a flag.
 
-**Tracks:** a track is **magenta and solid** when the course has reached the next station, and **dashed** when it hasn't. That's the course, drawn in the accent.
+**Tracks:** a track is **magenta and solid** when the course has reached the next station, and **dashed** when it hasn't. That's the course, drawn in the accent: solid up to the furthest station the work has reached, dashed beyond it.
 
 **The current page's station:** its name is bold and underlined with ink.
 
@@ -94,8 +94,10 @@ The shape of a session paused to ask something:
 - an optional note ("Anything the agent should know")
 - a primary action: "Send answer and resume"
 
+One ask can carry up to four questions, as `AskUserQuestion` does. Each further question is the agent's next message, with its own options under it, and the one note and the send row follow the last ([#52](https://github.com/jeffrichley/wayfarer/issues/52)).
+
 It's used inline in live build and on the desk. Rules:
-- Sending requires an option or a note.
+- Sending requires an option or a note. With several questions it requires an option for each, or a note.
 - After sending, the controls lock and the hint says where the answer was posted ("Posted to #130. The session resumes.").
 
 ## Conversation (`.convo`)

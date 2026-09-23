@@ -19,3 +19,11 @@
 /* A frame fills its specimen's box, not the viewport. */
 .frame { width: 720px; height: 280px; }
 .frame > :global(.app) { height: 100%; }
+/* A chronicle is as wide as home's left column gives it. */
+.chronicle { width: 660px; }
+.lines { display: grid; gap: 16px; justify-items: start; }
+/* The shell's bars at a screen's width, and a menu with room to hang open. */
+.stack { display: grid; gap: 16px; justify-items: start; }
+.bar { width: 1100px; }
+.menuBox { width: 400px; height: 300px; }
+.hang { position: relative; }
