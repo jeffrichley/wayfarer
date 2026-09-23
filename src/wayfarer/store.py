@@ -146,9 +146,13 @@ class Store:
             (effort,),
         )
 
-    def pause(self, effort: int, paused: bool = True) -> None:
-        """Pause or resume `effort`'s cascade; one not armed stays unarmed."""
-        self._db.execute("UPDATE cascades SET paused = ? WHERE effort = ?", (int(paused), effort))
+    def pause(self, effort: int) -> None:
+        """Pause `effort`'s cascade; one not armed stays unarmed."""
+        self._db.execute("UPDATE cascades SET paused = 1 WHERE effort = ?", (effort,))
+
+    def resume(self, effort: int) -> None:
+        """Resume `effort`'s cascade; one not armed stays unarmed."""
+        self._db.execute("UPDATE cascades SET paused = 0 WHERE effort = ?", (effort,))
 
     def pause_all(self) -> None:
         self._db.execute("UPDATE cascades SET paused = 1")

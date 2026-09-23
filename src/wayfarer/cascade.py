@@ -116,7 +116,8 @@ class Cascades:
             await self._decide(effort)
 
     async def resume(self, effort: int) -> None:
-        self._store().pause(effort, paused=False)
+        """Start what `effort`'s cascade can again, as of a fresh read."""
+        self._store().resume(effort)
         self._why.pop(effort, None)
         await self._efforts.read(effort)
 
@@ -169,17 +170,19 @@ class Cascades:
         for ticket in tickets:
             if ticket.number not in self._claimed:
                 continue
-            self._claimed.discard(ticket.number)
             login = await self._github.login()
-            ours = ticket.assignees == [login] and _takeable_but_for_the_claim(ticket)
-            if ours and submitting:
+            if login not in ticket.assignees:
+                # A read from before the claim: GitHub took the write, so a later read
+                # will show it. Until then it stays claimed, and holds its slot.
+                continue
+            self._claimed.discard(ticket.number)
+            if submitting and ticket.assignees == [login] and _takeable_but_for_the_claim(ticket):
                 self._submit(ticket.number)
-            elif login in ticket.assignees:
+            else:
                 # Someone else took it too, or the cascade paused meanwhile: let it go.
                 await self._github.write(
                     "DELETE", f"/issues/{ticket.number}/assignees", {"assignees": [login]}
                 )
-            # Otherwise the claim did not land, and the ticket is takeable again.
 
     async def _start(self, effort: int, tickets: list[Ticket], store: Store) -> bool:
         """Claim every ticket it may start while the cap has room; False if it had to pause."""

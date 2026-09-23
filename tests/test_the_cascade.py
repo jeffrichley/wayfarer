@@ -346,6 +346,25 @@ def test_a_ticket_a_person_takes_as_wayfarer_claims_it_is_left_to_them(
     assert app.started() == []
 
 
+def test_a_claim_made_just_before_a_pause_is_let_go_not_stranded(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Widgets", tickets=1)
+    app = wayfarer()
+    # The person pauses while the claim is on its way, before any read shows it.
+    github.meanwhile(lambda: post(f"{app.url}api/efforts/{effort.number}/pause"))
+
+    with _page(app.url) as seen:
+        app.arm(effort)
+        seen.item(_cascade(effort), paused=True)
+        # The read that shows the claim finds the cascade paused, so it lets go.
+        seen.item(_ticket(ticket), assignees=[], state="takeable")
+        assert app.started() == []
+
+        post(f"{app.url}api/efforts/{effort.number}/resume")
+        eventually(lambda: app.started() == [ticket.number])
+
+
 def test_a_ticket_a_person_has_taken_is_left_alone(wayfarer: Serve, github: GitHub) -> None:
     effort, (mine, theirs) = github.effort("Widgets", tickets=2)
     # Taken by hand: by the person Wayfarer writes as, and by someone else.

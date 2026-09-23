@@ -47,7 +47,8 @@ class Queue:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        """Stop every run, and return once each has wound down, its work kept (ADR-0017)."""
+        """Stop every run, and return once each has wound down, its work kept
+        (Waystation ADR-0017)."""
         runs = list(self._runs)
         for run in runs:
             run.cancel()

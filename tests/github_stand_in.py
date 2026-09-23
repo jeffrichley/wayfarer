@@ -197,7 +197,7 @@ class GitHub:
         self.poll_interval: int | None = None
         self._refusals: list[Refusal] = []
         self._forbidden: list[str] = []
-        self._meanwhile: list[Callable[[], None]] = []
+        self._meanwhile: list[Callable[[], object]] = []
         self.api = ""
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -265,7 +265,7 @@ class GitHub:
         with self._lock:
             self._forbidden.append(path)
 
-    def meanwhile(self, change: Callable[[], None]) -> None:
+    def meanwhile(self, change: Callable[[], object]) -> None:
         """Make `change` just after Wayfarer's next write, as a person racing it would."""
         with self._lock:
             self._meanwhile.append(change)

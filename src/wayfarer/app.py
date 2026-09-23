@@ -173,6 +173,7 @@ def create_app(
 
     @app.post("/api/efforts/{number}/resume", status_code=202)
     async def resume(number: int) -> Response:
+        """Resume the effort's cascade, starting what it can as of a fresh read."""
         return accept(cascades.resume(number))
 
     @app.post("/api/tickets/{number}/stop", status_code=202)
