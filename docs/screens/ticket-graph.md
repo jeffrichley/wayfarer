@@ -86,7 +86,7 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
   | Blocked | "Not yet": "Reaches the frontier once *X* and *Y* land.", and a ghost toggle **Queue an agent for when it unblocks** (`queue-agent`, `aria-pressed`) |
 
 - **What to build:** the ticket's end-to-end behaviour, in plain language.
-- **Acceptance criteria · N of M:** the shared criteria list, with test names.
+- **Acceptance criteria:** the shared criteria list, as written and read-only (see [`../design/shell.md`](../design/shell.md)).
 - **Blocked by / Unblocks:** linked tickets with glyphs. Following one selects its card and moves focus there.
 - **Thread:** map → spec → ticket → session → PR → landed (see [`../design/shell.md`](../design/shell.md#thread)).
 

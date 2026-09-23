@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import { type Glyph, State, TestRun } from "../State";
+import { Button, type ButtonProps } from "../Button";
+import { Criteria } from "../Criteria";
+import { Frame, Pane, Split } from "../Frame";
+import { type Glyph, State, TestRun, TestRuns } from "../State";
+import { type Step, Thread } from "../Thread";
+import { Chip, Kicker, Meta, Named, Rule } from "../Type";
 import styles from "./Gallery.module.css";
 
 // Every primitive in every state, on one page. A ticket that lands a widget adds
@@ -18,6 +23,59 @@ const GLYPHS: [Glyph, string][] = [
   ["blocked", "Blocked"],
   ["pending", "Not reached yet"],
   ["out", "Out of scope"],
+];
+
+// Each button variant with the words it carries in the prototype.
+const VARIANTS: [ButtonProps["variant"], string][] = [
+  ["primary", "Arm the cascade"],
+  ["secondary", "Review PR #141"],
+  ["ghost", "Queue an agent"],
+];
+const SIZES = [
+  ["", {}],
+  ["-small", { small: true }],
+  ["-arrow", { arrow: true }],
+] as const;
+
+// #128's thread as the ticket graph's panel draws it, mid-build.
+const THREAD: Step[] = [
+  {
+    skill: "/wayfinder",
+    name: <a className="nm" href="#112">ACX compliance before delivery</a>,
+    meta: "What does ACX reject? · How should a failing chapter explain itself?",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/to-spec",
+    name: <a className="nm" href="#124">Pre-delivery compliance checks</a>,
+    meta: "Story 5",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/to-tickets",
+    name: <Named name="Flag a noise floor above −60 dB" n={128} href="#128" />,
+    meta: "After Flag loudness",
+    glyph: "done",
+    word: "Landed",
+  },
+  {
+    skill: "/tdd",
+    name: <a className="nm" href="#wt">wt/noise-floor</a>,
+    meta: "Claude Code · running now",
+    glyph: "building",
+    word: "Building",
+  },
+  { skill: "/code-review", name: "No PR yet", glyph: "pending", word: "Not reached yet" },
+  { skill: "merge", name: "Not landed", glyph: "pending", word: "Not reached yet" },
+];
+
+const CRITERIA = [
+  "Measure the noise floor of every chapter",
+  "Chapters above −60 dB fail the check",
+  "Failures explain the value, the limit, and the timestamp",
+  "The clean fixture passes",
 ];
 
 const TOKENS = [
@@ -41,6 +99,24 @@ function Specimen({ name, children }: { name: string; children: ReactNode }) {
     <div className={styles.specimen} data-specimen={name}>
       {children}
     </div>
+  );
+}
+
+// Enough lines that a region overflows, so it can be seen to scroll on its own.
+function Filler({ what }: { what: string }) {
+  return Array.from({ length: 15 }, (_, i) => (
+    <p key={i} style={{ padding: "4px 20px" }}>
+      {`Line ${i + 1} of ${what}.`}
+    </p>
+  ));
+}
+
+// Stand-ins for the top bar and the route band, which are their own widgets.
+function StandIn({ children }: { children: string }) {
+  return (
+    <p className="meta" style={{ padding: "12px 24px", borderBottom: "1px solid var(--border)" }}>
+      {children}
+    </p>
   );
 }
 
@@ -119,7 +195,7 @@ export function Gallery() {
       <Section title="Type">
         <div className={styles.row}>
           <Specimen name="type-kicker">
-            <span className="kicker">/to-tickets · 9 tracer bullets</span>
+            <Kicker>/to-tickets · 9 tracer bullets</Kicker>
           </Specimen>
           <Specimen name="type-display">
             <h2>Pre-delivery compliance checks</h2>
@@ -128,59 +204,144 @@ export function Gallery() {
             <p>A ticket reaches the frontier when every ticket feeding into it has landed.</p>
           </Specimen>
           <Specimen name="type-meta">
-            <span className="meta">Holds up 4 tickets · 1 starts the moment it lands</span>
+            <Meta>Holds up 4 tickets · 1 starts the moment it lands</Meta>
           </Specimen>
           <Specimen name="type-name">
-            <a className="nm" href="#127">
-              Warn when no retail sample is chosen
-            </a>
-            <span className="id">#127</span>
+            <Named name="Warn when no retail sample is chosen" n={127} href="#127" />
           </Specimen>
           <Specimen name="type-skill">
             <span className="skill">/code-review</span>
           </Specimen>
           <Specimen name="type-chip">
-            <span className="chip">AFK</span>
+            <Chip>AFK</Chip>
           </Specimen>
           <Specimen name="type-num">
             <span className="num">10:20</span>
+          </Specimen>
+          <Specimen name="type-rule">
+            <div style={{ width: 200 }}>
+              <Rule />
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Names">
+        <div className={styles.row}>
+          <Specimen name="name-plain">
+            <Named name="Warn when no retail sample is chosen" n={127} />
+          </Specimen>
+          <Specimen name="name-row">
+            <span style={{ fontSize: "13.5px" }}>
+              <Named name="Flag peaks above −3 dB" n={127} href="#127" />
+            </span>
+          </Specimen>
+          <Specimen name="name-line">
+            <p>
+              <Named name="Flag peaks above −3 dB" n={127} href="#127" /> finished its session and
+              opened PR #141.
+            </p>
+          </Specimen>
+          <Specimen name="name-head">
+            <h2>
+              <Named name="Flag peaks above −3 dB" n={127} href="#127" />
+            </h2>
           </Specimen>
         </div>
       </Section>
 
       <Section title="Buttons">
+        {VARIANTS.map(([variant, label]) => (
+          <div key={variant} className={styles.row}>
+            {SIZES.flatMap(([size, props]) =>
+              [false, true].map((disabled) => (
+                <Specimen
+                  key={`${size}${disabled}`}
+                  name={`button-${variant}${size}${disabled ? "-disabled" : ""}`}
+                >
+                  <Button variant={variant} {...props} disabled={disabled}>
+                    {label}
+                  </Button>
+                </Specimen>
+              )),
+            )}
+          </div>
+        ))}
         <div className={styles.row}>
-          <Specimen name="button-primary">
-            <button type="button" className="btn btn-primary">
-              Arm the cascade
-            </button>
+          <Specimen name="button-link">
+            <Button variant="secondary" arrow href="#desk">
+              Open the desk
+            </Button>
           </Specimen>
-          <Specimen name="button-primary-disabled">
-            <button type="button" className="btn btn-primary" aria-disabled="true">
-              Arm the cascade
-            </button>
-          </Specimen>
-          <Specimen name="button-secondary">
-            <button type="button" className="btn btn-secondary">
-              Review PR #141
-            </button>
-          </Specimen>
-          <Specimen name="button-secondary-arrow">
-            <button type="button" className="btn btn-secondary btn-arrow">
-              Watch the session
-            </button>
-          </Specimen>
-          <Specimen name="button-secondary-small">
-            <button type="button" className="btn btn-secondary btn-sm">
-              Start an agent
-            </button>
-          </Specimen>
-          <Specimen name="button-ghost">
-            <button type="button" className="btn btn-ghost">
-              Queue an agent for when it unblocks
-            </button>
+          <Specimen name="button-link-disabled">
+            <Button variant="secondary" arrow href="#desk" disabled>
+              Open the desk
+            </Button>
           </Specimen>
         </div>
+      </Section>
+
+      <Section title="Frames">
+        <div className={styles.row}>
+          <Specimen name="frame">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Pane>
+                  <Filler what="the page" />
+                </Pane>
+              </Frame>
+            </div>
+          </Specimen>
+          <Specimen name="frame-no-route">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>}>
+                <Pane>
+                  <Filler what="the page" />
+                </Pane>
+              </Frame>
+            </div>
+          </Specimen>
+          <Specimen name="split-left">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Split left={{ label: "The queue", width: 240, children: <Filler what="the side" /> }}>
+                  <Filler what="the page" />
+                </Split>
+              </Frame>
+            </div>
+          </Specimen>
+          <Specimen name="split-right">
+            <div className={styles.frame}>
+              <Frame bar={<StandIn>The top bar</StandIn>} route={<StandIn>The route band</StandIn>}>
+                <Split right={{ label: "The detail", width: 260, children: <Filler what="the side" /> }}>
+                  <Filler what="the page" />
+                </Split>
+              </Frame>
+            </div>
+          </Specimen>
+        </div>
+      </Section>
+
+      <Section title="Test runs">
+        <Specimen name="runs">
+          <TestRuns runs={["red", "green", "red", "red", "green"]} />
+        </Specimen>
+      </Section>
+
+      <Section title="Thread">
+        <Specimen name="thread">
+          <div style={{ width: 340 }}>
+            <Thread steps={THREAD} />
+          </div>
+        </Specimen>
+      </Section>
+
+      <Section title="Acceptance criteria">
+        <Specimen name="criteria">
+          <div style={{ width: 340 }}>
+            <Criteria criteria={CRITERIA} />
+          </div>
+        </Specimen>
       </Section>
     </main>
   );

@@ -26,6 +26,18 @@
     .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
     .legend span { display: inline-flex; gap: 6px; align-items: center; }
 
+    /* The test rhythm's strip, from live-build.html; its margin below belongs to
+       the strip, with the meta line under it, not to the sequence. */
+    .rhythm { display: flex; flex-wrap: wrap; gap: 4px; }
+    .rhythm .tr { width: 14px; height: 14px; }
+
+    /* #70 drops the criterion's tick box, so the mark's column goes with it. */
+    .crit li { grid-template-columns: 1fr; }
+
+    /* A frame fills its specimen's box, not the viewport. */
+    .frame { width: 720px; height: 280px; }
+    .frame > .app { height: 100%; }
+
     body { padding: 24px; }
     section { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 24px; }
     /* Each specimen is its piece's markup in a bare box, the same box the gallery uses. */
@@ -67,20 +79,72 @@
     <div data-specimen="type-kicker"><span class="kicker">/to-tickets · 9 tracer bullets</span></div>
     <div data-specimen="type-display"><h2>Pre-delivery compliance checks</h2></div>
     <div data-specimen="type-body"><p>A ticket reaches the frontier when every ticket feeding into it has landed.</p></div>
-    <div data-specimen="type-meta"><span class="meta">Holds up 4 tickets · 1 starts the moment it lands</span></div>
+    <div data-specimen="type-meta"><p class="meta">Holds up 4 tickets · 1 starts the moment it lands</p></div>
     <div data-specimen="type-name"><a class="nm" href="#127">Warn when no retail sample is chosen</a><span class="id">#127</span></div>
     <div data-specimen="type-skill"><span class="skill">/code-review</span></div>
     <div data-specimen="type-chip"><span class="chip">AFK</span></div>
     <div data-specimen="type-num"><span class="num">10:20</span></div>
+    <div data-specimen="type-rule"><div style="width: 200px"><hr class="rule" /></div></div>
   </section>
 
+  <!-- The name with its id riding after it (principle 3), as a card, a desk row,
+       a chronicle line and a screen head carry it. -->
+  <section aria-label="Names">
+    <div data-specimen="name-plain">Warn when no retail sample is chosen<span class="id">#127</span></div>
+    <div data-specimen="name-row"><span style="font-size: 13.5px"><a class="nm" href="#127">Flag peaks above −3 dB</a><span class="id">#127</span></span></div>
+    <div data-specimen="name-line"><p><a class="nm" href="#127">Flag peaks above −3 dB</a><span class="id">#127</span> finished its session and opened PR #141.</p></div>
+    <div data-specimen="name-head"><h2><a class="nm" href="#127">Flag peaks above −3 dB</a><span class="id">#127</span></h2></div>
+  </section>
+
+  <!-- Every variant in every state. A disabled link is a disabled button: it
+       goes nowhere, so it is not drawn as a link. -->
   <section aria-label="Buttons">
     <div data-specimen="button-primary"><button type="button" class="btn btn-primary">Arm the cascade</button></div>
     <div data-specimen="button-primary-disabled"><button type="button" class="btn btn-primary" aria-disabled="true">Arm the cascade</button></div>
+    <div data-specimen="button-primary-small"><button type="button" class="btn btn-primary btn-sm">Arm the cascade</button></div>
+    <div data-specimen="button-primary-small-disabled"><button type="button" class="btn btn-primary btn-sm" aria-disabled="true">Arm the cascade</button></div>
+    <div data-specimen="button-primary-arrow"><button type="button" class="btn btn-primary btn-arrow">Arm the cascade</button></div>
+    <div data-specimen="button-primary-arrow-disabled"><button type="button" class="btn btn-primary btn-arrow" aria-disabled="true">Arm the cascade</button></div>
     <div data-specimen="button-secondary"><button type="button" class="btn btn-secondary">Review PR #141</button></div>
-    <div data-specimen="button-secondary-arrow"><button type="button" class="btn btn-secondary btn-arrow">Watch the session</button></div>
-    <div data-specimen="button-secondary-small"><button type="button" class="btn btn-secondary btn-sm">Start an agent</button></div>
-    <div data-specimen="button-ghost"><button type="button" class="btn btn-ghost">Queue an agent for when it unblocks</button></div>
+    <div data-specimen="button-secondary-disabled"><button type="button" class="btn btn-secondary" aria-disabled="true">Review PR #141</button></div>
+    <div data-specimen="button-secondary-small"><button type="button" class="btn btn-secondary btn-sm">Review PR #141</button></div>
+    <div data-specimen="button-secondary-small-disabled"><button type="button" class="btn btn-secondary btn-sm" aria-disabled="true">Review PR #141</button></div>
+    <div data-specimen="button-secondary-arrow"><button type="button" class="btn btn-secondary btn-arrow">Review PR #141</button></div>
+    <div data-specimen="button-secondary-arrow-disabled"><button type="button" class="btn btn-secondary btn-arrow" aria-disabled="true">Review PR #141</button></div>
+    <div data-specimen="button-ghost"><button type="button" class="btn btn-ghost">Queue an agent</button></div>
+    <div data-specimen="button-ghost-disabled"><button type="button" class="btn btn-ghost" aria-disabled="true">Queue an agent</button></div>
+    <div data-specimen="button-ghost-small"><button type="button" class="btn btn-ghost btn-sm">Queue an agent</button></div>
+    <div data-specimen="button-ghost-small-disabled"><button type="button" class="btn btn-ghost btn-sm" aria-disabled="true">Queue an agent</button></div>
+    <div data-specimen="button-ghost-arrow"><button type="button" class="btn btn-ghost btn-arrow">Queue an agent</button></div>
+    <div data-specimen="button-ghost-arrow-disabled"><button type="button" class="btn btn-ghost btn-arrow" aria-disabled="true">Queue an agent</button></div>
+    <div data-specimen="button-link"><a class="btn btn-secondary btn-arrow" href="#desk">Open the desk</a></div>
+    <div data-specimen="button-link-disabled"><button type="button" class="btn btn-secondary btn-arrow" aria-disabled="true">Open the desk</button></div>
+  </section>
+
+  <!-- The page skeleton (the prototype's "app frame"), each region scrolling on
+       its own. A specimen is a bounded box, so the frame fills it rather than the
+       viewport. The split's columns are set as each screen sets its own. -->
+  <section aria-label="Frames">
+    <div data-specimen="frame"><div class="frame"><div class="app"><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The top bar</p><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The route band</p><main class="pane"><p style="padding: 4px 20px">Line 1 of the page.</p><p style="padding: 4px 20px">Line 2 of the page.</p><p style="padding: 4px 20px">Line 3 of the page.</p><p style="padding: 4px 20px">Line 4 of the page.</p><p style="padding: 4px 20px">Line 5 of the page.</p><p style="padding: 4px 20px">Line 6 of the page.</p><p style="padding: 4px 20px">Line 7 of the page.</p><p style="padding: 4px 20px">Line 8 of the page.</p><p style="padding: 4px 20px">Line 9 of the page.</p><p style="padding: 4px 20px">Line 10 of the page.</p><p style="padding: 4px 20px">Line 11 of the page.</p><p style="padding: 4px 20px">Line 12 of the page.</p><p style="padding: 4px 20px">Line 13 of the page.</p><p style="padding: 4px 20px">Line 14 of the page.</p><p style="padding: 4px 20px">Line 15 of the page.</p></main></div></div></div>
+    <div data-specimen="frame-no-route"><div class="frame"><div class="app no-route"><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The top bar</p><main class="pane"><p style="padding: 4px 20px">Line 1 of the page.</p><p style="padding: 4px 20px">Line 2 of the page.</p><p style="padding: 4px 20px">Line 3 of the page.</p><p style="padding: 4px 20px">Line 4 of the page.</p><p style="padding: 4px 20px">Line 5 of the page.</p><p style="padding: 4px 20px">Line 6 of the page.</p><p style="padding: 4px 20px">Line 7 of the page.</p><p style="padding: 4px 20px">Line 8 of the page.</p><p style="padding: 4px 20px">Line 9 of the page.</p><p style="padding: 4px 20px">Line 10 of the page.</p><p style="padding: 4px 20px">Line 11 of the page.</p><p style="padding: 4px 20px">Line 12 of the page.</p><p style="padding: 4px 20px">Line 13 of the page.</p><p style="padding: 4px 20px">Line 14 of the page.</p><p style="padding: 4px 20px">Line 15 of the page.</p></main></div></div></div>
+    <div data-specimen="split-left"><div class="frame"><div class="app"><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The top bar</p><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The route band</p><main class="split" style="grid-template-columns: 240px minmax(0, 1fr)"><aside class="pane side-l" aria-label="The queue"><p style="padding: 4px 20px">Line 1 of the side.</p><p style="padding: 4px 20px">Line 2 of the side.</p><p style="padding: 4px 20px">Line 3 of the side.</p><p style="padding: 4px 20px">Line 4 of the side.</p><p style="padding: 4px 20px">Line 5 of the side.</p><p style="padding: 4px 20px">Line 6 of the side.</p><p style="padding: 4px 20px">Line 7 of the side.</p><p style="padding: 4px 20px">Line 8 of the side.</p><p style="padding: 4px 20px">Line 9 of the side.</p><p style="padding: 4px 20px">Line 10 of the side.</p><p style="padding: 4px 20px">Line 11 of the side.</p><p style="padding: 4px 20px">Line 12 of the side.</p><p style="padding: 4px 20px">Line 13 of the side.</p><p style="padding: 4px 20px">Line 14 of the side.</p><p style="padding: 4px 20px">Line 15 of the side.</p></aside><div class="pane"><p style="padding: 4px 20px">Line 1 of the page.</p><p style="padding: 4px 20px">Line 2 of the page.</p><p style="padding: 4px 20px">Line 3 of the page.</p><p style="padding: 4px 20px">Line 4 of the page.</p><p style="padding: 4px 20px">Line 5 of the page.</p><p style="padding: 4px 20px">Line 6 of the page.</p><p style="padding: 4px 20px">Line 7 of the page.</p><p style="padding: 4px 20px">Line 8 of the page.</p><p style="padding: 4px 20px">Line 9 of the page.</p><p style="padding: 4px 20px">Line 10 of the page.</p><p style="padding: 4px 20px">Line 11 of the page.</p><p style="padding: 4px 20px">Line 12 of the page.</p><p style="padding: 4px 20px">Line 13 of the page.</p><p style="padding: 4px 20px">Line 14 of the page.</p><p style="padding: 4px 20px">Line 15 of the page.</p></div></main></div></div></div>
+    <div data-specimen="split-right"><div class="frame"><div class="app"><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The top bar</p><p class="meta" style="padding: 12px 24px; border-bottom: 1px solid var(--border)">The route band</p><main class="split" style="grid-template-columns: minmax(0, 1fr) 260px"><div class="pane"><p style="padding: 4px 20px">Line 1 of the page.</p><p style="padding: 4px 20px">Line 2 of the page.</p><p style="padding: 4px 20px">Line 3 of the page.</p><p style="padding: 4px 20px">Line 4 of the page.</p><p style="padding: 4px 20px">Line 5 of the page.</p><p style="padding: 4px 20px">Line 6 of the page.</p><p style="padding: 4px 20px">Line 7 of the page.</p><p style="padding: 4px 20px">Line 8 of the page.</p><p style="padding: 4px 20px">Line 9 of the page.</p><p style="padding: 4px 20px">Line 10 of the page.</p><p style="padding: 4px 20px">Line 11 of the page.</p><p style="padding: 4px 20px">Line 12 of the page.</p><p style="padding: 4px 20px">Line 13 of the page.</p><p style="padding: 4px 20px">Line 14 of the page.</p><p style="padding: 4px 20px">Line 15 of the page.</p></div><aside class="pane side" aria-label="The detail"><p style="padding: 4px 20px">Line 1 of the side.</p><p style="padding: 4px 20px">Line 2 of the side.</p><p style="padding: 4px 20px">Line 3 of the side.</p><p style="padding: 4px 20px">Line 4 of the side.</p><p style="padding: 4px 20px">Line 5 of the side.</p><p style="padding: 4px 20px">Line 6 of the side.</p><p style="padding: 4px 20px">Line 7 of the side.</p><p style="padding: 4px 20px">Line 8 of the side.</p><p style="padding: 4px 20px">Line 9 of the side.</p><p style="padding: 4px 20px">Line 10 of the side.</p><p style="padding: 4px 20px">Line 11 of the side.</p><p style="padding: 4px 20px">Line 12 of the side.</p><p style="padding: 4px 20px">Line 13 of the side.</p><p style="padding: 4px 20px">Line 14 of the side.</p><p style="padding: 4px 20px">Line 15 of the side.</p></aside></main></div></div></div>
+  </section>
+
+  <!-- live-build.html's test rhythm: runs in order, a red before every green. -->
+  <section aria-label="Test run sequence">
+    <div data-specimen="runs"><div class="rhythm" aria-label="5 test runs"><span class="tr tr-red"></span><span class="tr tr-green"></span><span class="tr tr-red"></span><span class="tr tr-red"></span><span class="tr tr-green"></span></div></div>
+  </section>
+
+  <!-- WS.thread(128) from assets/wayfarer.js, as the ticket graph's panel draws
+       it: three landed steps, the running session, and two not reached yet. -->
+  <section aria-label="Thread">
+    <div data-specimen="thread"><div style="width: 340px"><ol class="thread"><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/wayfinder</span><div class="t-name"><a class="nm" href="#112">ACX compliance before delivery</a></div><div class="t-meta">What does ACX reject? · How should a failing chapter explain itself?</div></div></li><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/to-spec</span><div class="t-name"><a class="nm" href="#124">Pre-delivery compliance checks</a></div><div class="t-meta">Story 5</div></div></li><li class=""><span class="t-mark"><span class="st st-done" aria-hidden="true"></span></span><div><span class="t-skill">/to-tickets</span><div class="t-name"><a class="nm" href="#128">Flag a noise floor above −60 dB</a><span class="id">#128</span></div><div class="t-meta">After Flag loudness</div></div></li><li class=" next-pending"><span class="t-mark"><span class="st st-building" aria-hidden="true"></span></span><div><span class="t-skill">/tdd</span><div class="t-name"><a class="nm" href="#wt">wt/noise-floor</a></div><div class="t-meta">Claude Code · running now</div></div></li><li class="pending next-pending"><span class="t-mark"><span class="st st-pending" aria-hidden="true"></span></span><div><span class="t-skill">/code-review</span><div class="t-name">No PR yet</div></div></li><li class="pending"><span class="t-mark"><span class="st st-pending" aria-hidden="true"></span></span><div><span class="t-skill">merge</span><div class="t-name">Not landed</div></div></li></ol></div></div>
+  </section>
+
+  <!-- WS.criteriaList(128), with what #70 drops: no tick box, no test name. -->
+  <section aria-label="Acceptance criteria">
+    <div data-specimen="criteria"><div style="width: 340px"><ul class="crit"><li><span class="c-text">Measure the noise floor of every chapter</span></li><li><span class="c-text">Chapters above −60 dB fail the check</span></li><li><span class="c-text">Failures explain the value, the limit, and the timestamp</span></li><li><span class="c-text">The clean fixture passes</span></li></ul></div></div>
   </section>
 </body>
 </html>

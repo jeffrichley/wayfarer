@@ -82,7 +82,9 @@ The connecting line is solid through done steps and dashed into pending ones.
 
 ## Acceptance criteria list
 
-A list of the ticket's criteria, each with a checkbox mark (not met / met / weakly met) and, beneath it, the name of the test that proves it in mono. It's used in the ticket graph, live build, the review desk question view and the PR view. A criterion's test name is the bridge between the spec's words and the code.
+A list of the ticket's criteria, rendered as written and read-only. It's used in the ticket graph, live build, the review desk question view and the PR view.
+
+There are no ticks, no progress count and no test name beneath a criterion. Nothing ticks a criterion in the first slice, and a criterion is not claimed to be proven by a named test. The prototype still draws checkbox marks and test names; they are dead and were not ported ([#70](https://github.com/jeffrichley/wayfarer/issues/70)).
 
 ## Question card (`question-<n>`)
 

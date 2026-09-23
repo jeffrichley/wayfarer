@@ -1,0 +1,6 @@
+/* A sequence of test runs, in order, as live build's test rhythm draws one
+   (prototype/live-build.html). The strip's margin and the meta line under it
+   belong to the strip. */
+.runs { display: flex; flex-wrap: wrap; gap: 4px; }
+.runs li { display: flex; }
+.runs :global(.tr) { width: 14px; height: 14px; }
