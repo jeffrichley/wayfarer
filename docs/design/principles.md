@@ -1,7 +1,10 @@
+---
+type: principles
+---
 
 # Principles
 
-These rules decided most of the prototype. When a design question comes up during the build, the answer is usually here. Words in **bold** are defined in [`../CONTEXT.md`](../CONTEXT.md).
+These rules decided most of the prototype. When a design question comes up during the build, the answer is usually here. Words in **bold** are defined in [`../../CONTEXT.md`](../../CONTEXT.md).
 
 ## 1. A line, not a board
 
@@ -41,7 +44,7 @@ Fog, frontier, destination, seam, tracer bullets, red and green all come from th
 
 *Why:* someone who uses the skills already has this vocabulary. Renaming it would make them translate. Drawing it makes the skill easier to learn for someone new to it.
 
-*In practice:* check [`../CONTEXT.md`](../CONTEXT.md) before naming anything. When the skills have no word, use the chart metaphor (course, thread, chronicle).
+*In practice:* check [`../../CONTEXT.md`](../../CONTEXT.md) before naming anything. When the skills have no word, use the chart metaphor (course, thread, chronicle).
 
 ## 5. Steer in place, and show what will happen first
 
@@ -56,7 +59,7 @@ Buttons say what happens ("Post resolution and close", "Approve and merge", "Sen
 
 ## 6. Most unblocking first
 
-**Needs you** is ordered by how much each item unblocks, and each item says what it unblocks ("Unblocks 2 tickets and clears fog").
+**Needs you** is ordered by how much each item holds up, and each item says so ("Holds up 4 tickets · 1 starts the moment it lands"). An item holds up every open ticket downstream of it, because with a cascade armed, all of them would be worked the moment they could be.
 
 *Why:* when agents run in parallel, the person is the bottleneck. Their attention should go where it frees the most work.
 

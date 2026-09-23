@@ -48,16 +48,18 @@ Change one, run `just types`, and commit both.
 | `live-build.html` | a build in progress |
 | `review-desk.html` | reviewing what came back |
 
-`docs/` carries the intent behind each screen: `CONTEXT.md` for the vocabulary,
-`docs/design/` for the shell and visual language, `docs/screens/` per screen.
+`CONTEXT.md` at the root carries the vocabulary. `docs/` carries the intent behind
+each screen: `docs/design/` for the shell and visual language, `docs/screens/` per
+screen.
 
 ## Naming
 
-The prototype's own docs call it **Waystation**, which collides with
-[`jeffrichley/waystation`](https://github.com/jeffrichley/waystation) — a bare
-Python library for orchestrating sandboxed AI coding agents. Those are two
-different things and the names are not settled. Treat every name in here as
-provisional.
+**Wayfarer is this app. [Waystation](https://github.com/jeffrichley/waystation) is
+the library it runs on** — a sister repo of Python primitives for orchestrating
+sandboxed AI coding agents. Settled 2026-09-20.
+
+Parts of `docs/` still call this app "Waystation", as do the `assets/waystation.*`
+filenames and the `data-od-id` values. That naming is stale; read it as Wayfarer.
 
 ## Provenance
 

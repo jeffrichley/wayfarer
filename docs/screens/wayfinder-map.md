@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Wayfinder map
 
 **Prototype:** `wayfinder-map.html?effort=casting` (still charting), `?effort=acx` (way clear, handed off), `?effort=sample` (one ticket left; see [`handoff-to-spec.md`](handoff-to-spec.md)) · **Station:** `/wayfinder` · **Arrive from:** the route band, home, the effort switcher, a Needs-you item · **Leave to:** the spec reader once handed off, the desk for grilling

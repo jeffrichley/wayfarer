@@ -2,6 +2,7 @@
 .od-skills/
 plugin-source/
 *.artifact.json
+.DS_Store
 
 # Credentials: Wayfarer reads them from the environment it was launched in, never a file it owns.
 .env

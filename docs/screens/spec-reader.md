@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Spec reader
 
 **Prototype:** `spec-reader.html` (spec #124, *Pre-delivery compliance checks*) · **Station:** `/to-spec` · **Arrive from:** the route band, the thread, a map that has handed off · **Leave to:** the map a decision came from, the ticket graph, a specific ticket

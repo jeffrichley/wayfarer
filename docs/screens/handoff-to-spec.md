@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # The way is clear: handoff to `/to-spec`
 
 **Prototype:** `wayfinder-map.html?effort=sample` (the map *Choosing the retail sample*) · **Station:** `/wayfinder` → `/to-spec` · **Arrive from:** its row on home, the effort switcher, the desk item `map-160`, the Needs-you item "In session with you" · **Leave to:** slicing into tickets

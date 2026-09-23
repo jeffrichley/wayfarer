@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Review desk
 
 **Prototype:** `review-desk.html?item=<key>` (`pr-141`, `q-130`, `map-160`, `g-152`) · **Station:** `/code-review` → merge · **Arrive from:** "Needs you" in the top bar, Needs you on home, action blocks in the ticket graph · **Leave to:** the ticket, the session, the map
@@ -15,19 +19,19 @@ It answers: *what needs me, what happens when I decide, and what should I know b
 ## Layout
 
 - **Top bar** and **route band**, with the `/code-review` station current in the prototype.
-- **Queue** (`needs-you-queue`), left, 350px: "Needs you", "Grouped by effort, most unblocking first."
+- **Queue** (`needs-you-queue`), left, 350px: "Needs you", "What holds up the most work, first."
 - **Item** (`desk-item`), right: a scrolling working surface (`m-pane`) and, for PRs, a pinned **merge bar** at the bottom.
 
 ## Pieces
 
 ### Queue (`desk-<key>`)
-- **Grouping:** by effort. The current effort comes first, then "Elsewhere · *effort name*".
+- **Order:** one list across efforts, by what each item holds up ([ordering rules](../design/data-and-commands.md#needs-you-derived)). Each item names its effort. The order freezes while you are on the desk and re-ranks when you come back; new items join at the bottom, marked new.
 - **Each item** is a button showing:
   - a glyph: half ring for a review, diamond for anything waiting on an answer
   - the kind in mono ("Review", "Question", "Grilling · HITL", "Seam · /to-spec")
   - the name in serif
   - the ask ("/code-review found one gap against the spec")
-  - what it unblocks ("Unblocks 1 ticket", "Clears the way to the destination")
+  - what it holds up ("Holds up 4 tickets · 1 starts the moment it lands")
 - **Resolved items stay in place,** dimmed, with what happened ("Merged just now", "Answered · the session resumed"), so the person sees their own progress through the queue.
 - **Selecting** sets `aria-pressed` and `?item=`, and the queue repaints in place so focus stays on the item.
 
@@ -103,7 +107,7 @@ It answers: *what needs me, what happens when I decide, and what should I know b
 ## Prototype shortcuts
 
 - **Hard-coded items:** four items with hand-written content, and the diff is a small fixed excerpt.
-- **Queue order is authored,** not computed.
+- **Queue order is authored,** not computed. The real rule is in [`data-and-commands.md`](../design/data-and-commands.md#needs-you-derived).
 - **Demo actions** are saved in `sessionStorage` and shared with home, the ticket graph and live build: merge, answer, send finding, start grilling.
 - **Local-only comments:** line comments and change requests change only local markup.
 - **Station highlight:** the route band always highlights `/code-review`, even for question and grilling items.

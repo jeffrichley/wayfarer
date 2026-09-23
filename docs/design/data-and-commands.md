@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # Data and commands
 
 This doc covers where everything on screen comes from, and what every steering action has to do in the real build. The prototype fakes both with sample data in `assets/waystation.js`.
@@ -15,9 +19,45 @@ Each part is marked as one of three kinds, and they need to stay distinct:
 | GitHub pull requests and checks | PRs, diffs, CI status, merges |
 | The repo itself | Installed skills, `docs/agents/*`, `CONTEXT.md`, ADRs (these give readiness) |
 | Claude Code sessions in git worktrees | Running work: beats, test runs, questions, changed files |
-| Waystation's own store | Only what nothing else holds: per-user "last visit" for the home headline, queued agents, notes waiting to be read. Keep it minimal. |
+| Wayfarer's own store | Only what nothing else holds. See [The store](#the-store-decided). |
 
 **Principle:** GitHub is the record. Waystation derives state and never keeps a second copy of workflow state that could drift from the tracker.
+
+## Freshness *(decided)*
+
+Wayfarer hears from GitHub by **poke-and-re-read** ([ADR-0003](../adr/0003-poke-and-re-read.md)). One signal, *something may have changed*, triggers a re-read, and nothing Wayfarer receives is applied as data.
+
+- **Its own writes** trigger an immediate re-read of what they touched.
+- **A conditional poll** (`issues?since=…&sort=updated` with an `ETag`) runs every 10 s while a cascade is armed or a browser is open, and every 60 s otherwise. A `304` costs no rate limit. It respects `X-Poll-Interval` and backs off on `403`/`429`.
+- **PR checks** don't bump the issue, so each PR the cascade is waiting on is polled for its checks on the same rhythm.
+- **Webhooks** are deferred ([Webhooks as a poke](https://github.com/jeffrichley/wayfarer/issues/18)): a poke through a tunnel the person runs, never data, and never a replacement for the poll.
+
+**One read model** serves the screens and the cascade: a single GraphQL read of the effort's ticket graph per change (about 3 points for 30 tickets).
+
+**When GitHub and a live session disagree, GitHub owns the state.** A live session only annotates the card with its stage, its last beat, or "session ended, waiting for GitHub to confirm". A state never advances on a hook alone ([ADR-0002](../adr/0002-hooks-are-never-the-truth-about-a-ticket.md)). If GitHub shows a ticket landed or closed while a session is still live on it, the card shows GitHub's state and the session is flagged in Needs you. It is not stopped automatically.
+
+## The store *(decided)*
+
+One SQLite file per repo (stdlib `sqlite3`, WAL), outside the checkout, at `~/.local/share/wayfarer/<owner>/<repo>/`, beside the per-run event files. It holds only what a restarted Wayfarer needs and GitHub cannot hold:
+
+- **Sessions Wayfarer started:** run id, ticket, purpose, started, ended, event file, and the Outcome. Recorded at `run_start`, since Waystation generates the run id and nothing in the library writes it down.
+- **Armed cascades:** which effort, and whether it is paused.
+- **Last visit**, for the home headline. Updated on leaving home, so a refresh keeps the headline.
+- **Settings**, per repo. The concurrency cap, default 3, is one number shared by every armed cascade. Auto-merge on green is on by default. A PR with no checks at all counts as green, since the effort's own PR into the trunk is where the repo's gates apply. Any pending check waits, and any failing check goes to Needs you. Session time caps default to 20 min of silence and 2 h of wall time, with no cap on turns or dollars. The merge queue's re-test is capped at 30 min of wall time, with no silence cap; hitting it counts as a failed re-test.
+
+Notes and queued agents are gone. Notes had nowhere to go once mid-run steering was cut, and an armed cascade replaces a per-ticket queue.
+
+**Event files.** Wayfarer owns retention, since Waystation's `EventLog` has none. A session's JSONL file is kept until its effort ships, then deleted. The Outcome stays in the store.
+
+**Restart.** Read the store, then GitHub, then Docker containers labelled `waystation.run-id`.
+- A stored session with no end is an **orphan**. It appears in Needs you, naming its ticket, and is offered `DockerSandbox.reap(run_id)`.
+- A labelled container with no store row is shown as unknown and never reaped automatically. The label carries no repo, so it may belong to another repo's Wayfarer.
+- An armed cascade comes back **paused**, so a restart never spends money unasked.
+
+**Questions.** A session asks with `AskUserQuestion`, and a hook in the image defers the call, which ends the session ([Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19)).
+- **On GitHub:** a question comment on the ticket, carrying a hidden marker naming the session, plus the `wayfarer:asked` label. That is the whole state.
+- **Answering:** removing the label is the signal, whether the person answered in the desk or on GitHub.
+- **Locally:** the session's transcript is a file beside its event files, with the same retention. If it is lost, the resume starts cold with the question and answer in its prompt.
 
 ## The read model
 
@@ -61,11 +101,13 @@ Each part is marked as one of three kinds, and they need to stay distinct:
 - **Acceptance criterion → test name:** taken from the session (the test it wrote for that criterion) or from the PR. *Open.*
 - **State:**
   1. PR merged or issue closed as completed → **landed**
-  2. PR open → **in review**
-  3. its session paused on a question → **waiting on you**
-  4. a session running → **building**
-  5. every blocker landed and nobody on it → **takeable**
-  6. otherwise → **blocked**
+  2. labelled `wayfarer:asked` → **asked**
+  3. labelled `wayfarer:held` → **held** (a draft PR when the session left commits, a comment when it left none)
+  4. PR ready (not draft), checks green or absent, and approved when auto-merge is off → **landing**. Wayfarer enqueues every such ticket it is not already landing, so a restart rebuilds the merge queue from GitHub in PR-ready order
+  5. PR open → **in review**
+  6. a session running → **building**
+  7. every blocker landed and nobody on it → **takeable**
+  8. otherwise → **blocked**
 
 ### Session *(open: this is the biggest unknown)*
 A Claude Code run on one ticket in `wt/<name>`. The screens need:
@@ -85,18 +127,50 @@ An item appears when any of these is true:
 
 | Kind | Condition |
 |---|---|
-| Review | A ticket's PR is open with `/code-review` done and awaiting a human |
-| Question | A session is paused on a question |
-| Grilling / prototype | A HITL decision ticket is on the frontier, or claimed by you and in session |
-| Seam | `/to-spec` is waiting for seam agreement |
+| In review | Auto-merge is off and a clean, green PR is waiting for approval |
+| Question | A ticket is Asked: labelled `wayfarer:asked` |
+| Held | A ticket is labelled `wayfarer:held`: a blocking finding, a failed attempt, or work that could not land (a red re-test on the latest effort branch, or a conflict a resolver session couldn't clear), said in plain words |
+| Environment | A session failed for a reason that was not its own, and the cascade paused. A ticket that had not reached Landing went back on the frontier; a Landing ticket keeps its place in the merge queue. One item also covers an effort branch whose own tests are red |
 | Drafts | `/to-tickets` drafts are waiting for the person to check them (its "quiz the user" step) |
+| Ship the effort | Every ticket in an effort is closed and the cascade has disarmed |
+| Orphan container | A container labelled with a run id outlived its session, and is offered for `reap` |
+| Closed with a live session | GitHub closed a ticket whose session is still running |
 
-**Ordering:** by how much the item unblocks. Count the tickets whose *last* open blocker is this item, and add weight when resolving it would clear fog or clear the way. Each item states that effect in words.
+Grilling and prototype tickets and seams are not in this slice: those stations are out of scope.
+
+**Ordering.** Decided in [What "most unblocking first" computes in Needs you](https://github.com/jeffrichley/wayfarer/issues/24).
+- **One list** across every effort in the repo, each item naming its effort on the right.
+- **Environment** is pinned above everything, unscored. It pauses every cascade, and there is only ever one.
+- **Everything else that concerns a ticket** ranks by what it **holds up**: the item's ticket plus every open ticket downstream of it, since a cascade would work all of them the moment it could. A ticket stalled by two items counts in both; nothing ever adds the counts up. A draft counts every ticket in it.
+- **Items that hold up no ticket** come last: Ship the effort, then orphan containers, then closed tickets with a live session.
+- **Ties** go to whatever has waited longest.
+- **On the desk the order freezes** while you work. Counts and sentences update live, new items join at the bottom marked new, and it re-ranks when you come back. Home always shows the live order.
+- **Sentences** are templated, with the reason or question first:
+
+  | Kind | Sentence |
+  |---|---|
+  | Environment | "Every cascade is paused · ⟨plain-words reason⟩" |
+  | Question | "⟨question's gist⟩ · Holds up N tickets" |
+  | Held | "⟨plain-words Held reason⟩ · Holds up N tickets · M start when it lands" |
+  | In review | "Clean and green, waiting on your approval · Holds up N tickets" |
+  | Drafts | "N tickets drafted from ⟨spec⟩, waiting on your check" |
+  | Ship the effort | "Every ticket landed · one review to ship ⟨effort⟩" |
+  | Orphan container | "A container from ⟨ticket⟩ outlived its session" |
+  | Closed with a live session | "⟨ticket⟩ was closed on GitHub while its session runs" |
+
+  "M start" counts the tickets that become takeable the moment it resolves. When that is none, the clause is dropped.
+- **The words.** "Holds up", never "unblocks": resolving a Held ticket may start nothing yet while still freeing everything behind it.
 
 ### Chronicle *(derived)*
-- **Contents:** one sentence per meaningful event, newest first, grouped by day, each naming things by name and tagged with its skill.
-- **Home headline:** summarises events since the person's last visit (stored by Waystation).
-- *Open:* whether sentences are templated or written by a model, and how events are merged ("Three tickets reached the frontier, and two agents picked them up").
+Decided in [The chronicle](https://github.com/jeffrichley/wayfarer/issues/22).
+- **Source:** a pure function of the effort's GitHub issue and PR timelines, plus the session rows already in the store. Nothing new is stored, so a rebuild gives the same chronicle. Facts that live only in Wayfarer, such as a paused cascade, appear in Needs you while live and never in the chronicle.
+- **Sentences:** templated, one template per event kind. Where a line needs prose it quotes text that already exists: the question's gist, the plain-words Held reason, the first sentence of the Outcome summary. No model writes lines.
+- **What earns a line:** a ticket taken, Asked (with the question's gist), answered and resumed, Held (with the reason), retried (Continue or Start over), landed (with what it unblocked), closed without landing; a cascade armed; an effort ready to ship, and shipped; tickets published by `/to-tickets`. **Never:** beats, which skill is running, a PR opening, entering the queue, re-testing, a resolver session (these show on the card while Landing, and reach the chronicle only as the Held or Landed they end in), CI runs, label noise.
+- **Folding, by cause:** a line is one landing, answer, arming or publish plus what it *directly* caused: the tickets it made takeable and the sessions the cascade started on them. A ticket assigned after its last blocker closed folds into that blocker's line. Unrelated events are never folded by time. A line is at most two sentences; any overflow gets its own line.
+- **Who acted:** by kind of event, not by the timeline's actor, since Wayfarer writes with the person's token. Automatic kinds (taken, landed, Held) read passively; a person's kinds (answered, let it land, retried, closed without landing, armed) read "You". An assignment with no session row in the store is a person taking the ticket. Wayfarer closes a landed ticket with a comment ("Landed on ⟨effort branch⟩ at ⟨sha⟩") carrying a hidden marker, so a close without one is a person's. Any other login is named.
+- **Each line** shows the time, a status glyph, the sentence, and the effort's name on the right. Not the skill.
+- **Paging:** Today and Yesterday on home, then Earlier one day at a time. A shipped effort's lines stay, ending with "⟨effort⟩ shipped". Nothing is cached beyond memory.
+- **Home headline and standfirst:** templated, separately from the chronicle, from the same events since the last visit. The headline is under 14 words and leads with the top Needs you item, then landings. The standfirst is one sentence per active effort, from its counts. The last visit is local to this machine and is updated on leaving home, not on arriving.
 
 ## Commands (steering)
 
@@ -112,16 +186,21 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 | Agree seam and write the spec | `agree-seam` | Answer `/to-spec`'s seam check. `/to-spec` publishes the spec with `ready-for-agent`, and the map gets a pointer and closes. | Pointer convention proposed |
 | Slice into tickets / Slice the uncovered stories | `slice-into-tickets`, `slice-uncovered` | Start `/to-tickets` on the spec (or on named stories). The drafts come back to the person before publishing. | Defined by `/to-tickets` |
 | Publish tickets | `publish-drafts` | Publish the approved drafts with blocking edges and `ready-for-agent` | Defined by `/to-tickets` |
-| Start an agent on this ticket | `start-agent`, `start-agent-132` | Claim the ticket, create `wt/<name>` from main, and start a Claude Code session running `/tdd` on it | Transport open |
-| Queue an agent for when it unblocks | `queue-agent` | Waystation remembers the request and starts the session when the last blocker lands | Waystation store |
-| Pause / Resume | `pause-session` | Pause the session at its next safe point, then resume it | Transport open |
+| Start an agent on this ticket | `start-agent`, `start-agent-132` | Superseded: arming a cascade is the only way a session starts | Cut ([The cascade](https://github.com/jeffrichley/wayfarer/issues/14)) |
+| Arm a cascade | none yet | Confirm in one line ("4 tickets are takeable now, up to 3 at a time"), then start each takeable ticket: assign it, then submit its flow | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
+| Pause / Resume the cascade | none yet | Stop submitting; running sessions finish. Resume submits again | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
+| Stop a ticket | none yet | Cancel its session with salvage. The ticket stays claimed and is Held | [The cascade](https://github.com/jeffrichley/wayfarer/issues/14) |
+| Retry a Held ticket | none yet | Clear `wayfarer:held` and start a session. **Continue** (the default when there are commits) resumes the transcript on the preservation branch. **Start over** runs on the effort branch's head and closes the draft PR. It is the default for a ticket Held by a red re-test, since continuing would build on the version that broke | [The unhappy path of a session](https://github.com/jeffrichley/wayfarer/issues/20) |
+| Queue an agent for when it unblocks | `queue-agent` | Superseded by arming a cascade for the effort, which starts every ticket as it becomes takeable | Wayfarer's store (armed cascade) |
+| Pause / Resume a session | `pause-session` | Pause the session at its next safe point, then resume it | Cut: nothing flows into a running session |
 | Send note | `send-note` | Deliver a note the session reads before its next step, without stopping it | Transport open |
 | Open terminal | `open-terminal` | Open the worktree's session in a real terminal | Open |
-| Send answer and resume | `send-answer-<n>` | Deliver the answer to the paused session, post it to the ticket as a comment, and resume | Transport open |
+| Send answer and resume | `send-answer-<n>` | Post an answer comment on the ticket, remove `wayfarer:asked`, and queue a resume: a fresh container on the preservation branch runs `--resume` with the stored transcript, and the hook hands the answer to the deferred `AskUserQuestion` call | [Ask by ending](https://github.com/jeffrichley/wayfarer/issues/19) |
 | Send finding to the agent | `send-finding` | Reopen the ticket's session with the finding as its task | Transport open |
 | Comment on a diff line | `pr-diff` rows | Post a PR review comment *and* deliver it to the worktree session | Transport open |
 | Request changes | `request-changes` | Post a changes-requested review and reopen the session with the request | Transport open |
-| Approve and merge | `approve-merge` | Approve and merge the PR; the ticket lands, and dependents may reach the frontier | GitHub |
+| Let it land | none yet | For a Held ticket with a PR: mark the PR ready and remove `wayfarer:held`, so it joins the merge queue. Marking it ready by hand on GitHub does the same, and Wayfarer clears the label | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
+| Land it | `approve-merge` | With auto-merge off, approve a clean PR so it joins the merge queue. An approving review on GitHub does the same. Merging by hand on GitHub skips the queue and is accepted as landed, untested | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
 
 ## Global open questions
 
@@ -130,4 +209,4 @@ Each command lives in the prototype at the `data-od-id` shown. "Must do" is the 
 3. **Several people:** "Needs you" assumes one person driving. What changes when a team shares a repo? Is "you" the assignee?
 4. **The conventions above:** map → spec pointer, fog → ticket graduation, story → ticket, seam record. Should these be written back into the skills (upstream changes to mattpocock/skills) or kept as Waystation-side inference?
 5. **Several repos:** the repo switcher implies it. Does "Needs you" roll up across repos?
-6. **Freshness:** GitHub webhooks, polling, or both, and how fast sessions have to feel live.
+6. **Freshness:** decided. Poke-and-re-read with a conditional poll, webhooks later. See [Freshness](#freshness-decided).

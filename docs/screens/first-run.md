@@ -1,3 +1,7 @@
+---
+type: reference
+status: draft
+---
 # First run
 
 **Prototype:** `first-run.html` · **Station:** `/wayfinder` · **Arrive from:** the repo switcher, choosing a repo with no maps (the sample is *madrigal*) · **Leave to:** the new map, once charted
