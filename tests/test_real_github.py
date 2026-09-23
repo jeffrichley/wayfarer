@@ -13,6 +13,7 @@ import httpx
 import pytest
 
 from wayfarer.github import GitHub, Repo, ref
+from wayfarer.merge_queue import _PULL, _READY
 from wayfarer.read_model import _EFFORT
 from wayfarer.settings import Settings
 
@@ -51,6 +52,24 @@ def test_the_read_holds_against_real_github_within_its_point_budget() -> None:
     assert "errors" not in body, body["errors"]
     assert len(body["data"]["repository"]["issue"]["subIssues"]["nodes"]) >= 30
     assert body["data"]["rateLimit"]["cost"] <= 3
+
+
+def test_the_merge_queue_reads_when_pull_requests_became_ready_for_one_point() -> None:
+    # Two of Wayfarer's own merged pull requests.
+    aliases = "".join(_PULL % {"number": number} for number in (75, 76))
+    priced = (_READY % aliases).replace("repository(", "rateLimit { cost } repository(", 1)
+
+    response = httpx.post(
+        "https://api.github.com/graphql",
+        headers={"Authorization": f"bearer {_token()}"},
+        json={"query": priced, "variables": {"owner": _OWNER, "name": _NAME}},
+        timeout=Settings().github_timeout,
+    )
+
+    body = response.json()
+    assert "errors" not in body, body["errors"]
+    assert body["data"]["repository"]["pr75"]["createdAt"]
+    assert body["data"]["rateLimit"]["cost"] <= 1
 
 
 @pytest.mark.parametrize(
