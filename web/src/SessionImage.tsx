@@ -10,6 +10,7 @@ export function SessionImage() {
   const [finished, setFinished] = useState<BuildFinished | null>(null);
 
   // Bumped to read the status again, after a click and when a build finishes.
+  // Read by fetch until the page's one stream lands (#31), which will carry it.
   const [asked, setAsked] = useState(0);
   const refresh = () => setAsked((n) => n + 1);
 

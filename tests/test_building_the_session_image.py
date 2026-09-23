@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 
-from conftest import Launcher, events, get, post
+from conftest import Launcher, commit_layer, events, get, post
 
 pytestmark = pytest.mark.docker
 
@@ -30,9 +30,7 @@ def built_tags() -> Iterator[list[str]]:
 
 def _build(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
     """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
-    layer = clone / ".wayfarer"
-    layer.mkdir(exist_ok=True)
-    (layer / "Dockerfile").write_text(dockerfile)
+    commit_layer(clone, dockerfile)
 
     assert post(f"{url}api/image/build").status_code == 202
     output: list[str] = []
@@ -132,10 +130,8 @@ def test_a_second_click_while_building_joins_the_build_rather_than_starting_anot
     wayfarer: Launcher, clone: Path, built_tags: list[str]
 ) -> None:
     url = wayfarer.start().url()
-    layer = clone / ".wayfarer"
-    layer.mkdir()
     # Unique, so Docker's cache cannot make it quick enough to finish between clicks.
-    (layer / "Dockerfile").write_text(f"FROM wayfarer-base\nRUN sleep 3 && echo {uuid4()}\n")
+    commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {uuid4()}\n")
 
     assert post(f"{url}api/image/build").status_code == 202
     assert get(f"{url}api/image").json()["building"] is True
@@ -145,3 +141,23 @@ def test_a_second_click_while_building_joins_the_build_rather_than_starting_anot
 
     assert [kind for kind, _ in streamed].count("finished") == 1
     assert sum("RUN sleep 3" in event.get("line", "") for _, event in streamed) == 1
+
+
+def test_editing_the_layer_mid_build_does_not_change_what_the_build_is_tagged(
+    wayfarer: Launcher, clone: Path, built_tags: list[str]
+) -> None:
+    url = wayfarer.start().url()
+    marker = uuid4().hex
+    commit_layer(clone, f"FROM wayfarer-base\nRUN sleep 3 && echo {marker} > /tmp/built\n")
+    clicked = get(f"{url}api/image").json()["tag"]
+
+    assert post(f"{url}api/image/build").status_code == 202
+    commit_layer(clone, "FROM wayfarer-base\nRUN echo edited > /tmp/built\n")
+    *_, (_, finished) = events(f"{url}api/image/build")
+    built_tags.append(finished["tag"])
+
+    assert finished["tag"] == clicked
+    inside = subprocess.run(
+        ["docker", "run", "--rm", clicked, "cat", "/tmp/built"], capture_output=True, text=True
+    )
+    assert inside.stdout.strip() == marker

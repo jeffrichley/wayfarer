@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import shutil
 import tempfile
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
@@ -163,7 +164,7 @@ class Images:
     """One repo's session image: what it would be, and the build a person last asked for."""
 
     def __init__(self, repo: Path, recipe: Recipe = BASE) -> None:
-        self._layer = repo / LAYER
+        self._layer = (repo / LAYER).parent
         self._recipe = recipe
         self.last_build: Build | None = None
         self._running: asyncio.Task[None] | None = None
@@ -173,11 +174,11 @@ class Images:
         return self.last_build is not None and not self.last_build.finished
 
     async def status(self) -> ImageStatus:
-        if not self._layer.is_file():
+        if not _has_layer(self._layer):
             return ImageStatus(
                 layer=LAYER, refusal=REFUSAL, tag=None, ready=False, building=self.building
             )
-        current = tag(self._layer.parent, self._recipe)
+        current = tag(self._layer, self._recipe)
         return ImageStatus(
             layer=LAYER,
             refusal=None,
@@ -191,20 +192,30 @@ class Images:
 
         Builds happen only when a person asks: nothing else calls this.
         """
-        if not self._layer.is_file():
+        if not _has_layer(self._layer):
             raise NoLayer
         if self.building:
             return
-        build = Build(tag(self._layer.parent, self._recipe))
+        # Hashed and built from one copy taken now, so editing the layer while it
+        # builds cannot tag an image under a hash of other inputs.
+        snapshot = Path(tempfile.mkdtemp(prefix="wayfarer-layer-"))
+        shutil.copytree(self._layer, snapshot, dirs_exist_ok=True)
+        build = Build(tag(snapshot, self._recipe))
         self.last_build = build
-        self._running = asyncio.create_task(self._build(build))
+        self._running = asyncio.create_task(self._build(build, snapshot))
 
-    async def _build(self, build: Build) -> None:
+    async def _build(self, build: Build, layer: Path) -> None:
         try:
-            finished = await _build_and_probe(build, self._layer.parent, self._recipe)
+            finished = await _build_and_probe(build, layer, self._recipe)
         except OSError as error:
             finished = _failed(build, f"Docker could not be run: {error}")
+        finally:
+            shutil.rmtree(layer, ignore_errors=True)
         await build.finish(finished)
+
+
+def _has_layer(layer: Path) -> bool:
+    return (layer / "Dockerfile").is_file()
 
 
 async def _build_and_probe(build: Build, layer: Path, recipe: Recipe) -> BuildFinished:

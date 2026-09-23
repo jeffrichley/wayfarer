@@ -133,6 +133,13 @@ def wayfarer(clone: Path, tmp_path: Path) -> Iterator[Launcher]:
     launcher.close()
 
 
+def commit_layer(clone: Path, dockerfile: str) -> None:
+    """Give the repo its own layer of the session image."""
+    layer = clone / ".wayfarer"
+    layer.mkdir(exist_ok=True)
+    (layer / "Dockerfile").write_text(dockerfile)
+
+
 def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
 
@@ -166,6 +173,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 def _docker_answers() -> bool:
     try:
+        # Bounded so a wedged daemon skips the tier rather than hanging collection.
         return subprocess.run(["docker", "info"], capture_output=True, timeout=30).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False

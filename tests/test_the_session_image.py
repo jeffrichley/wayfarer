@@ -7,15 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from conftest import Launcher, get, post
+from conftest import Launcher, commit_layer, get, post
 
 pytestmark = pytest.mark.git
-
-
-def _commit_layer(clone: Path, dockerfile: str) -> None:
-    layer = clone / ".wayfarer"
-    layer.mkdir(exist_ok=True)
-    (layer / "Dockerfile").write_text(dockerfile)
 
 
 def test_a_repo_with_no_layer_of_its_own_is_refused_and_told_what_to_add(
@@ -37,7 +31,7 @@ def test_a_repo_with_no_layer_of_its_own_is_refused_and_told_what_to_add(
 def test_a_repo_with_a_layer_is_not_refused_and_has_a_tag_waiting_to_be_built(
     wayfarer: Launcher, clone: Path
 ) -> None:
-    _commit_layer(clone, "FROM wayfarer-base\n")
+    commit_layer(clone, "FROM wayfarer-base\n")
     url = wayfarer.start().url()
 
     status = get(f"{url}api/image").json()
@@ -48,11 +42,11 @@ def test_a_repo_with_a_layer_is_not_refused_and_has_a_tag_waiting_to_be_built(
 
 
 def test_changing_the_layer_changes_the_tag(wayfarer: Launcher, clone: Path) -> None:
-    _commit_layer(clone, "FROM wayfarer-base\n")
+    commit_layer(clone, "FROM wayfarer-base\n")
     url = wayfarer.start().url()
     before = get(f"{url}api/image").json()["tag"]
 
-    _commit_layer(clone, "FROM wayfarer-base\nRUN echo toolchain\n")
+    commit_layer(clone, "FROM wayfarer-base\nRUN echo toolchain\n")
     edited = get(f"{url}api/image").json()["tag"]
     (clone / ".wayfarer" / "requirements.txt").write_text("pytest\n")
     added = get(f"{url}api/image").json()["tag"]
@@ -61,7 +55,7 @@ def test_changing_the_layer_changes_the_tag(wayfarer: Launcher, clone: Path) -> 
 
 
 def test_an_image_nobody_has_built_is_not_ready(wayfarer: Launcher, clone: Path) -> None:
-    _commit_layer(clone, f"FROM wayfarer-base\nRUN echo {uuid4()}\n")
+    commit_layer(clone, f"FROM wayfarer-base\nRUN echo {uuid4()}\n")
     url = wayfarer.start().url()
 
     assert get(f"{url}api/image").json()["ready"] is False
@@ -70,7 +64,7 @@ def test_an_image_nobody_has_built_is_not_ready(wayfarer: Launcher, clone: Path)
 def test_there_is_no_build_output_until_someone_asks_for_a_build(
     wayfarer: Launcher, clone: Path
 ) -> None:
-    _commit_layer(clone, "FROM wayfarer-base\n")
+    commit_layer(clone, "FROM wayfarer-base\n")
     url = wayfarer.start().url()
 
     assert get(f"{url}api/image/build").status_code == 404
