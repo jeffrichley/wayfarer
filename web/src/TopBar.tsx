@@ -49,7 +49,7 @@ export function TopBar({ repo, repos, effort, working, needsYou }: TopBarProps) 
       <span className={styles.sep} aria-hidden="true">
         /
       </span>
-      <Switch which="repo" label={repo} open={open} setOpen={setOpen}>
+      <Switch which="repo" label={repo} menu={open} setOpen={setOpen}>
         <RepoItems repos={repos} />
       </Switch>
       {effort && (
@@ -57,7 +57,7 @@ export function TopBar({ repo, repos, effort, working, needsYou }: TopBarProps) 
           <span className={styles.sep} aria-hidden="true">
             /
           </span>
-          <Switch which="effort" label={effort.name} open={open} setOpen={setOpen}>
+          <Switch which="effort" label={effort.name} menu={open} setOpen={setOpen}>
             <EffortItems efforts={effort.efforts} landed={effort.landed} />
           </Switch>
         </>
@@ -95,19 +95,20 @@ function agents(count: number) {
 function Switch({
   which,
   label,
-  open: opened,
+  menu,
   setOpen,
   children,
 }: {
   which: Which;
   label: string;
-  open: Which | null;
+  // The bar's open menu, if any.
+  menu: Which | null;
   setOpen: Dispatch<SetStateAction<Which | null>>;
   children: ReactNode;
 }) {
-  const open = opened === which;
+  const open = menu === which;
   const id = useId();
-  const own = useRef<HTMLDivElement>(null);
+  const self = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -117,23 +118,27 @@ function Switch({
     // Only this switcher's own menu: by the time a stale listener runs, the other
     // one may be the menu that is open.
     const onClose = () => setOpen((now) => (now === which ? null : now));
-    const lost = () => document.activeElement === null || document.activeElement === document.body;
+    const focusDropped = () =>
+      document.activeElement === null || document.activeElement === document.body;
     const onClick = (event: MouseEvent) => {
-      if (own.current?.contains(event.target as Node)) {
+      if (self.current?.contains(event.target as Node)) {
         return;
       }
       onClose();
       // A click on nothing focusable drops focus to the page; it goes back to
       // the button. A click on something that took focus keeps it there.
-      if (lost()) {
+      if (focusDropped()) {
         trigger.current?.focus();
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      // Only while focus is in this switcher, or nowhere: the key is not someone
-      // else's Escape.
-      if (event.key === "Escape" && (lost() || own.current?.contains(document.activeElement))) {
-        onClose();
+      if (event.key !== "Escape") {
+        return;
+      }
+      onClose();
+      // Focus comes back from the menu, or from nowhere; focus the person has
+      // since moved elsewhere stays where they put it.
+      if (focusDropped() || self.current?.contains(document.activeElement)) {
         trigger.current?.focus();
       }
     };
@@ -146,13 +151,13 @@ function Switch({
   }, [open, which, setOpen]);
 
   return (
-    <div className={styles.switch} ref={own}>
+    <div className={styles.switch} ref={self}>
       <button
         ref={trigger}
         className={which === "repo" ? styles.repoBtn : styles.effortBtn}
         type="button"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         data-piece={`${which}-switcher`}
         onClick={() => setOpen((now) => (now === which ? null : which))}
       >

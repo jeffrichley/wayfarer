@@ -23,7 +23,7 @@ It answers: where am I, is anything working, and does anything need me?
 | Needs you | `needs-you` | A count of everything waiting on a person. It links to the desk. The count badge is ink, not accent. When nothing is waiting it becomes a quiet grey badge with a 0, and stays in place. |
 | Theme toggle | `theme-toggle` | Switches between the chart and the night chart. See [`visual-language.md`](visual-language.md#themes). |
 
-**Menus:** open on click. Escape and an outside click close them. Only one menu is open at a time. After Escape focus returns to its button, and after an outside click too, unless the click landed on something that took focus. Each switcher is a disclosure button (`aria-expanded`) over a list of links ([#47](https://github.com/jeffrichley/wayfarer/issues/47)).
+**Menus:** open on click. Escape and an outside click close them. Only one menu is open at a time. Closing puts focus back on its button, unless the person has moved focus to something else, by Tab or by the click that closed it. Each switcher is a disclosure button (`aria-expanded`) over a list of links ([#47](https://github.com/jeffrichley/wayfarer/issues/47)).
 
 **Below 920px:** the crumbs hide, the effort name truncates with an ellipsis, and the repo switcher stays visible only when there's no effort crumb.
 

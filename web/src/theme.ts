@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 // is the one place it lives, so whoever sets it, every reader agrees.
 export type Theme = "light" | "dark";
 
+// The head script in web/index.html reads the same key.
 const KEY = "wayfarer.theme";
 // How long the root carries `theme-fade`, a little past its .3s transition.
 const FADE_MS = 350;
