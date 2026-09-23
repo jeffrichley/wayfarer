@@ -55,7 +55,7 @@ const THREAD: Step[] = [
   },
   {
     skill: "/to-tickets",
-    name: <Named name="Flag a noise floor above −60 dB" n={128} href="#128" />,
+    name: <Named name="Flag a noise floor above −60 dB" id={128} href="#128" />,
     meta: "After Flag loudness",
     glyph: "done",
     word: "Landed",
@@ -207,7 +207,7 @@ export function Gallery() {
             <Meta>Holds up 4 tickets · 1 starts the moment it lands</Meta>
           </Specimen>
           <Specimen name="type-name">
-            <Named name="Warn when no retail sample is chosen" n={127} href="#127" />
+            <Named name="Warn when no retail sample is chosen" id={127} href="#127" />
           </Specimen>
           <Specimen name="type-skill">
             <span className="skill">/code-review</span>
@@ -229,22 +229,22 @@ export function Gallery() {
       <Section title="Names">
         <div className={styles.row}>
           <Specimen name="name-plain">
-            <Named name="Warn when no retail sample is chosen" n={127} />
+            <Named name="Warn when no retail sample is chosen" id={127} />
           </Specimen>
           <Specimen name="name-row">
             <span style={{ fontSize: "13.5px" }}>
-              <Named name="Flag peaks above −3 dB" n={127} href="#127" />
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" />
             </span>
           </Specimen>
           <Specimen name="name-line">
             <p>
-              <Named name="Flag peaks above −3 dB" n={127} href="#127" /> finished its session and
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" /> finished its session and
               opened PR #141.
             </p>
           </Specimen>
           <Specimen name="name-head">
             <h2>
-              <Named name="Flag peaks above −3 dB" n={127} href="#127" />
+              <Named name="Flag peaks above −3 dB" id={127} href="#127" />
             </h2>
           </Specimen>
         </div>

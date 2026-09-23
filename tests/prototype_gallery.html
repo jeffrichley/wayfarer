@@ -31,6 +31,10 @@
     .rhythm { display: flex; flex-wrap: wrap; gap: 4px; }
     .rhythm .tr { width: 14px; height: 14px; }
 
+    /* #70 mutes a disabled secondary or ghost button, as the prototype mutes
+       only a disabled primary, so each reads as unavailable at rest. */
+    .btn-secondary[aria-disabled="true"], .btn-ghost[aria-disabled="true"] { color: var(--muted); }
+
     /* #70 drops the criterion's tick box, so the mark's column goes with it. */
     .crit li { grid-template-columns: 1fr; }
 

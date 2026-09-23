@@ -24,8 +24,9 @@ export function Thread({ steps }: { steps: Step[] }) {
         const pending = step.glyph === "pending";
         const nextPending = steps[i + 1]?.glyph === "pending";
         return (
+          // Keyed by place: a thread's steps run in order, and a skill may recur.
           <li
-            key={step.skill}
+            key={i}
             className={[pending && "pending", nextPending && "next-pending"].filter(Boolean).join(" ")}
           >
             <span className="t-mark">

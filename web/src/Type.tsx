@@ -24,7 +24,7 @@ export function Rule() {
 // (principle 3). A card, a desk row, a chronicle line and a screen head all draw
 // the pair with this, so it looks the same in all of them. A link's text is the
 // name, never the id.
-export function Named({ name, n, href }: { name: string; n: number; href?: string }) {
+export function Named({ name, id, href }: { name: string; id: number; href?: string }) {
   return (
     <>
       {href === undefined ? (
@@ -34,7 +34,7 @@ export function Named({ name, n, href }: { name: string; n: number; href?: strin
           {name}
         </a>
       )}
-      <span className="id">{`#${n}`}</span>
+      <span className="id">{`#${id}`}</span>
     </>
   );
 }

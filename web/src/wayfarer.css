@@ -139,8 +139,11 @@ a.nm:hover { text-decoration-color: var(--fg); background: var(--hover); }
 .btn-primary[aria-disabled="true"], .btn-primary[aria-disabled="true"]:hover { background: var(--hover); border-color: var(--border); color: var(--fg); }
 .btn-arrow::after { content: '→'; transition: transform .15s ease; }
 .btn-arrow:hover::after { transform: translateX(2px); }
-/* The prototype stills a disabled primary under the pointer and nothing else;
-   every disabled button stays still, so none reads as available (#70). */
+/* The prototype mutes only a disabled primary, and stills only it under the
+   pointer. Every disabled button is muted and still, so none reads as available
+   at rest or under the pointer (#70). Disabled is the one state allowed to lower
+   contrast (docs/design/visual-language.md). */
+.btn-secondary[aria-disabled="true"], .btn-ghost[aria-disabled="true"] { color: var(--muted); }
 .btn-secondary[aria-disabled="true"]:hover { background: var(--surface); border-color: var(--border); }
 .btn-ghost[aria-disabled="true"]:hover { background: transparent; }
 .btn-arrow[aria-disabled="true"]:hover::after { transform: none; }

@@ -66,6 +66,20 @@ def test_a_disabled_button_does_not_answer_the_pointer(gallery: Page) -> None:
     assert moved == []
 
 
+@pytest.mark.parametrize("theme", THEMES)
+def test_a_disabled_button_is_drawn_apart_from_its_enabled_twin(gallery: Page, theme: str) -> None:
+    choose(gallery, theme)
+    buttons = specimens(gallery, lambda name: name.startswith("button-"))
+
+    alike = [
+        name
+        for name, shot in buttons.items()
+        if name.endswith("-disabled")
+        and ImageChops.difference(shot, buttons[name.removesuffix("-disabled")]).getbbox() is None
+    ]
+    assert alike == []
+
+
 def test_a_disabled_button_is_unavailable_and_still_reachable(gallery: Page) -> None:
     for name in specimens(gallery, _disabled_button):
         control = _specimen(gallery, name).get_by_role("button")

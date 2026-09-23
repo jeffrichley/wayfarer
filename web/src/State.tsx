@@ -31,8 +31,10 @@ export function State({
   );
 }
 
+export type RunResult = "red" | "green";
+
 // A test run: hatched when it went red, solid when it went green.
-export function TestRun({ result, children }: { result: "red" | "green"; children: string }) {
+export function TestRun({ result, children }: { result: RunResult; children: string }) {
   return (
     <span className="state">
       <span className={`tr tr-${result}`} aria-hidden="true" />
@@ -44,7 +46,7 @@ export function TestRun({ result, children }: { result: "red" | "green"; childre
 // Test runs in the order they ran: the rhythm strip, and anywhere else a
 // sequence of runs is shown. Each mark carries its word for a person who cannot
 // see the hatching.
-export function TestRuns({ runs }: { runs: ("red" | "green")[] }) {
+export function TestRuns({ runs }: { runs: RunResult[] }) {
   return (
     <ol className={styles.runs} aria-label={`${runs.length} test runs`}>
       {runs.map((result, i) => (
