@@ -83,7 +83,9 @@ jobs:
       - uses: extractions/setup-just@v2
 
       - name: Install the web toolchain
-        run: corepack pnpm --dir web install --frozen-lockfile
+        # From inside web/, where corepack finds the pinned pnpm (see justfile).
+        run: corepack pnpm install --frozen-lockfile
+        working-directory: web
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
