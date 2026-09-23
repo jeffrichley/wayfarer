@@ -123,10 +123,11 @@ def test_a_widgets_prototype_fragment_joins_the_reference_as_a_file_of_its_own(
         '<section><div data-specimen="widget-new">New</div></section>'
     )
     reference = browser.new_page(viewport=VIEWPORT)
-    reference.goto(reference_page(tmp_path, fragments).as_uri())
-
-    found = disagreements(gallery, reference)
-    reference.close()
+    try:
+        reference.goto(reference_page(tmp_path, fragments).as_uri())
+        found = disagreements(gallery, reference)
+    finally:
+        reference.close()
 
     assert found == ["widget-new: not in the gallery"]
 

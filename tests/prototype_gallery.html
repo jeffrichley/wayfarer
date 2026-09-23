@@ -8,10 +8,12 @@
   This is the page's frame. Each widget's specimens are a fragment of their own
   in prototype_gallery/, its markup copied from the prototype screen it came
   from, with the rules it needs beside it; `specimens.py` gathers every fragment
-  into the page where the marker below sits, in name order: each is numbered
-  for where it falls, and a new one takes the next number. A ticket landing a
-  widget adds its fragment there, and the same specimens beside the widget in
-  web/src, without editing this page.
+  into the page where the marker below sits, in name order. The numbers keep
+  the order the page had before it was split, which the check reports its
+  disagreements in; a new fragment takes the next one, and two tickets taking
+  the same number still add two files, ordered by the name after it. A ticket
+  landing a widget adds its fragment there, and the same specimens beside the
+  widget in web/src, without editing this page.
 
   Each specimen is named by `data-specimen`, the same name the app's gallery uses.
 -->
