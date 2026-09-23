@@ -7,39 +7,15 @@ download and the plugin clone), and every later one reuses Docker's cache.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
-from conftest import Launcher, commit_layer, events, get, post
+from conftest import Launcher, build_layer, commit_layer, events, get, post
 
 pytestmark = pytest.mark.docker
-
-
-@pytest.fixture
-def built_tags() -> Iterator[list[str]]:
-    """Tags a test built, removed afterwards so runs do not pile images up."""
-    tags: list[str] = []
-    yield tags
-    for built in tags:
-        subprocess.run(["docker", "image", "rm", built], capture_output=True)
-
-
-def _build(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
-    """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
-    commit_layer(clone, dockerfile)
-
-    assert post(f"{url}api/image/build").status_code == 202
-    output: list[str] = []
-    for kind, event in events(f"{url}api/image/build"):
-        if kind == "output":
-            output.append(event["line"])
-        else:
-            return output, event
-    pytest.fail("the build stream ended without saying how the build finished")
 
 
 def _checks(finished: dict[str, Any]) -> dict[str, bool]:
@@ -57,7 +33,7 @@ def test_a_repo_with_a_layer_gets_an_image_built_on_click_with_output_streamed(
 
     # Unique, so the step really runs and its own output, not a cache hit, streams.
     marker = uuid4().hex
-    output, finished = _build(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
+    output, finished = build_layer(url, clone, f"FROM wayfarer-base\nRUN echo {marker} | rev\n")
     built_tags.append(finished["tag"])
 
     assert any(line.endswith(marker[::-1]) for line in output)
@@ -78,7 +54,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
 ) -> None:
     url = wayfarer.start().url()
 
-    _, finished = _build(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n")
+    _, finished = build_layer(url, clone, "FROM wayfarer-base\nRUN echo probe-me\n")
     built_tags.append(finished["tag"])
 
     assert set(_checks(finished)) == {
@@ -103,7 +79,7 @@ def test_an_image_that_fails_its_probe_is_never_tagged_for_a_session(
 ) -> None:
     url = wayfarer.start().url()
 
-    _, finished = _build(url, clone, f"FROM wayfarer-base\n{layer}")
+    _, finished = build_layer(url, clone, f"FROM wayfarer-base\n{layer}")
     built_tags.append(finished["tag"])
 
     assert finished["ready"] is False
@@ -117,7 +93,7 @@ def test_a_layer_that_does_not_build_says_so_and_leaves_no_tag(
 ) -> None:
     url = wayfarer.start().url()
 
-    output, finished = _build(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
+    output, finished = build_layer(url, clone, "FROM wayfarer-base\nRUN exit 3\n")
 
     assert finished["ready"] is False
     assert finished["error"] is not None

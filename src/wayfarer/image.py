@@ -130,7 +130,13 @@ class Build:
 
     @property
     def finished(self) -> bool:
-        return bool(self._events) and isinstance(self._events[-1], BuildFinished)
+        return self.outcome is not None
+
+    @property
+    def outcome(self) -> BuildFinished | None:
+        """How it finished; None while it is still running."""
+        last = self._events[-1] if self._events else None
+        return last if isinstance(last, BuildFinished) else None
 
     async def output(self, line: str) -> None:
         await self._emit(BuildOutput(kind="output", line=line))
@@ -173,12 +179,16 @@ class Images:
     def building(self) -> bool:
         return self.last_build is not None and not self.last_build.finished
 
+    def current(self) -> str | None:
+        """The tag an image of the current inputs has, without asking Docker; None if refused."""
+        return tag(self._layer, self._recipe) if _has_layer(self._layer) else None
+
     async def status(self) -> ImageStatus:
-        if not _has_layer(self._layer):
+        current = self.current()
+        if current is None:
             return ImageStatus(
                 layer=LAYER, refusal=REFUSAL, tag=None, ready=False, building=self.building
             )
-        current = tag(self._layer, self._recipe)
         return ImageStatus(
             layer=LAYER,
             refusal=None,

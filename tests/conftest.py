@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,9 +28,6 @@ from playwright.sync_api import Browser, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
-
-# The port Wayfarer tries first; the Vite dev server proxies the API to it.
-DEFAULT_PORT = 7431
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
 _GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
@@ -91,7 +88,7 @@ class Launcher:
         self._recorder.write_text(_RECORDER)
         self._instances: list[Instance] = []
 
-    def start(self, *args: str, env: dict[str, str | None] | None = None) -> Instance:
+    def start(self, *args: str, env: Mapping[str, str | None] | None = None) -> Instance:
         """Run `wayfarer`; `env` overrides the environment, and `None` unsets a name."""
         opened = self._scratch / f"opened-{len(self._instances)}.txt"
         environment = {
@@ -101,6 +98,9 @@ class Launcher:
             "BROWSER": f"{sys.executable} {self._recorder} {opened} %s",
             "PYTHONUNBUFFERED": "1",
             "WAYFARER_GITHUB_API": self._github.api,
+            # Whatever port the OS has free, so no test contends with another
+            # suite on the machine for the default one.
+            "WAYFARER_PORT": "0",
             "GH_TOKEN": TOKEN,
         }
         for name, value in (env or {}).items():
@@ -183,6 +183,29 @@ def commit_layer(clone: Path, dockerfile: str) -> None:
     (layer / "Dockerfile").write_text(dockerfile)
 
 
+def build_layer(url: str, clone: Path, dockerfile: str) -> tuple[list[str], dict[str, Any]]:
+    """Commit `dockerfile` as the layer, click Build, and read the stream to its end."""
+    commit_layer(clone, dockerfile)
+
+    assert post(f"{url}api/image/build").status_code == 202
+    output: list[str] = []
+    for kind, event in events(f"{url}api/image/build"):
+        if kind == "output":
+            output.append(event["line"])
+        else:
+            return output, event
+    pytest.fail("the build stream ended without saying how the build finished")
+
+
+@pytest.fixture
+def built_tags() -> Iterator[list[str]]:
+    """Tags a test built, removed afterwards so runs do not pile images up."""
+    tags: list[str] = []
+    yield tags
+    for built in tags:
+        subprocess.run(["docker", "image", "rm", built], capture_output=True)
+
+
 def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
 
@@ -203,6 +226,18 @@ def events(url: str, timeout: float = 900.0) -> Iterator[tuple[str, Any]]:
             if line.startswith("data:"):
                 payload = json.loads(line.removeprefix("data:"))
                 yield payload["kind"], payload
+
+
+def stream(url: str, timeout: float = 10.0) -> Generator[Any]:
+    """Each server-sent event's payload at `url`, read while the stream stays open.
+
+    Close the iterator to hang up, as a page does when it goes away.
+    """
+    with httpx.stream("GET", url, timeout=timeout) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                yield json.loads(line.removeprefix("data:"))
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

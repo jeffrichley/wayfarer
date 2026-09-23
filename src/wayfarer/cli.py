@@ -19,29 +19,27 @@ __all__ = ["main"]
 
 # Localhost only: nothing else on the network may drive a person's agents.
 _HOST = "127.0.0.1"
-# The port the Vite dev server proxies the API to (web/vite.config.ts).
-_DEFAULT_PORT = 7431
 
 
-def _bind() -> socket.socket:
-    """A socket on the default port, or on any free one when that is taken."""
+def _bind(port: int) -> socket.socket:
+    """A socket on `port`, or on any free one when that is taken."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # So a restart can take the default port back while the last run's
+    # So a restart can take its port back while the last run's
     # connections linger in TIME_WAIT.
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        sock.bind((_HOST, _DEFAULT_PORT))
+        sock.bind((_HOST, port))
     except OSError:
         sock.bind((_HOST, 0))
     return sock
 
 
 async def _serve(lock: InstanceLock, repo: Path) -> None:
-    sock = _bind()
+    settings = Settings.from_env()
+    sock = _bind(settings.port)
     port = sock.getsockname()[1]
     url = f"http://{_HOST}:{port}/"
 
-    settings = Settings.from_env()
     app = create_app(repo, settings, GitHub(repo_of(repo), settings))
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     serving = asyncio.create_task(server.serve(sockets=[sock]))

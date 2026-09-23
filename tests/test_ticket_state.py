@@ -33,12 +33,15 @@ def _state(**facts: Any) -> TicketState:
 
 
 def _ready(**fields: Any) -> PullRequest:
-    return PullRequest(
-        **(
-            {"number": 7, "draft": False, "merged": False, "checks": None, "approved": False}
-            | fields
-        )
-    )
+    unremarkable: dict[str, Any] = {
+        "number": 7,
+        "branch": "ticket/7-x",
+        "draft": False,
+        "merged": False,
+        "checks": None,
+        "approved": False,
+    }
+    return PullRequest(**(unremarkable | fields))
 
 
 def test_a_ticket_with_a_running_session_is_building_even_though_it_is_claimed() -> None:

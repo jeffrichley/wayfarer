@@ -15,6 +15,10 @@ __all__ = ["Settings"]
 
 @dataclass(frozen=True)
 class Settings:
+    port: int = 7431
+    """The port Wayfarer tries first, falling back to any free one when it is taken.
+    The Vite dev server proxies the API here (web/vite.config.ts). `WAYFARER_PORT`
+    changes it, and 0 asks for whatever port is free."""
     github_api: str = "https://api.github.com"
     """Where GitHub's API is. `WAYFARER_GITHUB_API` points it elsewhere, such as a stand-in."""
     github_token: str | None = None
@@ -25,12 +29,31 @@ class Settings:
     """Tickets read per GraphQL query. Each costs about (1 + 4 x this) / 100 points,
     so 50 keeps a thirty-ticket effort to one query of 2 points, inside the 3 its
     budget allows; 100 would cost 4 (ADR-0003)."""
+    docker_timeout: float = 10.0
+    """Seconds the start gate waits for the Docker daemon to answer. One that has not
+    answered by then is as good as down, and a wedged one must not hang every start."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
+    poll_active: float = 10.0
+    """Seconds between polls of GitHub while a cascade is armed or a page is open (ADR-0003)."""
+    poll_idle: float = 60.0
+    """Seconds between polls of GitHub when nothing is watching (ADR-0003)."""
+    rate_limit_backoff: float = 60.0
+    """Seconds the poll waits after GitHub refuses it without saying how long, doubled on
+    each refusal in a row. GitHub asks for at least a minute before retrying."""
+    rate_limit_backoff_max: float = 900.0
+    """The longest that doubling may grow to, so a poll refused for a long spell still
+    notices within a quarter of an hour once GitHub answers again."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
         return cls(
+            port=int(env.get("WAYFARER_PORT", cls.port)),
             github_api=env.get("WAYFARER_GITHUB_API", cls.github_api),
             github_token=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN") or None,
+            poll_active=float(env.get("WAYFARER_POLL_ACTIVE", cls.poll_active)),
+            poll_idle=float(env.get("WAYFARER_POLL_IDLE", cls.poll_idle)),
+            rate_limit_backoff=float(
+                env.get("WAYFARER_RATE_LIMIT_BACKOFF", cls.rate_limit_backoff)
+            ),
         )
