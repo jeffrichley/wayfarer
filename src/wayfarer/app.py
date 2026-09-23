@@ -10,7 +10,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from wayfarer.models import Health
+from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
+from wayfarer.models import Effort, Health
+from wayfarer.read_model import read_effort
+from wayfarer.settings import Settings
 
 __all__ = ["create_app"]
 
@@ -26,7 +29,10 @@ or develop against the Vite dev server with <code>pnpm dev</code>.</p>
 """
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None, github: GitHub | None = None) -> FastAPI:
+    """The app, reading GitHub through `github`; without one, every read says so."""
+    settings = settings or Settings()
+    github = github or GitHub(None, settings)
     running = version("wayfarer")
     app = FastAPI(title="Wayfarer", version=running)
 
@@ -35,6 +41,23 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     async def health() -> Health:
         return Health(version=running)
+
+    # Read afresh on every ask; nothing is kept between reads (ADR-0002).
+    @app.get("/api/efforts/{number}")
+    async def effort(number: int) -> Effort:
+        try:
+            return await read_effort(
+                github,
+                number,
+                per_page=settings.tickets_per_page,
+                auto_merge=settings.auto_merge,
+            )
+        except NotConnected as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except NoSuchIssue as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except GitHubError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)

@@ -5,4 +5,9 @@ import type { components } from "./api.gen";
 
 type Schemas = components["schemas"];
 
+export type Checks = Schemas["Checks"];
+export type Effort = Schemas["Effort"];
 export type Health = Schemas["Health"];
+export type PullRequest = Schemas["PullRequest"];
+export type Ticket = Schemas["Ticket"];
+export type TicketState = Schemas["TicketState"];
