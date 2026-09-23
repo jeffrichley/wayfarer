@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # macOS runs `check` nightly rather than per PR (#88): it is the slower runner,
+  # has no Docker, and holds no floor. 07:00 UTC is overnight in the Americas.
+  schedule:
+    - cron: "0 7 * * *"
+  # And by hand, from the Actions tab, before a change that could break on macOS.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +33,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Ubuntu on every PR and push; macOS joins it on the nightly and manual
+        # runs (#88). Ubuntu is where every tier runs and the coverage floor holds.
+        os: ${{ fromJSON(contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name) && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +83,9 @@ jobs:
       - uses: extractions/setup-just@v2
 
       - name: Install the web toolchain
-        run: corepack pnpm --dir web install --frozen-lockfile
+        # From inside web/, where corepack finds the pinned pnpm (see justfile).
+        run: corepack pnpm install --frozen-lockfile
+        working-directory: web
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 

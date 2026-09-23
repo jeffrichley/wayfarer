@@ -36,6 +36,7 @@ dev = [
     "pre-commit>=4",
     "pytest>=8",
     "pytest-cov>=6",
+    "pytest-xdist>=3.6",
     "ruff>=0.8",
 ]
 
@@ -64,6 +65,12 @@ addopts = [
     "--strict-markers",
     "-m",
     "not live",
+    # Across every core: each test has its own clone, port and GitHub stand-in.
+    # `loadgroup` keeps a group on one worker; the docker tier is one (conftest).
+    "-n",
+    "auto",
+    "--dist",
+    "loadgroup",
     "--cov",
     "--cov-report=term-missing",
 ]

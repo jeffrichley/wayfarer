@@ -22,8 +22,9 @@ taken — and it is exactly what Wayfarer's own cascade reads as a claim — so 
 unclaimed ticket becomes two agents' work.
 
 **Done means CI green on the PR.** `just check` is the fast local signal and CI
-runs the same recipes on Ubuntu and macOS, so a local pass is evidence and the
-PR's run is the verdict. Push the branch, watch the run, and fix what it finds.
+runs the same recipes on Ubuntu, so a local pass is evidence and the PR's run is
+the verdict; macOS runs nightly, and by hand from the Actions tab. The suite runs
+in parallel, so a test must never share a port, file or image tag with another. Push the branch, watch the run, and fix what it finds.
 Hold the coverage floor where it is, and add a lint ignore only with the reason
 written beside it.
 

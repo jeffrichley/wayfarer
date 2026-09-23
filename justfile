@@ -4,7 +4,9 @@ set shell := ["bash", "-cu"]
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT := "0"
 
-pnpm := "corepack pnpm --dir web"
+# Run from inside web/: corepack takes the pnpm version from the package.json in
+# the directory it runs in, not from --dir, and elsewhere it fetches the latest.
+pnpm := "cd web && corepack pnpm"
 
 default:
     @just --list
