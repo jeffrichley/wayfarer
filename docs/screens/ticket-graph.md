@@ -91,7 +91,7 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 - **Thread:** map → spec → ticket → session → PR → landed (see [`../design/shell.md`](../design/shell.md#thread)).
 
 **Start an agent:**
-- The button becomes a disabled "Agent started in wt/books-status", and a ghost **Watch it work** link appears beside it.
+- The button becomes a disabled "Agent started in wt/books-status", and nothing else changes: the prototype keeps no demo state.
 - The card, tally, top bar and route band update *around* the clicked button without rebuilding it, so focus stays put.
 
 ## Flows
@@ -112,7 +112,7 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 
 - **Hand-placed layout:** card positions (`POS`) and wire routes (`WIRES`) are hand-placed, including which implied edges to skip.
 - **Default selection:** *Show compliance status on My Books* (#132) is selected by default, because it's the takeable one.
-- **Demo state:** "Start an agent" and "Queue" are saved in `sessionStorage`. Starting #132 makes it appear as a lane in live build.
+- **No demo state:** "Start an agent" and "Queue" change their own button and nothing else. Starting #132 doesn't add a lane in live build.
 
 ## Open questions
 

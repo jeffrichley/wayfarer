@@ -4,7 +4,7 @@ status: draft
 ---
 # The shell and shared pieces
 
-These are the pieces more than one screen uses. In the prototype they're built by `assets/waystation.js` and styled in `assets/waystation.css`. Each screen calls `WS.renderTopbar` and, except home, `WS.renderRoute`.
+These are the pieces more than one screen uses. In the prototype they're built by `assets/wayfarer.js` and styled in `assets/wayfarer.css`. Each screen calls `WS.renderTopbar` and, except home, `WS.renderRoute`.
 
 ## Frame
 
@@ -14,7 +14,7 @@ Every screen is a full-height grid: the **top bar**, the **route band** (every s
 
 It answers: where am I, is anything working, and does anything need me?
 
-| Piece | `data-od-id` | What it does |
+| Piece | `data-piece` | What it does |
 |---|---|---|
 | Wordmark | — | "Waystation" with a mark: a filled dot, a line, and an open ring. That's a small course from a landed point to the next station. It links home. |
 | Repo switcher | `repo-switcher` | Mono repo name with a menu. Each repo shows a one-line state ("3 efforts on the line", "Connected today · no maps yet"). A repo with no maps opens first run. |
@@ -104,6 +104,6 @@ Messages marked `AI` or `You`, with a mono "by" line naming the skill and time. 
 
 Charts are drawn on a fixed-size stage and scaled to their column. There's a minimum scale (about 0.7), so text never gets unreadably small; below it, the viewport scrolls. A ResizeObserver refits on resize.
 
-## Demo state (prototype only)
+## No demo state (prototype only)
 
-`WS.mark`, `WS.has` and `WS.got` store demo actions in `sessionStorage` (`waystation.demo.v1`). `WS.ticket(n)` applies those actions to the static sample tickets to derive live state, for example merged → landed, or answered → building. The real build replaces all of this with the read model described in [`data-and-commands.md`](data-and-commands.md).
+The prototype is frozen and keeps no demo state. `WS.ticket(n)` derives state from the static sample tickets alone. A page that plays a flow through on its own passes the stage it reached to the shell: `sampleStage` and `grilled` for the wayfinder map, `charted` and `research` for first run. The real build replaces all of this with the read model described in [`data-and-commands.md`](data-and-commands.md).

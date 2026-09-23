@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The line · galley · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .page { max-width: 1240px; margin: 0 auto; padding: 44px 40px 72px; }
 
@@ -108,7 +108,7 @@
 
   <main class="pane" id="content">
     <div class="page">
-      <section class="masthead" data-od-id="masthead">
+      <section class="masthead" data-piece="masthead">
         <div>
           <p class="kicker">galley · the story so far</p>
           <h1 id="headline">One ticket landed overnight, and an agent has stopped to ask you something.</h1>
@@ -120,7 +120,7 @@
         </div>
       </section>
 
-      <section data-od-id="the-line">
+      <section data-piece="the-line">
         <div class="section-head">
           <div><h2 style="display:inline">The line</h2><span class="meta">Every ticket sits at the station it has reached.</span></div>
           <div class="legend" aria-label="Legend">
@@ -136,7 +136,7 @@
       </section>
 
       <div class="lower">
-        <section data-od-id="chronicle">
+        <section data-piece="chronicle">
           <div class="section-head"><div><h2 style="display:inline">The chronicle</h2><span class="meta">What happened, in order, by name.</span></div></div>
           <div class="day">
             <span class="kicker">Today</span>
@@ -149,16 +149,16 @@
         </section>
 
         <aside>
-          <section data-od-id="needs-you-panel">
+          <section data-piece="needs-you-panel">
             <div class="section-head"><div><h2 style="display:inline">Needs you</h2><span class="meta">Most unblocking first</span></div></div>
             <ul class="needs-list" id="needs"></ul>
             <div class="needs-foot" id="needs-foot">
               <span class="meta">Answers post back to the tracker as comments.</span>
-              <a class="btn btn-secondary btn-arrow" href="review-desk.html" data-od-id="open-desk">Open the desk</a>
+              <a class="btn btn-secondary btn-arrow" href="review-desk.html" data-piece="open-desk">Open the desk</a>
             </div>
           </section>
 
-          <section class="agents" data-od-id="agents-at-work">
+          <section class="agents" data-piece="agents-at-work">
             <div class="section-head" style="margin-top:0"><div><h2 style="display:inline">At work</h2><span class="meta">Running right now</span></div></div>
             <ul id="agents"></ul>
           </section>
@@ -168,7 +168,7 @@
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { ticket, tickets, glyph, needsYou, esc, counts } = WS;
@@ -207,7 +207,7 @@
   let html = '<div class="line-row head"><div class="cell"></div>' + stations.map((s) => '<div class="cell"><span class="skill">' + s.skill + '</span><span class="s-name">' + s.name + '</span></div>').join('') + '</div>';
 
   // ACX
-  html += '<div class="line-row" data-od-id="line-acx"><div class="effort"><a class="e-name" href="live-build.html">ACX compliance before delivery</a><span class="meta">Map #112 · charted 3 Sep</span></div>' +
+  html += '<div class="line-row" data-piece="line-acx"><div class="effort"><a class="e-name" href="live-build.html">ACX compliance before delivery</a><span class="meta">Map #112 · charted 3 Sep</span></div>' +
     stations.map((s, i) => {
       const cell = acxCells[s.key];
       const inner = cell.html ? '<a class="cluster" href="' + href[s.key] + '" aria-label="' + s.name + ': ' + cell.cap.replace(/<[^>]+>/g, '') + '">' + cell.html + '</a>' : '<span class="cluster"><i class="passed"></i></span>';
@@ -215,23 +215,17 @@
     }).join('') + '</div>';
 
   // Casting
-  const castingCluster = g('landed') + g('landed') + g('landed') + g('building') + (WS.has('grilled', 152) ? g('building') : g('asking')) + g('blocked') + g('blocked') + '<i class="fog"></i><i class="fog"></i><i class="fog"></i>';
-  html += '<div class="line-row" data-od-id="line-casting"><div class="effort"><a class="e-name" href="wayfinder-map.html?effort=casting">Per-chapter voice casting</a><span class="meta">Map #147 · charted 9 Sep</span></div>' +
+  const castingCluster = g('landed') + g('landed') + g('landed') + g('building') + g('asking') + g('blocked') + g('blocked') + '<i class="fog"></i><i class="fog"></i><i class="fog"></i>';
+  html += '<div class="line-row" data-piece="line-casting"><div class="effort"><a class="e-name" href="wayfinder-map.html?effort=casting">Per-chapter voice casting</a><span class="meta">Map #147 · charted 9 Sep</span></div>' +
     stations.map((s, i) => {
-      if (i === 0) return '<div class="cell track-cell first" style="--d:' + d(1, 0) + 'ms"><a class="cluster" href="wayfinder-map.html?effort=casting" aria-label="Chart the way: 3 decided, 1 researching, 1 waiting on you, 2 blocked, 3 patches of fog">' + castingCluster + '</a><span class="cap">3 decided · ' + (WS.has('grilled', 152) ? '2 researching' : '<strong>1 waiting on you</strong>') + ' · 3 patches of fog</span></div>';
+      if (i === 0) return '<div class="cell track-cell first" style="--d:' + d(1, 0) + 'ms"><a class="cluster" href="wayfinder-map.html?effort=casting" aria-label="Chart the way: 3 decided, 1 researching, 1 waiting on you, 2 blocked, 3 patches of fog">' + castingCluster + '</a><span class="cap">3 decided · <strong>1 waiting on you</strong> · 3 patches of fog</span></div>';
       return '<div class="cell track-cell pending' + (i === 5 ? ' end' : '') + '" style="--d:' + d(1, i) + 'ms"><span class="cluster"><i class="passed pending"></i></span></div>';
     }).join('') + '</div>';
 
   // Retail sample: one decision from a clear way, then on through /to-spec
-  const sStage = WS.sampleStage();
   const sampleHref = 'wayfinder-map.html?effort=sample';
-  const sampleCells = {
-    last: [{ html: new Array(5).fill(g('landed')).join('') + g('asking') + '<i class="fog"></i>', cap: '5 decided · <strong>1 in session with you</strong> · 1 patch of fog', label: '5 decided, 1 in session with you, 1 patch of fog' }],
-    clear: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decided · way clear', label: '6 decided, the way is clear' }, { html: g('asking'), cap: '<strong>Agree the seam</strong>', label: 'Agree the seam for the spec' }],
-    written: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decisions', label: '6 decisions' }, { html: g('landed'), cap: 'Spec #168', label: 'Spec written' }, { html: g('takeable'), cap: 'Ready to slice', label: 'Ready to slice into tickets', next: true }],
-    slicing: [{ html: new Array(6).fill(g('landed')).join(''), cap: '6 decisions', label: '6 decisions' }, { html: g('landed'), cap: 'Spec #168', label: 'Spec written' }, { html: g('building'), cap: '/to-tickets drafting', label: 'Slicing into tickets' }],
-  }[sStage];
-  html += '<div class="line-row" data-od-id="line-retail-sample"><div class="effort"><a class="e-name" href="' + sampleHref + '">Choosing the retail sample</a><span class="meta">Map #160 · charted 10 Sep</span></div>' +
+  const sampleCells = [{ html: new Array(5).fill(g('landed')).join('') + g('asking') + '<i class="fog"></i>', cap: '5 decided · <strong>1 in session with you</strong> · 1 patch of fog', label: '5 decided, 1 in session with you, 1 patch of fog' }];
+  html += '<div class="line-row" data-piece="line-retail-sample"><div class="effort"><a class="e-name" href="' + sampleHref + '">Choosing the retail sample</a><span class="meta">Map #160 · charted 10 Sep</span></div>' +
     stations.map((s, i) => {
       const cell = sampleCells[i];
       const pos = (i === 0 ? ' first' : '') + (i === 5 ? ' end' : '');
@@ -240,17 +234,17 @@
     }).join('') + '</div>';
 
   // Landed effort
-  html += '<div class="line-row done-effort" data-od-id="line-upload-states"><div class="effort"><span class="e-static">Manuscript upload states</span><span class="meta">Map #88 · landed 2 Sep</span></div>' +
+  html += '<div class="line-row done-effort" data-piece="line-upload-states"><div class="effort"><span class="e-static">Manuscript upload states</span><span class="meta">Map #88 · landed 2 Sep</span></div>' +
     stations.map((s, i) => {
       if (i === 5) return '<div class="cell track-cell end" style="--d:' + d(3, 5) + 'ms"><span class="cluster">' + new Array(6).fill(g('landed')).join('') + '</span><span class="cap">6 of 6 landed</span></div>';
       return '<div class="cell track-cell' + (i === 0 ? ' first' : '') + '" style="--d:' + d(3, i) + 'ms"><span class="cluster"><i class="passed"></i></span></div>';
     }).join('') + '</div>';
 
   document.getElementById('line').innerHTML = html;
-  const sampleClause = { last: 'Choosing the retail sample is one decision from a clear way', clear: 'Choosing the retail sample has a clear way and waits on you to agree its seam', written: 'Choosing the retail sample has its spec written', slicing: 'Choosing the retail sample is being sliced into tickets' }[sStage];
+  const sampleClause = 'Choosing the retail sample is one decision from a clear way';
   document.getElementById('standfirst').textContent = 'Two agents are still building ACX compliance before delivery. ' + sampleClause + ', and per-chapter voice casting is waiting on a grilling session.';
   let seenLine = true;
-  try { seenLine = !!sessionStorage.getItem('waystation.intro.line'); sessionStorage.setItem('waystation.intro.line', '1'); } catch (e) { /* storage blocked */ }
+  try { seenLine = !!sessionStorage.getItem('wayfarer.intro.line'); sessionStorage.setItem('wayfarer.intro.line', '1'); } catch (e) { /* storage blocked */ }
   if (!seenLine && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelector('.line').classList.add('intro');
 
   /* ─── chronicle ────────────────────────────────────────────────── */
@@ -271,12 +265,6 @@
     ['15:30', 'landed', '/wayfinder', 'You resolved ' + castingLink('How does an override show up on the Cast page?') + ' A mark on the character’s chapter sparkline. One patch of fog graduated into two tickets.'],
     ['10:20', 'landed', '/to-tickets', '<a class="nm title" href="spec-reader.html">Pre-delivery compliance checks</a> was sliced into nine tickets. Two user stories have no ticket yet.'],
   ];
-  if (WS.has('sample', 'closed')) today.unshift(['now', 'landed', '/wayfinder', 'You closed ' + sampleLink(WS.EFFORTS.sample.last.name) + ' The way is clear on Choosing the retail sample.']);
-  if (WS.has('sample', 'written')) today.unshift(['now', 'landed', '/to-spec', '/to-spec wrote ' + sampleLink(WS.EFFORTS.sample.spec.name) + ' from the map, through the seam you agreed.']);
-  if (WS.has('sample', 'sliced')) today.unshift(['now', 'building', '/to-tickets', '/to-tickets is slicing ' + sampleLink(WS.EFFORTS.sample.spec.name) + ' into tickets for you to check.']);
-  if (WS.has('merged', 127)) today.unshift(['now', 'landed', 'merge', link(127) + ' landed. You approved it from the desk.']);
-  if (WS.has('answered', 130)) today.unshift(['now', 'building', '/tdd', 'You answered ' + link(130) + '. The session resumed.']);
-  if (WS.has('grilled', 152)) today.unshift(['now', 'building', '/grilling', 'You opened the grilling session on ' + castingLink(WS.CASTING_GRILL.name)]);
 
   const row = (e) => '<li class="entry"><time>' + e[0] + '</time>' + g(e[1]) + '<p>' + e[3] + '</p><span class="skill">' + e[2] + '</span></li>';
   document.getElementById('today').innerHTML = today.map(row).join('');
@@ -293,7 +281,7 @@
       const glyphState = it.kind === 'Review' ? 'review' : 'asking';
       const effort = it.effort === 'acx' ? 'ACX compliance' : it.effort === 'sample' ? 'Retail sample' : 'Voice casting';
       const unblocks = it.unblocksText || 'Unblocks ' + plural(it.unblocks, 'ticket', 'tickets') + (it.fog ? ' + fog' : '');
-      return '<li><a class="need" href="' + (it.href || 'review-desk.html?item=' + it.key) + '" data-od-id="need-' + it.key + '">' + g(glyphState) +
+      return '<li><a class="need" href="' + (it.href || 'review-desk.html?item=' + it.key) + '" data-piece="need-' + it.key + '">' + g(glyphState) +
         '<span><span class="n-kind">' + it.kind + ' · ' + effort + '</span><span class="n-name">' + esc(it.name) + '</span><span class="n-ask">' + esc(it.ask) + '</span></span>' +
         '<span class="n-unblocks">' + unblocks + '</span></a></li>';
     }).join('');

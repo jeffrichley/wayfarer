@@ -50,8 +50,8 @@ Each screen writeup has the same sections: **Intent**, **Layout**, **Pieces**, *
 
 ## The prototype
 
-- **Paths:** the prototype is plain HTML. `assets/waystation.css` holds the shared styles and `assets/waystation.js` holds the shared data and shell. Paths in these docs are relative to the prototype folder.
-- **Finding pieces:** every region, control and repeated card carries a `data-od-id` attribute. The writeups name pieces by that id, so searching for it finds the matching markup.
+- **Paths:** the prototype is plain HTML. It lives in `prototype/`. `assets/wayfarer.css` holds the shared styles and `assets/wayfarer.js` holds the shared data and shell. Paths in these docs are relative to `prototype/`.
+- **Finding pieces:** every region, control and repeated card carries a `data-piece` attribute. The writeups name pieces by that id, so searching for it finds the matching markup.
 - **Sample content:** the sample repo is **Galley**, an audiobook editor for indie authors. It has four efforts at different stations:
   - *ACX compliance before delivery*: building
   - *Per-chapter voice casting*: still charting
@@ -60,7 +60,7 @@ Each screen writeup has the same sections: **Intent**, **Layout**, **Pieces**, *
   
   A second repo, **madrigal**, has nothing charted and drives the first-run screen. The ACX audio limits and retail sample rules are ACX's real published requirements. Every ticket, file, timestamp and conversation is invented.
 - **"Now" in the sample** is Tuesday 15 September 2026, 09:46.
-- **Demo actions** (merge, answer, start, close, charting) persist in `sessionStorage` so they carry across screens, and they reset when the tab closes. The theme choice persists in `localStorage`.
+- **Frozen:** the prototype stores no demo state. Every screen opens at the same moment, and nothing a click does carries to another screen or survives a reload. A click on a ticket-changing action (merge, answer, start an agent, start grilling) gives its button's feedback and changes nothing else. The first-run chart and the retail sample's handoff still play through on their own page. The theme choice persists in `localStorage`.
 - **Scripted sessions:** agent sessions, grilling conversations and `/to-spec` writing are scripted. Each writeup's **Prototype shortcuts** section says what is faked and what the real build needs.
 
 ## Suggested build order

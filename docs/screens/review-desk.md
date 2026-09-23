@@ -108,7 +108,7 @@ It answers: *what needs me, what happens when I decide, and what should I know b
 
 - **Hard-coded items:** four items with hand-written content, and the diff is a small fixed excerpt.
 - **Queue order is authored,** not computed. The real rule is in [`data-and-commands.md`](../design/data-and-commands.md#needs-you-derived).
-- **Demo actions** are saved in `sessionStorage` and shared with home, the ticket graph and live build: merge, answer, send finding, start grilling.
+- **No demo state:** merge, answer, send finding and start grilling change their own controls and nothing else. The queue never resolves, and home, the ticket graph and live build don't see them.
 - **Local-only comments:** line comments and change requests change only local markup.
 - **Station highlight:** the route band always highlights `/code-review`, even for question and grilling items.
 

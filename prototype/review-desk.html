@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The desk · Needs you · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .desk-split { grid-template-columns: 350px minmax(0, 1fr); }
 
@@ -102,19 +102,19 @@
   <nav id="route"></nav>
 
   <main class="split desk-split" id="content">
-    <aside class="pane side-l queue" data-od-id="needs-you-queue">
+    <aside class="pane side-l queue" data-piece="needs-you-queue">
       <h1>Needs you</h1>
       <span class="meta">Grouped by effort, most unblocking first.</span>
       <div id="queue"></div>
     </aside>
-    <section class="main" data-od-id="desk-item">
+    <section class="main" data-piece="desk-item">
       <div class="pane m-pane" id="m-pane"><div class="m-inner" id="m-inner"></div></div>
       <div id="m-foot"></div>
     </section>
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { ticket, glyph, esc } = WS;
@@ -122,14 +122,10 @@
   render();
 
   const ITEMS = [
-    { key: 'pr-141', group: 'acx', kind: 'Review', name: ticket(127).name, ask: '/code-review found one gap against the spec', unblocks: 'Unblocks 1 ticket', done: () => WS.has('merged', 127), doneText: 'Merged just now', doneKind: 'Landed', glyph: 'review' },
-    { key: 'q-130', group: 'acx', kind: 'Question', name: ticket(130).name, ask: 'Should DOCX books without credits fail or warn?', unblocks: 'Unblocks 1 ticket', done: () => WS.has('answered', 130), doneText: 'Answered · the session resumed', doneKind: 'Answered', glyph: 'asking' },
-    { key: 'map-160', group: 'sample', name: WS.EFFORTS.sample.name,
-      get kind() { return WS.sampleStage() === 'last' ? 'Grilling · HITL' : 'Seam · /to-spec'; },
-      get ask() { return WS.sampleStage() === 'last' ? 'The last open ticket on the map is in session with you' : 'The way is clear. /to-spec needs you to agree the seam'; },
-      get unblocks() { return WS.sampleStage() === 'last' ? 'Clears the way to the destination' : 'Unblocks the spec'; },
-      done: () => WS.has('sample', 'written'), doneText: 'Spec written from the map', doneKind: 'Handed off', glyph: 'asking' },
-    { key: 'g-152', group: 'casting', kind: 'Grilling · HITL', name: WS.CASTING_GRILL.name, ask: 'Frontier ticket on the map', unblocks: 'Unblocks 2 tickets and clears fog', done: () => WS.has('grilled', 152), doneText: 'Session in progress with you', doneKind: 'In session', glyph: 'asking' },
+    { key: 'pr-141', group: 'acx', kind: 'Review', name: ticket(127).name, ask: '/code-review found one gap against the spec', unblocks: 'Unblocks 1 ticket', glyph: 'review' },
+    { key: 'q-130', group: 'acx', kind: 'Question', name: ticket(130).name, ask: 'Should DOCX books without credits fail or warn?', unblocks: 'Unblocks 1 ticket', glyph: 'asking' },
+    { key: 'map-160', group: 'sample', kind: 'Grilling · HITL', name: WS.EFFORTS.sample.name, ask: 'The last open ticket on the map is in session with you', unblocks: 'Clears the way to the destination', glyph: 'asking' },
+    { key: 'g-152', group: 'casting', kind: 'Grilling · HITL', name: WS.CASTING_GRILL.name, ask: 'Frontier ticket on the map', unblocks: 'Unblocks 2 tickets and clears fog', glyph: 'asking' },
   ];
   let current = WS.param('item');
   if (!ITEMS.some((i) => i.key === current)) current = 'pr-141';
@@ -140,18 +136,16 @@
     '<div class="q-group"><span class="kicker">ACX compliance before delivery</span>' + ITEMS.filter((i) => i.group === 'acx').map(itemHtml).join('') + '</div>' +
     '<div class="q-group"><span class="kicker">Elsewhere · Choosing the retail sample</span>' + ITEMS.filter((i) => i.group === 'sample').map(itemHtml).join('') + '</div>' +
     '<div class="q-group"><span class="kicker">Elsewhere · Per-chapter voice casting</span>' + ITEMS.filter((i) => i.group === 'casting').map(itemHtml).join('') + '</div>';
-  function itemHtml(it) { return '<button type="button" class="item" data-key="' + it.key + '" data-od-id="desk-' + it.key + '" aria-pressed="false"></button>'; }
+  function itemHtml(it) { return '<button type="button" class="item" data-key="' + it.key + '" data-piece="desk-' + it.key + '" aria-pressed="false"></button>'; }
   function paintQueue() {
     ITEMS.forEach((it) => {
       const el = queue.querySelector('[data-key="' + it.key + '"]');
-      const done = it.done();
-      el.classList.toggle('resolved', done);
       el.setAttribute('aria-pressed', String(it.key === current));
-      el.innerHTML = (done ? glyph(it.key === 'g-152' ? 'building' : 'landed') : glyph(it.glyph)) +
-        '<span class="i-kind">' + (done ? it.doneKind : it.kind) + '</span>' +
+      el.innerHTML = glyph(it.glyph) +
+        '<span class="i-kind">' + it.kind + '</span>' +
         '<span class="i-name">' + esc(it.name) + '</span>' +
-        '<span class="i-ask">' + (done ? it.doneText : esc(it.ask)) + '</span>' +
-        (done ? '' : '<span class="i-unblocks">' + it.unblocks + '</span>');
+        '<span class="i-ask">' + esc(it.ask) + '</span>' +
+        '<span class="i-unblocks">' + it.unblocks + '</span>';
     });
   }
   queue.querySelectorAll('.item').forEach((el) => el.addEventListener('click', () => {
@@ -205,25 +199,25 @@
   let fileIdx = 2;
 
   function renderPR() {
-    const t = ticket(127), merged = WS.has('merged', 127), sent = WS.has('findingSent', 127);
+    const t = ticket(127);
     inner.innerHTML =
-      '<header class="m-head" data-od-id="pr-header"><span class="kicker">/code-review · PR #141 · wt/peak-ceiling → main</span>' +
+      '<header class="m-head" data-piece="pr-header"><span class="kicker">/code-review · PR #141 · wt/peak-ceiling → main</span>' +
       '<h2><a href="ticket-graph.html#127">' + esc(t.name) + '</a></h2>' +
-      '<div class="facts"><span>' + glyph(merged ? 'landed' : 'review') + (merged ? 'Merged' : 'Open, waiting on you') + '</span><span class="num">+' + adds + ' −' + dels + ' · ' + FILES.length + ' files</span><span>' + glyph('landed') + 'CI passed</span><span>Delivers stories 3 and 4</span></div></header>' +
+      '<div class="facts"><span>' + glyph('review') + 'Open, waiting on you</span><span class="num">+' + adds + ' −' + dels + ' · ' + FILES.length + ' files</span><span>' + glyph('landed') + 'CI passed</span><span>Delivers stories 3 and 4</span></div></header>' +
 
-      '<section class="sec" data-od-id="code-review-axes"><span class="kicker">/code-review · two axes, reviewed in parallel</span><div class="axes">' +
+      '<section class="sec" data-piece="code-review-axes"><span class="kicker">/code-review · two axes, reviewed in parallel</span><div class="axes">' +
         '<div class="axis"><h3>' + glyph('landed') + 'Standards</h3><p class="verdict">No findings</p><p>Follows the check shape set by <a class="nm" href="ticket-graph.html#126">' + esc(ticket(126).name) + '</a>. Tests go through the analysis pass, the one seam the spec agreed.</p></div>' +
         '<div class="axis"><h3>' + glyph('review') + 'Spec</h3><p class="verdict">1 finding</p>' +
-          '<div class="finding" data-od-id="spec-finding"><span class="kicker">Story 4 · criterion 3</span><p class="quote">“A failure names the timestamp of the loudest peak.”</p>' +
+          '<div class="finding" data-piece="spec-finding"><span class="kicker">Story 4 · criterion 3</span><p class="quote">“A failure names the timestamp of the loudest peak.”</p>' +
           '<p>The test checks that a timestamp exists, not that it is right. It would still pass if every peak were reported at 0:00.</p><p>Suggested: assert the clipped fixture’s known peak time.</p>' +
-          '<div class="act"><button type="button" class="btn btn-secondary" id="send-finding" data-od-id="send-finding"' + (sent || merged ? ' aria-disabled="true"' : '') + '>' + (sent ? 'Sent · the agent is adding the assertion' : 'Send to the agent') + '</button><button type="button" class="btn btn-ghost" id="jump-finding">Show in diff</button></div></div>' +
+          '<div class="act"><button type="button" class="btn btn-secondary" id="send-finding" data-piece="send-finding">Send to the agent</button><button type="button" class="btn btn-ghost" id="jump-finding">Show in diff</button></div></div>' +
         '</div></div></section>' +
 
-      '<section class="sec" data-od-id="criteria-tests"><span class="kicker">Acceptance criteria, proven by tests</span><table class="ct"><tbody>' +
+      '<section class="sec" data-piece="criteria-tests"><span class="kicker">Acceptance criteria, proven by tests</span><table class="ct"><tbody>' +
         t.criteria.map((c) => '<tr><td>' + (c.done === 'part' ? '<span class="box part" aria-label="Weakly covered"></span>' : '<span class="box on" aria-label="Covered"></span>') + '</td><td>' + esc(c.text) + '</td><td class="test">' + esc(c.test) + '</td><td class="res' + (c.done === 'part' ? ' weak' : '') + '">' + (c.done === 'part' ? 'Passes, weakly asserted' : 'Passes') + '</td></tr>').join('') +
       '</tbody></table></section>' +
 
-      '<section class="sec" data-od-id="pr-diff"><span class="kicker">Changes</span><div class="tabs" role="tablist" id="tabs">' +
+      '<section class="sec" data-piece="pr-diff"><span class="kicker">Changes</span><div class="tabs" role="tablist" id="tabs">' +
         FILES.map((f, i) => '<button type="button" role="tab" class="tab" aria-selected="' + (i === fileIdx) + '" data-i="' + i + '">' + f.path.split('/').slice(-2).join('/') + '<span class="d">+' + f.rows.filter((r) => r[2] === '+').length + (f.rows.some((r) => r[2] === '-') ? ' −' + f.rows.filter((r) => r[2] === '-').length : '') + '</span></button>').join('') +
       '</div><table class="diff" id="diff"><tbody></tbody></table><p class="diff-hint">Click any line to leave a comment for the agent. Comments go to wt/peak-ceiling, not just to GitHub.</p></section>';
 
@@ -237,7 +231,6 @@
     const sendF = document.getElementById('send-finding');
     sendF.addEventListener('click', () => {
       if (sendF.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('findingSent', 127);
       sendF.setAttribute('aria-disabled', 'true');
       sendF.textContent = 'Sent · the agent is adding the assertion';
     });
@@ -282,28 +275,19 @@
   }
 
   function renderPRBar() {
-    const merged = WS.has('merged', 127);
     const waiting = ticket(133).blockedBy.filter((b) => b !== 127 && ticket(b).state !== 'landed').length;
     foot.innerHTML = '<div class="changes" id="changes" hidden><label class="field-label" for="changes-text">What should the agent change before this can merge?</label><textarea class="textarea" id="changes-text"></textarea><div style="padding:10px 0 2px"><button type="button" class="btn btn-secondary btn-sm" id="changes-send">Send changes request</button></div></div>' +
-      '<div class="bar" data-od-id="merge-bar"><p class="b-text" id="bar-text">' + (merged
-        ? '<b>' + esc(ticket(127).name) + '</b> landed. ' + WS.counts().landed + ' of 9 tickets are in.'
-        : 'Merging lands <b>' + esc(ticket(127).name) + '</b>. <b>' + esc(ticket(133).name) + '</b> will still wait on ' + waiting + ' tickets.') + '</p>' +
-      '<div class="b-actions"><button type="button" class="btn btn-secondary" id="request" aria-expanded="false"' + (merged ? ' aria-disabled="true"' : '') + ' data-od-id="request-changes">Request changes</button>' +
-      '<button type="button" class="btn btn-primary" id="merge"' + (merged ? ' aria-disabled="true"' : '') + ' data-od-id="approve-merge">' + (merged ? 'Merged' : 'Approve and merge') + '</button></div></div>';
+      '<div class="bar" data-piece="merge-bar"><p class="b-text" id="bar-text">Merging lands <b>' + esc(ticket(127).name) + '</b>. <b>' + esc(ticket(133).name) + '</b> will still wait on ' + waiting + ' tickets.</p>' +
+      '<div class="b-actions"><button type="button" class="btn btn-secondary" id="request" aria-expanded="false" data-piece="request-changes">Request changes</button>' +
+      '<button type="button" class="btn btn-primary" id="merge" data-piece="approve-merge">Approve and merge</button></div></div>';
 
     const merge = document.getElementById('merge'), request = document.getElementById('request'), changes = document.getElementById('changes');
     merge.addEventListener('click', () => {
       if (merge.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('merged', 127);
       merge.setAttribute('aria-disabled', 'true');
       merge.textContent = 'Merged';
       request.setAttribute('aria-disabled', 'true');
       changes.hidden = true;
-      document.getElementById('bar-text').innerHTML = '<b>' + esc(ticket(127).name) + '</b> landed. ' + WS.counts().landed + ' of 9 tickets are in.';
-      const facts = inner.querySelector('.facts span');
-      if (facts) facts.innerHTML = glyph('landed') + 'Merged';
-      paintQueue();
-      render();
     });
     request.addEventListener('click', () => {
       if (request.getAttribute('aria-disabled') === 'true') return;
@@ -322,15 +306,13 @@
 
   /* ─── agent question ───────────────────────────────────────────── */
   function renderQuestion() {
-    const t = ticket(130), answered = WS.got('answered', 130);
+    const t = ticket(130);
     inner.innerHTML =
-      '<header class="m-head" data-od-id="question-header"><span class="kicker">/tdd · Claude Code · wt/credits · paused 09:18</span>' +
+      '<header class="m-head" data-piece="question-header"><span class="kicker">/tdd · Claude Code · wt/credits · paused 09:18</span>' +
       '<h2><a href="ticket-graph.html#130">' + esc(t.name) + '</a></h2>' +
-      '<div class="facts"><span>' + glyph(answered ? 'building' : 'asking') + (answered ? 'Resumed with your answer' : 'Waiting on you') + '</span><span>' + t.criteria.filter((c) => c.done === true).length + ' of ' + t.criteria.length + ' criteria passing</span><span>Unblocks ' + esc(ticket(133).short) + '</span></div></header>' +
+      '<div class="facts"><span>' + glyph('asking') + 'Waiting on you</span><span>' + t.criteria.filter((c) => c.done === true).length + ' of ' + t.criteria.length + ' criteria passing</span><span>Unblocks ' + esc(ticket(133).short) + '</span></div></header>' +
       '<div class="two sec">' +
-        '<div class="panel" id="q-panel">' + (answered
-          ? '<div class="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">Claude Code · 09:18</span>' + esc(t.question.text) + '</div></div><div class="msg you"><span class="who">You</span><div class="body"><span class="by">You</span>' + esc(answered) + '</div></div></div><p class="meta" style="margin-top:14px">Posted to #130. <a class="nm" href="live-build.html?session=130">Watch the session resume</a></p>'
-          : WS.questionCard(130)) + '</div>' +
+        '<div class="panel" id="q-panel">' + WS.questionCard(130) + '</div>' +
         '<div class="ctx">' +
           '<span class="kicker" style="display:block; margin-bottom:10px">What the spec already says</span>' +
           '<p class="prose">“Every ACX audio rule blocks export. A missing retail sample only warns.”</p>' +
@@ -340,21 +322,20 @@
           '<span class="kicker" style="display:block; margin:6px 0 8px">Criteria so far</span>' + WS.criteriaList(t) +
         '</div>' +
       '</div>';
-    if (!answered) WS.bindQuestion(document.getElementById('q-panel'), 130, () => { paintQueue(); render(); });
+    WS.bindQuestion(document.getElementById('q-panel'), 130);
     foot.innerHTML = '';
   }
 
   /* ─── retail sample: the last ticket, then the handoff ─────────── */
   function renderSample() {
-    const stage = WS.sampleStage(), last = WS.EFFORTS.sample.last;
-    const closing = stage === 'last';
+    const last = WS.EFFORTS.sample.last;
     inner.innerHTML =
-      '<header class="m-head" data-od-id="sample-header"><span class="kicker">/wayfinder · Choosing the retail sample · map #160' + (closing ? ' · issue #' + last.n : '') + '</span>' +
-      '<h2><a href="wayfinder-map.html?effort=sample' + (closing ? '#' + last.n : '') + '">' + esc(closing ? last.name : 'The way is clear') + '</a></h2>' +
-      '<div class="facts">' + (closing ? '<span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph('asking') + 'Claimed by you · in session since 09:32</span>' : '<span>' + glyph(stage === 'clear' ? 'asking' : 'landed') + (stage === 'clear' ? 'Handing off to /to-spec · the seam waits on you' : 'Spec written from the map') + '</span>') + '</div></header>' +
-      '<div class="two sec"><div class="panel" data-od-id="sample-panel">' +
-        '<p class="prose" style="margin-bottom:14px">' + (closing ? 'Everything else on this map is decided or ruled out. The grilling session has a drafted resolution for you to check. Closing it clears the last fog, and the way to the destination is clear.' : stage === 'clear' ? 'Every ticket is decided and no fog is left. /to-spec has read the map and proposes a seam before it writes.' : 'The spec is written and labelled ready-for-agent. The map is closed with a pointer to it.') + '</p>' +
-        (stage === 'written' || stage === 'slicing' ? '' : '<a class="btn btn-primary btn-arrow" href="wayfinder-map.html?effort=sample' + (closing ? '#' + last.n : '') + '" data-od-id="open-sample-map">' + (closing ? 'Check the resolution on the map' : 'Agree the seam on the map') + '</a>') +
+      '<header class="m-head" data-piece="sample-header"><span class="kicker">/wayfinder · Choosing the retail sample · map #160 · issue #' + last.n + '</span>' +
+      '<h2><a href="wayfinder-map.html?effort=sample#' + last.n + '">' + esc(last.name) + '</a></h2>' +
+      '<div class="facts"><span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph('asking') + 'Claimed by you · in session since 09:32</span></div></header>' +
+      '<div class="two sec"><div class="panel" data-piece="sample-panel">' +
+        '<p class="prose" style="margin-bottom:14px">Everything else on this map is decided or ruled out. The grilling session has a drafted resolution for you to check. Closing it clears the last fog, and the way to the destination is clear.</p>' +
+        '<a class="btn btn-primary btn-arrow" href="wayfinder-map.html?effort=sample#' + last.n + '" data-piece="open-sample-map">Check the resolution on the map</a>' +
       '</div><div class="ctx">' +
         '<span class="kicker" style="display:block; margin-bottom:8px">Destination</span>' +
         '<p>' + esc(WS.EFFORTS.sample.destination) + '</p>' +
@@ -364,19 +345,18 @@
 
   /* ─── grilling session ─────────────────────────────────────────── */
   function renderGrill() {
-    const started = WS.has('grilled', 152);
     inner.innerHTML =
-      '<header class="m-head" data-od-id="grilling-header"><span class="kicker">/wayfinder · Per-chapter voice casting · map #147 · issue #152</span>' +
+      '<header class="m-head" data-piece="grilling-header"><span class="kicker">/wayfinder · Per-chapter voice casting · map #147 · issue #152</span>' +
       '<h2><a href="wayfinder-map.html?effort=casting#152">' + esc(WS.CASTING_GRILL.name) + '</a></h2>' +
-      '<div class="facts"><span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph(started ? 'building' : 'asking') + (started ? 'Claimed by you · in session' : 'On the frontier · waiting on you') + '</span></div></header>' +
+      '<div class="facts"><span class="chip">Grilling</span><span class="chip">HITL</span><span>' + glyph('asking') + 'On the frontier · waiting on you</span></div></header>' +
       '<div class="two sec">' +
-        '<div class="panel" data-od-id="grilling-panel">' +
+        '<div class="panel" data-piece="grilling-panel">' +
           '<p class="prose" style="margin-bottom:14px">This ticket only resolves in a live exchange with you. The session runs /grilling and /domain-modeling, as the map’s notes ask.</p>' +
-          '<button type="button" class="btn ' + (started ? 'btn-secondary' : 'btn-primary') + '" id="start-grill"' + (started ? ' aria-disabled="true"' : '') + ' data-od-id="start-grilling">' + (started ? 'Session in progress' : 'Start grilling session') + '</button>' +
-          '<div id="session" style="margin-top:18px"' + (started ? '' : ' hidden') + '>' +
+          '<button type="button" class="btn btn-primary" id="start-grill" data-piece="start-grilling">Start grilling session</button>' +
+          '<div id="session" style="margin-top:18px" hidden>' +
             '<div class="convo" id="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling · claimed by you</span>' + esc(WS.CASTING_GRILL.opener) + '</div></div></div>' +
             '<label class="field-label" for="grill-reply" style="margin-top:16px">Your answer</label><textarea class="textarea" id="grill-reply" placeholder="Answer in your own words. The agent keeps asking until the decision is sharp."></textarea>' +
-            '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-od-id="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to #152 when you close the session.</span></div>' +
+            '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-piece="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to #152 when you close the session.</span></div>' +
           '</div>' +
         '</div>' +
         '<div class="ctx">' +
@@ -394,13 +374,10 @@
     const start = document.getElementById('start-grill');
     start.addEventListener('click', () => {
       if (start.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('grilled', 152);
       start.setAttribute('aria-disabled', 'true');
       start.classList.remove('btn-primary'); start.classList.add('btn-secondary');
       start.textContent = 'Session in progress';
       document.getElementById('session').hidden = false;
-      paintQueue();
-      render();
     });
     document.getElementById('grill-send').addEventListener('click', () => {
       const ta = document.getElementById('grill-reply'), hint = document.getElementById('grill-hint');

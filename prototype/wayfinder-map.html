@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Wayfinder map · Waystation</title>
-  <link rel="stylesheet" href="assets/waystation.css" />
-  <script>try{var t=localStorage.getItem("waystation.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+  <link rel="stylesheet" href="assets/wayfarer.css" />
+  <script>try{var t=localStorage.getItem("wayfarer.theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
   <style>
     .map-split { grid-template-columns: minmax(0, 1fr) 350px; }
     .canvas-col { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
@@ -192,7 +192,7 @@
   <nav id="route"></nav>
 
   <main class="split map-split" id="content">
-    <section class="canvas-col" data-od-id="map-canvas">
+    <section class="canvas-col" data-piece="map-canvas">
       <div class="canvas-head">
         <div>
           <span class="kicker" id="map-kicker"></span>
@@ -213,24 +213,24 @@
         <div class="stage-wrap"><div class="stage" id="stage"></div></div>
       </div>
 
-      <div class="scrub" data-od-id="replay">
+      <div class="scrub" data-piece="replay">
         <div class="caption" aria-live="polite"><span class="when" id="cap-when"></span><span class="what" id="cap-what"></span></div>
-        <button class="play" id="play" type="button" aria-label="Replay the map from the start" data-od-id="replay-play"></button>
+        <button class="play" id="play" type="button" aria-label="Replay the map from the start" data-piece="replay-play"></button>
         <div class="range-wrap">
           <input type="range" id="range" min="0" step="1" aria-label="Map history" />
           <div class="ticks" id="ticks"></div>
         </div>
-        <button class="btn btn-ghost btn-sm now-btn" id="now" type="button" data-od-id="replay-now">Back to now</button>
+        <button class="btn btn-ghost btn-sm now-btn" id="now" type="button" data-piece="replay-now">Back to now</button>
       </div>
     </section>
 
-    <aside class="side drawer" data-od-id="map-drawer">
+    <aside class="side drawer" data-piece="map-drawer">
       <div class="pane" id="drawer"></div>
     </aside>
   </main>
 </div>
 
-<script src="assets/waystation.js"></script>
+<script src="assets/wayfarer.js"></script>
 <script>
 (function () {
   const { esc, glyph } = WS;
@@ -416,7 +416,11 @@
   const SAMPLE = effortId === 'sample';
   const LAST = SAMPLE ? M.nodes.find((nd) => nd.withYou) : null;
 
-  /* Replaying stored progress: the close and the handoff become events on the map. */
+  /* Nothing is stored: each visit opens at the same moment, and the sample
+     map's close and handoff happen on this page only, as events on the map. */
+  let sampleStage = 'last';   // → clear → written → slicing
+  let seam = null;
+  let grilled = false;        // the casting map's HITL ticket, once you start it
   function closeSampleOnMap(resolution) {
     M.events.push({ when: '15 Sep · now', what: 'The sample stays as chosen. The last patch of fog cleared without a new ticket. <b>The way is clear.</b>' });
     LAST.closed = M.events.length - 1;
@@ -426,8 +430,6 @@
   function handSampleOff() {
     M.events.push({ when: '15 Sep · now', what: 'Handed to /to-spec as <b>' + WS.EFFORTS.sample.spec.name + '</b>. The map is closed.' });
   }
-  if (SAMPLE && WS.has('sample', 'closed')) closeSampleOnMap(WS.got('sample', 'closed'));
-  if (SAMPLE && WS.has('sample', 'written')) handSampleOff();
   let NOW = M.events.length - 1;
   const byN = {};
   M.nodes.forEach((nd) => { byN[nd.n] = nd; });
@@ -435,8 +437,7 @@
   let selected = null;
   let handoffIntro = false;
 
-  WS.renderTopbar({ page: 'wayfinder', effort: effortId });
-  WS.renderRoute({ page: 'wayfinder', effort: effortId });
+  refreshShell();
   document.title = M.title + ' · Wayfinder map · Waystation';
   document.getElementById('map-kicker').textContent = '/wayfinder · map #' + M.issue + ' · charted ' + M.charted;
   document.getElementById('map-title').textContent = M.title;
@@ -445,7 +446,7 @@
   const WORD = { closed: 'Decided', working: 'Claimed', ask: 'Waiting on you', take: 'Frontier · unclaimed', blocked: 'Blocked', out: 'Out of scope' };
   const GLYPH = { closed: 'st-done', working: 'st-building', ask: 'st-ask', take: 'st-take', blocked: 'st-blocked', out: 'st-out', hidden: 'st-pending' };
 
-  function grilledNow(nd, s) { return (effortId === 'casting' && nd.n === 152 && s === NOW && WS.has('grilled', 152)) || (nd.withYou && nd.claimed <= s); }
+  function grilledNow(nd, s) { return (effortId === 'casting' && nd.n === 152 && s === NOW && grilled) || (nd.withYou && nd.claimed <= s); }
   function stateAt(nd, s) {
     if (nd.created > s) return 'hidden';
     if (nd.out != null && nd.out <= s) return 'out';
@@ -504,12 +505,12 @@
   add('<div class="tray-rule" style="top:478px"></div>');
   add('<div class="tray-label kicker" style="top:470px">Beyond the destination</div>');
   const patches = M.fog.map((f) => add('<div class="patch" style="left:' + f.x + 'px; top:' + f.y + 'px">' + esc(f.text) + '</div>'));
-  const dest = add('<div class="dest" style="left:' + M.dest.x + 'px; top:' + M.dest.y + 'px" data-od-id="destination"><span class="dest-mark" aria-hidden="true"></span><span class="kicker">Destination</span><span class="d-text">' + esc(M.destination) + '</span>' +
+  const dest = add('<div class="dest" style="left:' + M.dest.x + 'px; top:' + M.dest.y + 'px" data-piece="destination"><span class="dest-mark" aria-hidden="true"></span><span class="kicker">Destination</span><span class="d-text">' + esc(M.destination) + '</span>' +
     (M.handoff ? '<span class="d-clear">The way is clear. <a class="nm" href="spec-reader.html">Handed to /to-spec</a></span>' : SAMPLE ? '<span class="d-clear" id="d-clear"></span>' : '') + '</div>');
 
   const nodeEls = {};
   M.nodes.forEach((nd) => {
-    const b = add('<button type="button" class="node" data-n="' + nd.n + '" data-od-id="map-ticket-' + nd.n + '" aria-pressed="false" style="left:' + nd.x + 'px; top:' + nd.y + 'px">' +
+    const b = add('<button type="button" class="node" data-n="' + nd.n + '" data-piece="map-ticket-' + nd.n + '" aria-pressed="false" style="left:' + nd.x + 'px; top:' + nd.y + 'px">' +
       '<span class="st" aria-hidden="true"></span>' +
       '<span class="n-label"><span class="n-name">' + esc(nd.name) + '</span><span class="n-type">' + TYPE[nd.type] + ' · ' + nd.mode + '</span><span class="n-flag"></span></span></button>');
     nodeEls[nd.n] = b;
@@ -568,7 +569,7 @@
     fogTitle.style.opacity = clear ? 0 : 1;
     dest.classList.toggle('clear', clear && step === NOW);
     if (SAMPLE) {
-      const written = WS.has('sample', 'written');
+      const written = sampleStage === 'written' || sampleStage === 'slicing';
       document.getElementById('d-clear').textContent = written ? 'The way is clear. Written up as ' + WS.EFFORTS.sample.spec.name + '.' : 'The way is clear. Next: /to-spec.';
     }
 
@@ -595,7 +596,7 @@
     const replay = past ? '<div class="notice replay-note" style="margin:16px 22px 0"><span class="st st-pending" aria-hidden="true"></span><span>Replaying ' + esc(M.events[step].when) + '. Return to now to act on the map.</span></div>' : '';
     let html;
     drawer.classList.toggle('handoff-in', !!handoffIntro);
-    if (selected == null && SAMPLE && !past && WS.sampleStage() !== 'last') {
+    if (selected == null && SAMPLE && !past && sampleStage !== 'last') {
       html = handoffHtml(states);
     } else if (selected == null) {
       const decided = M.nodes.filter((nd) => states[nd.n] === 'closed').sort((a, b) => a.closed - b.closed);
@@ -604,7 +605,7 @@
       const out = M.nodes.filter((nd) => states[nd.n] === 'out');
       const lastCall = SAMPLE && !past && states[LAST.n] === 'working';
       html = '<div class="d-head"><span class="kicker">Map #' + M.issue + ' · wayfinder:map</span><h2 tabindex="-1">' + esc(M.title) + '</h2></div>' + replay +
-        (lastCall ? '<div class="block last-call" data-od-id="last-call"><span class="kicker">One decision from a clear way</span><p class="prose">Everything else on this map is decided or ruled out, and the last patch of fog hangs on one ticket. Closing it clears the way.</p>' +
+        (lastCall ? '<div class="block last-call" data-piece="last-call"><span class="kicker">One decision from a clear way</span><p class="prose">Everything else on this map is decided or ruled out, and the last patch of fog hangs on one ticket. Closing it clears the way.</p>' +
           '<div class="decision" style="margin-top:6px">' + glyph('building') + '<div>' + nameBtn(LAST.n) + '<span class="gist">In session with you · Grilling, HITL</span></div></div></div>' : '') +
         '<div class="block"><span class="kicker">Destination</span><p class="prose serif">' + esc(M.destination) + '</p></div>' +
         (dest.classList.contains('clear') && M.handoff ? '<div class="block"><span class="kicker">Handed off</span><p class="prose">The way is clear. This map became <a class="nm" href="spec-reader.html">' + esc(M.handoff.name) + '</a><span class="id">#' + M.handoff.n + '</span>.</p></div>' : '') +
@@ -647,11 +648,10 @@
     }
     if (s === 'working' && nd.mode === 'AFK') return '<div class="block"><p class="meta">Started ' + esc(M.events[nd.claimed].when) + '. You’ll see the resolution here and in the chronicle when the subagent closes the ticket.</p></div>';
     if (effortId === 'casting' && nd.n === 152) {
-      const started = WS.has('grilled', 152);
-      return '<div class="block" data-od-id="grilling-session"><span class="kicker">Human in the loop</span>' +
+      return '<div class="block" data-piece="grilling-session"><span class="kicker">Human in the loop</span>' +
         '<div class="d-actions"><p class="prose">This ticket only resolves in a live exchange with you. The session runs /grilling and /domain-modeling, as the map’s notes ask.</p>' +
-        '<div><button type="button" class="btn ' + (started ? 'btn-secondary' : 'btn-primary') + '" id="start-grill" data-od-id="start-grilling"' + (started ? ' aria-disabled="true"' : '') + '>' + (started ? 'Session in progress' : 'Start grilling session') + '</button></div></div>' +
-        '<div class="session" id="session"' + (started ? '' : ' hidden') + '>' + sessionHtml() + '</div></div>';
+        '<div><button type="button" class="btn ' + (grilled ? 'btn-secondary' : 'btn-primary') + '" id="start-grill" data-piece="start-grilling"' + (grilled ? ' aria-disabled="true"' : '') + '>' + (grilled ? 'Session in progress' : 'Start grilling session') + '</button></div></div>' +
+        '<div class="session" id="session"' + (grilled ? '' : ' hidden') + '>' + sessionHtml() + '</div></div>';
     }
     if (nd.withYou && s === 'working') return lastTicketHtml(nd);
     const verb = nd.type === 'prototype' ? 'prototype' : 'grilling';
@@ -662,14 +662,14 @@
   const msg = (who, by, text) => '<div class="msg' + (who === 'You' ? ' you' : '') + '"><span class="who">' + who + '</span><div class="body"><span class="by">' + by + '</span>' + esc(text) + '</div></div>';
 
   function lastTicketHtml(nd) {
-    return '<div class="block" data-od-id="last-ticket-session"><span class="kicker">Grilling session · with you</span><div class="convo">' +
+    return '<div class="block" data-piece="last-ticket-session"><span class="kicker">Grilling session · with you</span><div class="convo">' +
         msg('AI', '/grilling · 09:32', 'An author picks a sample from chapter 3, then re-renders chapter 3 with a different voice for Eliot. What should happen to the sample?') +
         msg('You', 'You · 09:36', 'It shouldn’t change quietly. They picked that passage because of how it sounded.') +
         msg('AI', '/grilling · /domain-modeling · 09:37', 'So a sample is a chosen cut, not a live window onto its chapter. When the chapter changes, should Galley only flag the sample, or offer to re-cut it?') +
         msg('You', 'You · 09:41', 'Flag it and ask them to listen again. Never re-cut it on its own.') +
         msg('AI', '/grilling · 09:42', 'That’s sharp enough to close. A sample never changes by itself, so the fog about re-running its checks has nothing left to decide.') +
       '</div></div>' +
-      '<div class="block" data-od-id="resolution-comment"><span class="kicker">Resolution comment</span>' +
+      '<div class="block" data-piece="resolution-comment"><span class="kicker">Resolution comment</span>' +
         '<label class="field-label" for="resolution">Drafted from your answers. Edit it before it posts to the ticket.</label>' +
         '<textarea class="textarea res-ta" id="resolution">' + esc(nd.resolution) + '</textarea>' +
         '<span class="kicker" style="display:block; margin-top:16px">Closing this ticket</span>' +
@@ -678,7 +678,7 @@
           '<li><i class="fog-key" aria-hidden="true"></i><span>Clears the last patch of fog without a new ticket: <em>' + esc(M.fog[1].text) + '</em></span></li>' +
           '<li><i class="mini-dest" aria-hidden="true"></i><span>Leaves nothing open between here and the destination</span></li>' +
         '</ul>' +
-        '<div class="res-act"><button type="button" class="btn btn-primary" id="close-last" data-od-id="close-last-ticket">Post resolution and close</button><span class="meta" id="close-hint" aria-live="polite"></span></div>' +
+        '<div class="res-act"><button type="button" class="btn btn-primary" id="close-last" data-piece="close-last-ticket">Post resolution and close</button><span class="meta" id="close-hint" aria-live="polite"></span></div>' +
       '</div>';
   }
 
@@ -690,27 +690,25 @@
   };
 
   function handoffHtml(states) {
-    const stage = WS.sampleStage();
-    const seam = WS.got('sample', 'seam');
-    const writtenYet = stage === 'written' || stage === 'slicing';
+    const writtenYet = sampleStage === 'written' || sampleStage === 'slicing';
     const decided = M.nodes.filter((nd) => states[nd.n] === 'closed').sort((a, b) => a.closed - b.closed);
     const out = M.nodes.filter((nd) => states[nd.n] === 'out');
     const r = (d) => ' reveal" style="--d:' + d + 'ms';
 
     const seamBlock = writtenYet ?
       '<div class="t-meta">Agreed with you. ' + SEAMS[seam || 'existing'].agreed + '</div>' :
-      '<div class="seam" data-od-id="seam-proposal"><p class="by">/to-spec · proposed seam</p>' +
+      '<div class="seam" data-piece="seam-proposal"><p class="by">/to-spec · proposed seam</p>' +
         '<p class="seam-text">Test through the compliance read model that Pre-delivery compliance checks already built. Suggestions and the out-of-date flag both read it.</p>' +
         '<div role="radiogroup" aria-label="Seam for the spec">' + Object.keys(SEAMS).map((k) =>
           '<button type="button" class="choice" role="radio" aria-checked="' + (k === 'existing') + '" data-seam="' + k + '"><span class="radio"></span><span><span class="c-title">' + SEAMS[k].title + '</span><span class="c-sub" style="display:block">' + SEAMS[k].sub + '</span></span></button>').join('') + '</div>' +
         '<label class="field-label" for="seam-note" style="margin-top:10px">Anything the spec should know</label>' +
         '<textarea class="textarea" id="seam-note" style="min-height:64px" placeholder="Optional. /to-spec reads this before it writes."></textarea>' +
-        '<div class="act"><button type="button" class="btn btn-primary" id="agree-seam" data-od-id="agree-seam">Agree seam and write the spec</button></div></div>';
+        '<div class="act"><button type="button" class="btn btn-primary" id="agree-seam" data-piece="agree-seam">Agree seam and write the spec</button></div></div>';
 
     return '<div class="d-head' + r(900) + '"><span class="kicker">Map #' + M.issue + (writtenYet ? ' · closed' : ' · wayfinder:map') + '</span>' +
         '<h2 tabindex="-1" id="handoff-title">The way is clear</h2>' +
         '<p class="clear-lead">Every ticket on ' + esc(M.title) + ' is decided or ruled out, and no fog is left. The destination is a spec, so the course continues at /to-spec.</p></div>' +
-      '<div class="block' + r(1250) + '" data-od-id="handoff-to-spec"><span class="kicker">Hand off to /to-spec</span>' +
+      '<div class="block' + r(1250) + '" data-piece="handoff-to-spec"><span class="kicker">Hand off to /to-spec</span>' +
         '<ol class="thread hand">' +
           '<li><span class="t-mark">' + glyph('landed') + '</span><div><span class="t-skill">Read</span><div class="t-name">Read the map and its decisions</div><div class="t-meta">' + decided.length + ' decisions, ' + out.length + ' ruled out, and CONTEXT.md. /to-spec writes from what’s decided and doesn’t interview you.</div></div></li>' +
           '<li id="step-seam"' + (writtenYet ? '' : ' class="next-pending"') + '><span class="t-mark" id="seam-mark">' + glyph(writtenYet ? 'landed' : 'asking') + '</span><div><span class="t-skill">With you</span><div class="t-name">Agree the seam</div>' + seamBlock + '</div></li>' +
@@ -720,7 +718,7 @@
         '<div id="spec-slot">' + (writtenYet ? specCardHtml() : '') + '</div>' +
       '</div>' +
       '<div class="block' + r(1500) + '"><span class="kicker">Destination</span><p class="prose serif">' + esc(M.destination) + '</p></div>' +
-      '<div class="block' + r(1650) + '" data-od-id="spec-sources"><span class="kicker">Written from these decisions · ' + (decided.length + out.length) + '</span>' +
+      '<div class="block' + r(1650) + '" data-piece="spec-sources"><span class="kicker">Written from these decisions · ' + (decided.length + out.length) + '</span>' +
         decided.concat(out).map((nd) => '<div class="feeds"><span class="st ' + (states[nd.n] === 'out' ? 'st-out' : 'st-done') + '" aria-hidden="true"></span><div><button type="button" class="link" data-go="' + nd.n + '">' + esc(nd.name) + '</button><span class="to">→ ' + nd.feeds + '</span></div></div>').join('') +
       '</div>';
   }
@@ -732,18 +730,19 @@
 
   function specCardHtml() {
     const spec = WS.EFFORTS.sample.spec;
-    const slicing = WS.sampleStage() === 'slicing';
-    return '<div class="spec-card" data-od-id="spec-168" style="margin-top:4px"><span class="kicker">/to-spec · issue #' + spec.n + ' · ready-for-agent</span>' +
+    const slicing = sampleStage === 'slicing';
+    return '<div class="spec-card" data-piece="spec-168" style="margin-top:4px"><span class="kicker">/to-spec · issue #' + spec.n + ' · ready-for-agent</span>' +
         '<h3>' + esc(spec.name) + '</h3>' +
         '<p class="prose">Authors reach the retail sample last and pick one by scrubbing through chapters. Galley suggests passages that already meet ACX’s rules, and keeps a chosen sample steady when chapters change.</p>' +
         '<div class="counts"><span>12 user stories</span><span>4 implementation decisions</span><span>3 testing decisions</span></div></div>' +
-      '<div class="slice-act"><button type="button" class="btn ' + (slicing ? 'btn-secondary' : 'btn-primary') + '" id="slice"' + (slicing ? ' aria-disabled="true"' : '') + ' data-od-id="slice-into-tickets">' + (slicing ? 'Slicing into tickets' : 'Slice into tickets') + '</button>' +
+      '<div class="slice-act"><button type="button" class="btn ' + (slicing ? 'btn-secondary' : 'btn-primary') + '" id="slice"' + (slicing ? ' aria-disabled="true"' : '') + ' data-piece="slice-into-tickets">' + (slicing ? 'Slicing into tickets' : 'Slice into tickets') + '</button>' +
         '<span class="meta" id="slice-hint">' + (slicing ? '/to-tickets is drafting. You check the tickets before they publish.' : 'Runs /to-tickets. You check the drafts before they publish.') + '</span></div>';
   }
 
   function refreshShell() {
-    WS.renderTopbar({ page: 'wayfinder', effort: effortId });
-    WS.renderRoute({ page: 'wayfinder', effort: effortId });
+    const opts = { page: 'wayfinder', effort: effortId, sampleStage: sampleStage, grilled: grilled };
+    WS.renderTopbar(opts);
+    WS.renderRoute(opts);
   }
 
   function bindSample() {
@@ -763,7 +762,7 @@
     if (agree) agree.addEventListener('click', () => {
       if (agree.getAttribute('aria-disabled') === 'true') return;
       const picked = drawer.querySelector('.seam .choice[aria-checked="true"]').dataset.seam;
-      WS.mark('sample', 'seam', picked);
+      seam = picked;
       agree.setAttribute('aria-disabled', 'true');
       agree.classList.replace('btn-primary', 'btn-secondary');
       agree.textContent = 'Seam agreed';
@@ -780,7 +779,7 @@
     const slice = document.getElementById('slice');
     if (slice) slice.addEventListener('click', () => {
       if (slice.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('sample', 'sliced');
+      sampleStage = 'slicing';
       slice.setAttribute('aria-disabled', 'true');
       slice.classList.replace('btn-primary', 'btn-secondary');
       slice.textContent = 'Slicing into tickets';
@@ -792,8 +791,8 @@
   /* /to-spec writes section by section, then publishes and closes the map. */
   function writeSpec() {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // state moves at once, so a reload or another screen mid-write reads the result
-    WS.mark('sample', 'written');
+    // state moves at once, so a panel rebuilt mid-write reads the result
+    sampleStage = 'written';
     handSampleOff();
     const list = document.getElementById('writing');
     document.getElementById('step-write').classList.remove('pending');
@@ -824,7 +823,7 @@
   /* The last close: the resolution posts, the fog lifts, the course reaches the destination. */
   function clearTheWay(text) {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    WS.mark('sample', 'closed', text);
+    sampleStage = 'clear';
     closeSampleOnMap(text);
     NOW = M.events.length - 1;
     step = NOW;
@@ -866,20 +865,20 @@
     return '<div class="convo" id="convo"><div class="msg"><span class="who">AI</span><div class="body"><span class="by">/grilling · claimed by you</span>' + esc(WS.CASTING_GRILL.opener) + '</div></div></div>' +
       '<label class="field-label" for="grill-reply" style="margin-top:16px">Your answer</label>' +
       '<textarea class="textarea" id="grill-reply" placeholder="Answer in your own words. The agent keeps asking until the decision is sharp."></textarea>' +
-      '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-od-id="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to issue #152 when you close the session.</span></div>';
+      '<div style="margin-top:10px; display:flex; gap:10px; align-items:center"><button type="button" class="btn btn-primary" id="grill-send" data-piece="grilling-send">Send</button><span class="meta" id="grill-hint">The resolution posts to issue #152 when you close the session.</span></div>';
   }
 
   function bindSession() {
     const start = document.getElementById('start-grill');
     if (start) start.addEventListener('click', () => {
       if (start.getAttribute('aria-disabled') === 'true') return;
-      WS.mark('grilled', 152);
+      grilled = true;
       start.setAttribute('aria-disabled', 'true');
       start.classList.remove('btn-primary'); start.classList.add('btn-secondary');
       start.textContent = 'Session in progress';
       document.getElementById('session').hidden = false;
       refreshNodesOnly();
-      WS.renderTopbar({ page: 'wayfinder', effort: effortId });
+      refreshShell();
     });
     const send = document.getElementById('grill-send');
     if (send) send.addEventListener('click', () => {
@@ -959,7 +958,7 @@
 
   const hashN = Number(location.hash.slice(1));
   if (byN[hashN]) selected = hashN;
-  const introKey = 'waystation.intro.' + effortId;
+  const introKey = 'wayfarer.intro.' + effortId;
   let seen = true;
   try { seen = !!sessionStorage.getItem(introKey); sessionStorage.setItem(introKey, '1'); } catch (e) { /* storage blocked */ }
   if (!seen && selected == null && !matchMedia('(prefers-reduced-motion: reduce)').matches) {

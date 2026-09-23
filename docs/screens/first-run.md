@@ -125,7 +125,7 @@ Appears after Map the frontier.
 ## Prototype shortcuts
 
 - **Scripted session:** the charting session always follows the sample idea (Madrigal voices beyond English), even if the person types something else. Candidate questions, destination sentences, the map number (#38) and issue numbers are all fixed.
-- **Storage:** nothing is saved until Create the map. Reloading mid-flow starts over. After creation, the charted state lives in `sessionStorage`.
+- **Storage:** nothing is saved. The whole flow plays through on this page, and a reload starts over from the blank chart.
 - **No link out:** the charted map isn't linked to `wayfinder-map.html`, which only knows the Galley maps. In the real build, this page *becomes* that map.
 
 ## Open questions
