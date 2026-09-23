@@ -57,9 +57,6 @@ class _Poll:
                 return
             except RateLimited as refusal:
                 floor = self._back_off(refusal)
-            except GitHubError as error:
-                _log.warning("The poll of GitHub failed, and will try again: %s", error)
-                floor = 0.0
             await self._rest(started, floor)
 
     async def _round(self) -> float:
@@ -74,11 +71,19 @@ class _Poll:
         self._etags = {path: self._etags.get(path) for path in paths}
         floor = 0.0
         for path in paths:
-            answer = await self._github.conditional(
-                path,
-                self._etags[path],
-                self._listing if path == "/issues" else None,
-            )
+            try:
+                answer = await self._github.conditional(
+                    path,
+                    self._etags[path],
+                    self._listing if path == "/issues" else None,
+                )
+            except RateLimited:
+                raise
+            except GitHubError as error:
+                # One path refused, such as checks a token may not read, holds up
+                # no other; it is asked again next round.
+                _log.warning("The poll of GitHub failed, and will try again: %s", error)
+                continue
             self._etags[path] = answer.etag
             floor = max(floor, answer.poll_interval)
             # A first answer pokes too: a watch that read before it may have missed

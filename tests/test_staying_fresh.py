@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Generator
+from email.utils import formatdate
 from itertools import pairwise
 from typing import Any
 
@@ -96,6 +97,8 @@ def test_the_poll_runs_fast_while_a_page_is_open_and_slows_when_none_is(
     spec, _ = github.effort("Rhythm", tickets=1)
     url = wayfarer.start(env=_FAST).url()
     _until(lambda: len(github.polls()) >= 1)
+    # A poll that must not happen has no signal to wait for, so each check of the
+    # slow rhythm watches a second: ten ticks of the open one.
     time.sleep(1.0)
     assert len(github.polls()) == 1, "idle, it polled at the open rhythm"
 
@@ -103,11 +106,11 @@ def test_the_poll_runs_fast_while_a_page_is_open_and_slows_when_none_is(
     next(page)
     _polls_after(github, 5)
     page.close()
-    time.sleep(0.5)
+    # The last fast rest may already have begun, so one more poll is allowed.
     settled = len(github.polls())
     time.sleep(1.0)
 
-    assert len(github.polls()) == settled, "with the page gone, it kept polling fast"
+    assert len(github.polls()) <= settled + 1, "with the page gone, it kept polling fast"
 
 
 def _gaps(polls: list[Logged]) -> list[float]:
@@ -119,8 +122,9 @@ def _gaps(polls: list[Logged]) -> list[float]:
     [
         Refusal(429, {"Retry-After": "1"}),
         Refusal(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "{in_one_second}"}),
+        Refusal(429, {"Retry-After": "{http_date}"}),
     ],
-    ids=["retry-after", "rate-limit-reset"],
+    ids=["retry-after", "rate-limit-reset", "retry-after-as-a-date"],
 )
 def test_a_rate_limited_poll_waits_as_long_as_github_asks(
     wayfarer: Launcher, github: GitHub, refusal: Refusal
@@ -131,8 +135,9 @@ def test_a_rate_limited_poll_waits_as_long_as_github_asks(
     next(page)
     _polls_after(github, 2)
 
+    later = int(time.time()) + 2
     headers = {
-        name: value.format(in_one_second=int(time.time()) + 2)
+        name: value.format(in_one_second=later, http_date=formatdate(later, usegmt=True))
         for name, value in refusal.headers.items()
     }
     github.refuse(Refusal(refusal.status, headers))
@@ -238,3 +243,21 @@ def test_a_poll_github_refuses_keeps_to_its_rhythm_and_keeps_asking(
     polls = _polls_after(github, 3)
 
     assert {poll.status for poll in polls} == {401}
+
+
+def test_a_pull_request_whose_checks_are_forbidden_does_not_hold_up_the_poll(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Forbidden checks", tickets=1)
+    github.pull_request(ticket, checks="PENDING")
+    github.forbid("/check-runs")
+    url = wayfarer.start(env=_FAST).url()
+    page = _watch(url, spec.number)
+    next(page)
+    _polls_after(github, 3, path="/check-runs")
+
+    ticket.labels.append(HELD)
+
+    assert _states(next(page)) == {ticket.number: "held"}
+    assert max(_gaps(github.polls()[-4:])) < 0.5
+    page.close()

@@ -158,6 +158,7 @@ class Refusal:
 
     status: int
     headers: dict[str, str] = field(default_factory=dict)
+    message: str = "API rate limit exceeded"
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,7 @@ class GitHub:
         self.requests: list[Logged] = []
         self.poll_interval: int | None = None
         self._refusals: list[Refusal] = []
+        self._forbidden: list[str] = []
         self.api = ""
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
@@ -251,6 +253,12 @@ class GitHub:
         """Answer the next REST reads with these, one each, then serve again."""
         with self._lock:
             self._refusals += refusals
+
+    def forbid(self, path: str) -> None:
+        """Refuse every read of paths ending in `path`, as GitHub refuses a token
+        without the permission that path needs."""
+        with self._lock:
+            self._forbidden.append(path)
 
     def _visible(self) -> _Repo:
         return self._frozen if self._frozen is not None else self._live
@@ -351,10 +359,12 @@ class GitHub:
         """`body` with an ETag, or a refusal or `304` as GitHub would give instead."""
         with self._lock:
             refusal = self._refusals.pop(0) if self._refusals else None
+            if any(request.url.path.endswith(path) for path in self._forbidden):
+                refusal = Refusal(403, message="Resource not accessible by personal access token")
             interval = self.poll_interval
         if refusal is not None:
             return JSONResponse(
-                {"message": "API rate limit exceeded"},
+                {"message": refusal.message},
                 status_code=refusal.status,
                 headers=refusal.headers,
             )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterable, AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
@@ -24,6 +25,8 @@ from wayfarer.read_model import read_effort
 from wayfarer.settings import Settings
 
 __all__ = ["create_app"]
+
+_log = logging.getLogger(__name__)
 
 # Built into the package by the hatch build hook (`hatch_build.py`), so the wheel
 # carries it and a user needs no Node toolchain (ADR-0004).
@@ -46,6 +49,12 @@ async def _last_build(request: Request) -> Build:
 
 
 LastBuild = Annotated[Build, Depends(_last_build)]
+
+
+def _report_death(task: asyncio.Task[None]) -> None:
+    """A poll that died leaves every page stale while it still serves, so say so."""
+    if not task.cancelled() and task.exception() is not None:
+        _log.error("The poll of GitHub stopped; pages will not refresh.", exc_info=task.exception())
 
 
 async def _read(app: FastAPI, number: int) -> Effort:
@@ -89,6 +98,7 @@ def create_app(
     @asynccontextmanager
     async def polling(app: FastAPI) -> AsyncIterator[None]:
         task = asyncio.create_task(poll(github, settings))
+        task.add_done_callback(_report_death)
         yield
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

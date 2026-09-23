@@ -11,6 +11,7 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -146,19 +147,16 @@ class GitHub:
         GitHub states a `304` "does not count against your primary rate limit", so
         asking about something unchanged costs nothing (ADR-0003).
         """
-        repo, auth = self._connected()
-        headers = auth | ({"If-None-Match": etag} if etag else {})
-        response = await self._send(
-            "GET", f"/repos/{repo.owner}/{repo.name}{path}", headers=headers, params=params
-        )
-        if response.status_code in (403, 429):
+        headers = {"If-None-Match": etag} if etag else {}
+        response = await self._rest("GET", path, headers=headers, params=params)
+        if _rate_limited(response):
             raise RateLimited(response.status_code, _asked_wait(response.headers))
         if response.status_code not in (200, 304):
             raise GitHubError(f"GitHub refused the read ({response.status_code}): {response.text}")
         return Answer(
             changed=response.status_code == 200,
             etag=response.headers.get("ETag", etag),
-            poll_interval=float(response.headers.get("X-Poll-Interval", 0)),
+            poll_interval=_seconds(response.headers.get("X-Poll-Interval")) or 0.0,
         )
 
     async def write(self, method: str, path: str, body: dict[str, Any]) -> Any:
@@ -167,28 +165,65 @@ class GitHub:
         Whatever comes back, the write may have landed, so the signal to re-read
         is raised either way (ADR-0003). Nothing it returns is believed as state.
         """
-        repo, auth = self._connected()
         try:
-            response = await self._send(
-                method, f"/repos/{repo.owner}/{repo.name}{path}", headers=auth, json=body
-            )
+            response = await self._rest(method, path, json=body)
         finally:
             self.freshness.poke()
         if response.is_error:
             raise GitHubError(f"GitHub refused the write ({response.status_code}): {response.text}")
-        return response.json()
+        # Some writes, such as deleting a branch, answer `204 No Content`.
+        return response.json() if response.content else None
+
+    async def _rest(
+        self, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: Any
+    ) -> httpx.Response:
+        repo, auth = self._connected()
+        return await self._send(
+            method,
+            f"/repos/{repo.owner}/{repo.name}{path}",
+            headers=auth | (headers or {}),
+            **kwargs,
+        )
+
+
+# GitHub's rules for its rate-limit responses:
+# https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#handle-rate-limit-errors-appropriately
+
+
+def _rate_limited(response: httpx.Response) -> bool:
+    """A `429`, or a `403` that says it is a rate limit. Any other `403` is a
+    permission GitHub withholds, which waiting will not fix."""
+    if response.status_code == 429:
+        return True
+    return response.status_code == 403 and (
+        "Retry-After" in response.headers
+        or response.headers.get("X-RateLimit-Remaining") == "0"
+        or "rate limit" in response.text.lower()
+    )
 
 
 def _asked_wait(headers: httpx.Headers) -> float | None:
-    """How long GitHub asked for, by its documented rate-limit headers.
-
-    https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#handle-rate-limit-errors-appropriately
-    """
+    """How long GitHub asked for, or None when it did not say."""
     if "Retry-After" in headers:
-        return float(headers["Retry-After"])
-    if headers.get("X-RateLimit-Remaining") == "0" and "X-RateLimit-Reset" in headers:
-        return max(0.0, float(headers["X-RateLimit-Reset"]) - time.time())
+        return _seconds(headers["Retry-After"])
+    if headers.get("X-RateLimit-Remaining") == "0":
+        reset = _seconds(headers.get("X-RateLimit-Reset"))
+        return None if reset is None else max(0.0, reset - time.time())
     return None
+
+
+def _seconds(value: str | None) -> float | None:
+    """A header's seconds, or an HTTP date as seconds from now; None if neither."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        return max(0.0, parsedate_to_datetime(value).timestamp() - time.time())
+    except (TypeError, ValueError):
+        return None
 
 
 def _only_not_found(errors: list[dict[str, Any]]) -> bool:
