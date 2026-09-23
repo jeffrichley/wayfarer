@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Collection, Iterator
+from collections.abc import Awaitable, Callable, Collection, Container, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -117,6 +117,10 @@ class Efforts:
         self._reading: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._followed: set[int] = set()
         self._pages: set[Watch] = set()
+        self.building: Container[int] = frozenset()
+        """The tickets a session is running on, which only this process knows."""
+        self.then: Callable[[int], Awaitable[None]] | None = None
+        """Called with an effort's number after each read of it: the cascade's cue."""
 
     async def read(self, number: int) -> None:
         """Read effort `number` from GitHub, put what changed on the stream, and follow it."""
@@ -126,6 +130,8 @@ class Efforts:
         async with self._reading[number]:
             await self._read(number)
         self._await_open_pulls()
+        if self.then is not None:
+            await self.then(number)
 
     async def follow(self) -> None:
         """Read every followed effort again each time the signal fires, until cancelled."""
@@ -172,6 +178,7 @@ class Efforts:
                 number,
                 per_page=self._settings.tickets_per_page,
                 auto_merge=self._settings.auto_merge,
+                building=self.building,
             )
         except (NotConnected, NoSuchIssue, GitHubError) as error:
             self._store.upsert(
@@ -199,6 +206,7 @@ async def read_effort(
     *,
     per_page: int,
     auto_merge: bool,
+    building: Container[int] = frozenset(),
 ) -> tuple[Effort, list[Ticket]]:
     """Effort `number` and its tickets, as GitHub has them now."""
     nodes: list[dict[str, Any]] = []
@@ -213,7 +221,7 @@ async def read_effort(
         if not page["pageInfo"]["hasNextPage"]:
             break
         after = page["pageInfo"]["endCursor"]
-    tickets = [_ticket(node, auto_merge=auto_merge) for node in nodes]
+    tickets = [_ticket(node, auto_merge=auto_merge, building=building) for node in nodes]
     effort = Effort(
         kind="effort",
         id=f"effort:{number}",
@@ -225,7 +233,7 @@ async def read_effort(
     return effort, tickets
 
 
-def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
+def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int]) -> Ticket:
     number: int = node["number"]
     labels = [label["name"] for label in node["labels"]["nodes"]]
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
@@ -244,8 +252,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool) -> Ticket:
             assignees=assignees,
             open_blockers=open_blockers,
             pull_request=pull_request,
-            # Nothing runs a session yet; the ticket that does feeds this in.
-            building=False,
+            building=number in building,
             auto_merge=auto_merge,
         ),
         open=is_open,

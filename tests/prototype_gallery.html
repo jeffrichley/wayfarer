@@ -65,6 +65,71 @@
     .mk-outcome { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--fg); background: radial-gradient(circle, var(--fg) 0 2px, transparent 2.5px); }
     /* #49 names a cycle by number, not by the criterion it serves, which no beat
        knows; the markup is the prototype's chapter all the same. */
+
+    /* Home's Needs you list, verbatim from index.html. */
+    .needs-list li { border-top: 1px solid var(--border); }
+    .needs-list li:last-child { border-bottom: 1px solid var(--border); }
+    .need { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 12px; padding: 14px 8px 14px 4px; text-decoration: none; align-items: start; }
+    .need:hover { background: var(--hover); }
+    .need .st { margin-top: 5px; }
+    .need .n-kind { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    .need .n-name { display: block; font-family: var(--font-display); font-size: 16px; line-height: 1.3; margin-top: 2px; }
+    .need .n-ask { display: block; font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+    .need .n-unblocks { font-size: 12px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+
+    /* The desk's queue items, verbatim from review-desk.html. */
+    .item {
+      display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 3px 11px; width: 100%;
+      padding: 13px 20px 14px; text-align: left; background: none; border: 0; border-top: 1px solid var(--border); cursor: pointer;
+      transition: background-color .15s ease;
+    }
+    .item:hover { background: var(--hover); }
+    .item[aria-pressed="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); }
+    .item:focus-visible { outline-offset: -2px; }
+    .item .st { margin-top: 4px; }
+    .item .i-kind { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .item .i-name { grid-column: 2; font-family: var(--font-display); font-size: 16px; line-height: 1.3; }
+    .item .i-ask { grid-column: 2; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+    .item .i-unblocks { grid-column: 2; font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .item.resolved .i-name { color: var(--ink-2); }
+
+    /* The ticket graph's cards from its layout prototype (wayfarer#23,
+       branch prototype/ticket-graph-layout): its full and name-only forms, verbatim
+       but for the canvas's motion. */
+    .card {
+      position: absolute; padding: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 5px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 3px; text-align: left; cursor: pointer;
+      transition: opacity .3s ease, background-color .15s ease, border-color .15s ease;
+    }
+    .card:hover { background: var(--hover); border-color: var(--line); }
+    .card[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+    .card.k-blocked { background: var(--bg); border-style: dashed; border-color: var(--line); }
+    .card.k-takeable, .card.k-asked, .card.k-held { border-color: var(--fg); }
+    .card .c-top { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+    .card .c-top .id { margin-left: auto; letter-spacing: 0; }
+    .card .c-name { font-family: var(--font-display); font-size: 15.5px; line-height: 1.25; color: var(--fg); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+    .card .c-foot { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card.k-asked .c-foot, .card.k-held .c-foot { color: var(--fg); }
+    .card.chip-f { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+    .card.chip-f { align-items: flex-start; padding: 9px 10px; }
+    .card.chip-f .st { margin-top: 3px; }
+    .card.chip-f .c-name { font-size: 14px; line-height: 1.25; flex: 1; min-width: 0; -webkit-line-clamp: 2; }
+    .card.chip-f .id { margin-top: 2px; }
+    .card.chip-f .id { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+    /* A blocked card answers the pointer, as ticket-graph.html's does. */
+    .card.k-blocked:hover { background: var(--hover); }
+    /* The canvas places a card and sizes it, 184 wide and 128 or 56 tall; a
+       specimen is the card alone. */
+    .card { position: relative; width: 184px; }
+    .card.card-f { height: 128px; }
+    .card.chip-f { height: 56px; }
+    /* #48: a name is never cut off. It is not clamped, the foot naming a
+       blocker wraps, and a card's height is a floor the name can grow past. */
+    .card .c-name { display: block; overflow: visible; }
+    .card .c-foot { white-space: normal; overflow: visible; }
+    .card.card-f, .card.chip-f { height: auto; }
+    .card.card-f { min-height: 128px; }
+    .card.chip-f { min-height: 56px; }
     /* The chronicle, from index.html, verbatim. */
     .day { margin-top: 6px; }
     .day + .day { margin-top: 26px; }
@@ -247,9 +312,69 @@
     <div data-specimen="beats-working"><div style="display: grid; width: 824px; height: 300px"><div class="pane beats-pane"><ol class="beats" aria-live="polite"><li class="chap"><span class="c-label"><span class="kicker">Before any test</span>Orient</span></li><li class="beat"><time>09:40</time><span class="mk"><span class="mk-read" aria-label="Read"></span></span><div class="txt">Read ISSUE.md and CONTEXT.md</div></li><li class="beat"><time>09:41</time><span class="mk"><span class="mk-note" aria-label="Remark"></span></span><div class="txt">Running the suite before the first test.</div></li><li class="working"><span></span><span class="mk"><span class="st st-building" aria-hidden="true"></span></span><span>Running the full suite<span class="num">12s</span></span></li></ol></div></div></div>
   </section>
 
+  <!-- cardHTML from the layout prototype (wayfarer#23), a full card for each
+       state a ticket shows a card in, then one selected. -->
+  <section aria-label="Ticket cards">
+    <div data-specimen="full-landing"><button type="button" class="card card-f k-landing" aria-pressed="false" aria-label="Flag peaks above −3 dB, Landing"><span class="c-top"><span class="st st-review" aria-hidden="true"></span>Landing<span class="id">#127</span></span><span class="c-name">Flag peaks above −3 dB</span><span class="c-foot">In the merge queue</span></button></div>
+    <div data-specimen="full-building"><button type="button" class="card card-f k-building" aria-pressed="false" aria-label="Flag a noise floor above −60 dB, Building"><span class="c-top"><span class="st st-building" aria-hidden="true"></span>Building<span class="id">#128</span></span><span class="c-name">Flag a noise floor above −60 dB</span><span class="c-foot">Working · 12 min</span></button></div>
+    <div data-specimen="full-asked"><button type="button" class="card card-f k-asked" aria-pressed="false" aria-label="Check room tone, Asked"><span class="c-top"><span class="st st-ask" aria-hidden="true"></span>Asked<span class="id">#130</span></span><span class="c-name">Check room tone</span><span class="c-foot">Asked you a question</span></button></div>
+    <div data-specimen="full-held"><button type="button" class="card card-f k-held" aria-pressed="false" aria-label="Warn when no retail sample is chosen, Held"><span class="c-top"><span class="st st-held" aria-hidden="true"></span>Held<span class="id">#129</span></span><span class="c-name">Warn when no retail sample is chosen</span><span class="c-foot">Held · a blocking finding</span></button></div>
+    <div data-specimen="full-takeable"><button type="button" class="card card-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Nobody on it yet</span></button></div>
+    <div data-specimen="full-takeable-at-cap"><button type="button" class="card card-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Starts when a slot frees</span></button></div>
+    <div data-specimen="full-blocked-on-one"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Explain a failing chapter, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#131</span></span><span class="c-name">Explain a failing chapter</span><span class="c-foot">Waiting on Check room tone</span></button></div>
+    <div data-specimen="full-blocked-on-many"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Block ACX export, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#133</span></span><span class="c-name">Block ACX export</span><span class="c-foot">Waiting on 5 tickets</span></button></div>
+    <div data-specimen="full-long-name"><button type="button" class="card card-f k-blocked" aria-pressed="false" aria-label="Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens, Blocked"><span class="c-top"><span class="st st-blocked" aria-hidden="true"></span>Blocked<span class="id">#134</span></span><span class="c-name">Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens</span><span class="c-foot">Waiting on Normalise loudness to the ACX range on request</span></button></div>
+    <div data-specimen="full-selected"><button type="button" class="card card-f k-takeable" aria-pressed="true" aria-label="Show compliance status on My Books, Takeable"><span class="c-top"><span class="st st-take" aria-hidden="true"></span>Takeable<span class="id">#132</span></span><span class="c-name">Show compliance status on My Books</span><span class="c-foot">Nobody on it yet</span></button></div>
+  </section>
+
+  <!-- The name-only card, as the layout prototype draws a ticket further out. -->
+  <section aria-label="Name-only ticket cards">
+    <div data-specimen="name-only-landing"><button type="button" class="card chip-f k-landing" aria-pressed="false" aria-label="Flag peaks above −3 dB, Landing"><span class="st st-review" aria-hidden="true"></span><span class="c-name">Flag peaks above −3 dB <span class="id">#127</span></span></button></div>
+    <div data-specimen="name-only-building"><button type="button" class="card chip-f k-building" aria-pressed="false" aria-label="Flag a noise floor above −60 dB, Building"><span class="st st-building" aria-hidden="true"></span><span class="c-name">Flag a noise floor above −60 dB <span class="id">#128</span></span></button></div>
+    <div data-specimen="name-only-asked"><button type="button" class="card chip-f k-asked" aria-pressed="false" aria-label="Check room tone, Asked"><span class="st st-ask" aria-hidden="true"></span><span class="c-name">Check room tone <span class="id">#130</span></span></button></div>
+    <div data-specimen="name-only-held"><button type="button" class="card chip-f k-held" aria-pressed="false" aria-label="Warn when no retail sample is chosen, Held"><span class="st st-held" aria-hidden="true"></span><span class="c-name">Warn when no retail sample is chosen <span class="id">#129</span></span></button></div>
+    <div data-specimen="name-only-takeable"><button type="button" class="card chip-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+    <div data-specimen="name-only-takeable-at-cap"><button type="button" class="card chip-f k-takeable" aria-pressed="false" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+    <div data-specimen="name-only-blocked-on-one"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Explain a failing chapter, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Explain a failing chapter <span class="id">#131</span></span></button></div>
+    <div data-specimen="name-only-blocked-on-many"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Block ACX export, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Block ACX export <span class="id">#133</span></span></button></div>
+    <div data-specimen="name-only-long-name"><button type="button" class="card chip-f k-blocked" aria-pressed="false" aria-label="Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens, Blocked"><span class="st st-blocked" aria-hidden="true"></span><span class="c-name">Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens <span class="id">#134</span></span></button></div>
+    <div data-specimen="name-only-selected"><button type="button" class="card chip-f k-takeable" aria-pressed="true" aria-label="Show compliance status on My Books, Takeable"><span class="st st-take" aria-hidden="true"></span><span class="c-name">Show compliance status on My Books <span class="id">#132</span></span></button></div>
+  </section>
+
   <!-- WS.criteriaList(128), with what #70 drops: no tick box, no test name. -->
   <section aria-label="Acceptance criteria">
     <div data-specimen="criteria"><div style="width: 340px"><ul class="crit"><li><span class="c-text">Measure the noise floor of every chapter</span></li><li><span class="c-text">Chapters above −60 dB fail the check</span></li><li><span class="c-text">Failures explain the value, the limit, and the timestamp</span></li><li><span class="c-text">The clean fixture passes</span></li></ul></div></div>
+  </section>
+  <!-- review-desk.html's queue item markup and rules, filled with one item of
+       each kind #50 renders: the prototype drew only reviews, questions and
+       grillings, and said "Unblocks", so the words are the ticket's and only the
+       shape is the prototype's. The effort rides beside the kind as home names
+       it. Then the item open on the desk, and a resolved one saying what
+       happened. -->
+  <section aria-label="Needs you on the desk">
+    <div data-specimen="desk-environment"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-blocked" aria-hidden="true"></span><span class="i-kind">Environment · Every effort</span><span class="i-name">Every cascade is paused</span><span class="i-ask">Docker stopped answering; two tickets went back on the frontier</span></button></div></div>
+    <div data-specimen="desk-question"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Question · ACX compliance</span><span class="i-name">Require opening and closing credits<span class="id">#130</span></span><span class="i-ask">Should DOCX books without credits fail or warn?</span><span class="i-unblocks">Holds up 4 tickets · 2 start the moment it lands</span></button></div></div>
+    <div data-specimen="desk-held"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-held" aria-hidden="true"></span><span class="i-kind">Held · ACX compliance</span><span class="i-name">Check room tone at the head and tail of each chapter<span class="id">#131</span></span><span class="i-ask">/code-review found a gap against the spec that blocks landing</span><span class="i-unblocks">Holds up 3 tickets · 1 starts the moment it lands</span></button></div></div>
+    <div data-specimen="desk-review"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-review" aria-hidden="true"></span><span class="i-kind">In review · ACX compliance</span><span class="i-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="i-ask">Clean and green, waiting on your approval</span><span class="i-unblocks">Holds up 1 ticket</span></button></div></div>
+    <div data-specimen="desk-drafts"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Drafts · Retail sample</span><span class="i-name">Retail sample suggestions</span><span class="i-ask">6 tickets drafted, waiting on your check</span></button></div></div>
+    <div data-specimen="desk-ship"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-take" aria-hidden="true"></span><span class="i-kind">Ship the effort · Voice casting</span><span class="i-name">Per-chapter voice casting</span><span class="i-ask">Every ticket landed · one review to ship it</span></button></div></div>
+    <div data-specimen="desk-orphan"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-ask" aria-hidden="true"></span><span class="i-kind">Leftover container · ACX compliance</span><span class="i-name">Flag a noise floor above −60 dB<span class="id">#128</span></span><span class="i-ask">Its container outlived its session</span></button></div></div>
+    <div data-specimen="desk-closed"><div style="width: 350px"><button type="button" class="item" aria-pressed="false"><span class="st st-building" aria-hidden="true"></span><span class="i-kind">Closed with a live session · ACX compliance</span><span class="i-name">Flag chapters longer than 120 minutes<span class="id">#129</span></span><span class="i-ask">Closed on GitHub while its session runs</span></button></div></div>
+    <div data-specimen="desk-selected"><div style="width: 350px"><button type="button" class="item" aria-pressed="true"><span class="st st-review" aria-hidden="true"></span><span class="i-kind">In review · ACX compliance</span><span class="i-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="i-ask">Clean and green, waiting on your approval</span><span class="i-unblocks">Holds up 1 ticket</span></button></div></div>
+    <div data-specimen="desk-resolved"><div style="width: 350px"><button type="button" class="item resolved" aria-pressed="false"><span class="st st-done" aria-hidden="true"></span><span class="i-kind">Question · ACX compliance</span><span class="i-name">Require opening and closing credits<span class="id">#130</span></span><span class="i-ask">Should DOCX books without credits fail or warn?</span><span class="i-unblocks">Answered · the session resumed</span></button></div></div>
+  </section>
+
+  <!-- index.html's Needs you row markup and rules, one row of each kind, filled
+       the same way. -->
+  <section aria-label="Needs you at home">
+    <div data-specimen="need-environment"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-environment"><span class="st st-blocked" aria-hidden="true"></span><span><span class="n-kind">Environment · Every effort</span><span class="n-name">Every cascade is paused</span><span class="n-ask">Docker stopped answering; two tickets went back on the frontier</span></span></a></li></ul></div></div>
+    <div data-specimen="need-question"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-question"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Question · ACX compliance</span><span class="n-name">Require opening and closing credits<span class="id">#130</span></span><span class="n-ask">Should DOCX books without credits fail or warn?</span></span><span class="n-unblocks">Holds up 4 tickets</span></a></li></ul></div></div>
+    <div data-specimen="need-held"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-held"><span class="st st-held" aria-hidden="true"></span><span><span class="n-kind">Held · ACX compliance</span><span class="n-name">Check room tone at the head and tail of each chapter<span class="id">#131</span></span><span class="n-ask">/code-review found a gap against the spec that blocks landing</span></span><span class="n-unblocks">Holds up 3 tickets</span></a></li></ul></div></div>
+    <div data-specimen="need-review"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-review"><span class="st st-review" aria-hidden="true"></span><span><span class="n-kind">In review · ACX compliance</span><span class="n-name">Flag peaks above −3 dB<span class="id">#127</span></span><span class="n-ask">Clean and green, waiting on your approval</span></span><span class="n-unblocks">Holds up 1 ticket</span></a></li></ul></div></div>
+    <div data-specimen="need-drafts"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-drafts"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Drafts · Retail sample</span><span class="n-name">Retail sample suggestions</span><span class="n-ask">6 tickets drafted, waiting on your check</span></span></a></li></ul></div></div>
+    <div data-specimen="need-ship"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-ship"><span class="st st-take" aria-hidden="true"></span><span><span class="n-kind">Ship the effort · Voice casting</span><span class="n-name">Per-chapter voice casting</span><span class="n-ask">Every ticket landed · one review to ship it</span></span></a></li></ul></div></div>
+    <div data-specimen="need-orphan"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-orphan"><span class="st st-ask" aria-hidden="true"></span><span><span class="n-kind">Leftover container · ACX compliance</span><span class="n-name">Flag a noise floor above −60 dB<span class="id">#128</span></span><span class="n-ask">Its container outlived its session</span></span></a></li></ul></div></div>
+    <div data-specimen="need-closed"><div style="width: 400px"><ul class="needs-list"><li><a class="need" href="#desk-closed"><span class="st st-building" aria-hidden="true"></span><span><span class="n-kind">Closed with a live session · ACX compliance</span><span class="n-name">Flag chapters longer than 120 minutes<span class="id">#129</span></span><span class="n-ask">Closed on GitHub while its session runs</span></span></a></li></ul></div></div>
   </section>
 
   <!-- index.html's chronicle lines, one of each kind. #22 puts the effort's name

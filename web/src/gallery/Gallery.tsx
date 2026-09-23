@@ -7,10 +7,12 @@ import { Chronicle, Line as ChronicleEntry } from "../Chronicle";
 import { Criteria } from "../Criteria";
 import { Diff, type FileDiff, type Line } from "../Diff";
 import { Frame, Pane, Split } from "../Frame";
+import { type Need, NeedRow, NeedsList, QueueItem } from "../NeedsYou";
 import { Route, type RouteProps } from "../Route";
 import { type Question, QuestionCard } from "../Question";
 import { type Glyph, State, TestRun, TestRuns } from "../State";
 import { type Step, Thread } from "../Thread";
+import { type Doing, TicketCard } from "../TicketCard";
 import { EffortItems, Menu, RepoItems, TopBar, type TopBarProps } from "../TopBar";
 import { Chip, Kicker, Meta, Named, Rule } from "../Type";
 import styles from "./Gallery.module.css";
@@ -136,6 +138,77 @@ const LIVE: Beat[] = [
   beat(2, "remark", [41, 0], 0, "Running the suite before the first test."),
   beat(1000, "working", [41, 48], 0, "Running the full suite"),
 ];
+
+// One item of each kind Needs you has in this slice, across three efforts. The
+// question is also shown resolved, and the review open on the desk.
+const QUESTION: Need = {
+  kind: "question",
+  effort: "ACX compliance",
+  ticket: { name: "Require opening and closing credits", id: 130 },
+  question: "Should DOCX books without credits fail or warn?",
+  holdsUp: 4,
+  starts: 2,
+};
+const REVIEW: Need = {
+  kind: "review",
+  effort: "ACX compliance",
+  ticket: { name: "Flag peaks above −3 dB", id: 127 },
+  holdsUp: 1,
+  starts: 0,
+};
+const NEEDS: Need[] = [
+  { kind: "environment", reason: "Docker stopped answering; two tickets went back on the frontier" },
+  QUESTION,
+  {
+    kind: "held",
+    effort: "ACX compliance",
+    ticket: { name: "Check room tone at the head and tail of each chapter", id: 131 },
+    reason: "/code-review found a gap against the spec that blocks landing",
+    holdsUp: 3,
+    starts: 1,
+  },
+  REVIEW,
+  { kind: "drafts", effort: "Retail sample", spec: "Retail sample suggestions", drafted: 6 },
+  { kind: "ship", effort: "Voice casting", name: "Per-chapter voice casting" },
+  { kind: "orphan", effort: "ACX compliance", ticket: { name: "Flag a noise floor above −60 dB", id: 128 } },
+  {
+    kind: "closed",
+    effort: "ACX compliance",
+    ticket: { name: "Flag chapters longer than 120 minutes", id: 129 },
+  },
+];
+
+// A ticket in every state it shows a card in, with what its foot needs. The two
+// blocked forms and waiting on a slot are states of their own here, since each
+// foot says something different (#48).
+type Card = { name: string; number: number } & Doing;
+const TAKEABLE: Card = { name: "Show compliance status on My Books", number: 132, state: "takeable", atCap: false };
+const CARDS: [string, Card][] = [
+  ["landing", { name: "Flag peaks above −3 dB", number: 127, state: "landing" }],
+  ["building", { name: "Flag a noise floor above −60 dB", number: 128, state: "building", minutes: 12 }],
+  ["asked", { name: "Check room tone", number: 130, state: "asked" }],
+  ["held", { name: "Warn when no retail sample is chosen", number: 129, state: "held" }],
+  ["takeable", TAKEABLE],
+  ["takeable-at-cap", { ...TAKEABLE, atCap: true }],
+  [
+    "blocked-on-one",
+    { name: "Explain a failing chapter", number: 131, state: "blocked", waitingOn: ["Check room tone"] },
+  ],
+  [
+    "blocked-on-many",
+    { name: "Block ACX export", number: 133, state: "blocked", waitingOn: ["a", "b", "c", "d", "e"] },
+  ],
+  [
+    "long-name",
+    {
+      name: "Explain a loudness failure in plain words, with the chapter, the value it measured, the limit it broke and the moment it happens",
+      number: 134,
+      state: "blocked",
+      waitingOn: ["Normalise loudness to the ACX range on request"],
+    },
+  ],
+];
+const CARD_SIZES = ["full", "name-only"] as const;
 
 // The chronicle's sample effort and tickets, from the prototype's ACX effort.
 const COMPLIANCE_CHECKS: Mention = { number: 124, title: "Pre-delivery compliance checks" };
@@ -879,6 +952,56 @@ export function Gallery() {
           </Specimen>
         </div>
         <LiveBeats />
+      </Section>
+
+      <Section title="Needs you">
+        <div className={styles.row} style={{ alignItems: "start" }}>
+          <div className={styles.column}>
+            {NEEDS.map((need) => (
+              <Specimen key={need.kind} name={`desk-${need.kind}`}>
+                <div style={{ width: 350 }}>
+                  <QueueItem need={need} />
+                </div>
+              </Specimen>
+            ))}
+            <Specimen name="desk-selected">
+              <div style={{ width: 350 }}>
+                <QueueItem need={REVIEW} pressed />
+              </div>
+            </Specimen>
+            <Specimen name="desk-resolved">
+              <div style={{ width: 350 }}>
+                <QueueItem need={QUESTION} resolved="Answered · the session resumed" />
+              </div>
+            </Specimen>
+          </div>
+          <div className={styles.column}>
+            {NEEDS.map((need) => (
+              <Specimen key={need.kind} name={`need-${need.kind}`}>
+                <div style={{ width: 400 }}>
+                  <NeedsList>
+                    <NeedRow need={need} href={`#desk-${need.kind}`} />
+                  </NeedsList>
+                </div>
+              </Specimen>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Ticket cards">
+        {CARD_SIZES.map((size) => (
+          <div key={size} className={styles.row}>
+            {CARDS.map(([state, card]) => (
+              <Specimen key={state} name={`${size}-${state}`}>
+                <TicketCard size={size} {...card} />
+              </Specimen>
+            ))}
+            <Specimen name={`${size}-selected`}>
+              <TicketCard size={size} {...TAKEABLE} selected />
+            </Specimen>
+          </div>
+        ))}
       </Section>
 
       <Section title="Chronicle lines">

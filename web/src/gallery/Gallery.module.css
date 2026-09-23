@@ -9,6 +9,7 @@
 .section > h2 { font-size: 20px; margin-bottom: 14px; }
 .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .row + .row { margin-top: 16px; }
+.column { display: grid; gap: 16px; }
 /* A glyph beside its word, set as the prototype's legends set one (index.html). */
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
 .legend + .legend { margin-top: 16px; }

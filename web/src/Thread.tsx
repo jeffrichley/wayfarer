@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { Glyph } from "./State";
+import { type Glyph, Mark } from "./State";
 
 // One step of a ticket's thread: the skill that took it, what it made, and a
 // line of meta. Its glyph says where the step stands: `done` has landed,
@@ -30,7 +30,7 @@ export function Thread({ steps }: { steps: Step[] }) {
             className={[pending && "pending", nextPending && "next-pending"].filter(Boolean).join(" ")}
           >
             <span className="t-mark">
-              <span className={`st st-${step.glyph}`} role="img" aria-label={step.word} />
+              <Mark glyph={step.glyph} word={step.word} />
             </span>
             <div>
               <span className="t-skill">{step.skill}</span>
