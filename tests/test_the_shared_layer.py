@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 from PIL import ImageChops
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import Page
 
-from specimens import THEMES, choose, disagreements, set_theme, specimens
+from specimens import THEMES, choose, disagreements, set_theme, specimen, specimens
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
 
@@ -22,10 +22,6 @@ CRITERIA = [
     "Failures explain the value, the limit, and the timestamp",
     "The clean fixture passes",
 ]
-
-
-def _specimen(page: Page, name: str) -> Locator:
-    return page.locator(f'[data-specimen="{name}"]')
 
 
 def _enabled_button(name: str) -> bool:
@@ -82,7 +78,7 @@ def test_a_disabled_button_is_drawn_apart_from_its_enabled_twin(gallery: Page, t
 
 def test_a_disabled_button_is_unavailable_and_still_reachable(gallery: Page) -> None:
     for name in specimens(gallery, _disabled_button):
-        control = _specimen(gallery, name).get_by_role("button")
+        control = specimen(gallery, name).get_by_role("button")
         assert control.is_disabled(), f"{name} is not disabled"
         assert control.evaluate("e => getComputedStyle(e).cursor") == "default", name
         control.focus()
@@ -90,10 +86,10 @@ def test_a_disabled_button_is_unavailable_and_still_reachable(gallery: Page) -> 
 
 
 def test_a_disabled_link_is_not_a_link(gallery: Page) -> None:
-    link = _specimen(gallery, "button-link").get_by_role("link", name="Open the desk")
+    link = specimen(gallery, "button-link").get_by_role("link", name="Open the desk")
     assert link.get_attribute("href") == "#desk"
 
-    disabled = _specimen(gallery, "button-link-disabled")
+    disabled = specimen(gallery, "button-link-disabled")
     assert disabled.get_by_role("link").count() == 0
     disabled.get_by_role("button", name="Open the desk").click(force=True)
     assert gallery.url.endswith("/gallery")
@@ -101,7 +97,7 @@ def test_a_disabled_link_is_not_a_link(gallery: Page) -> None:
 
 @pytest.mark.parametrize("frame", ["frame", "frame-no-route", "split-left", "split-right"])
 def test_each_region_of_the_page_scrolls_on_its_own(gallery: Page, frame: str) -> None:
-    regions = _specimen(gallery, frame).locator(".pane")
+    regions = specimen(gallery, frame).locator(".pane")
     assert regions.count() == (1 if frame.startswith("frame") else 2)
 
     for index in range(regions.count()):
@@ -121,7 +117,7 @@ def test_each_region_of_the_page_scrolls_on_its_own(gallery: Page, frame: str) -
 def test_a_name_and_its_id_look_the_same_wherever_they_ride(gallery: Page) -> None:
     carriers = ["type-name", "name-plain", "name-row", "name-line", "name-head"]
     looks = {
-        name: _specimen(gallery, name)
+        name: specimen(gallery, name)
         .locator(".id")
         .evaluate(
             """id => {
@@ -139,13 +135,13 @@ def test_a_name_and_its_id_look_the_same_wherever_they_ride(gallery: Page) -> No
     }
     assert looks["type-name"][0] == "its own face"
     assert looks["type-name"][1] == "0.80"
-    assert [_specimen(gallery, name).locator(".id").inner_text() for name in carriers] == [
+    assert [specimen(gallery, name).locator(".id").inner_text() for name in carriers] == [
         "#127"
     ] * len(carriers)
 
 
 def test_a_sequence_of_test_runs_reads_in_order(gallery: Page) -> None:
-    runs = _specimen(gallery, "runs").get_by_role("list", name="5 test runs")
+    runs = specimen(gallery, "runs").get_by_role("list", name="5 test runs")
     marks = runs.get_by_role("img")
 
     assert [marks.nth(i).get_attribute("aria-label") for i in range(marks.count())] == [
@@ -161,7 +157,7 @@ def test_a_sequence_of_test_runs_reads_in_order(gallery: Page) -> None:
 
 
 def test_the_thread_shows_landed_current_and_pending_steps(gallery: Page) -> None:
-    steps = _specimen(gallery, "thread").get_by_role("listitem")
+    steps = specimen(gallery, "thread").get_by_role("listitem")
 
     assert [
         steps.nth(i).get_by_role("img").get_attribute("aria-label") for i in range(steps.count())
@@ -174,7 +170,7 @@ def test_the_thread_shows_landed_current_and_pending_steps(gallery: Page) -> Non
 
 
 def test_the_criteria_read_as_written_and_nothing_more(gallery: Page) -> None:
-    criteria = _specimen(gallery, "criteria")
+    criteria = specimen(gallery, "criteria")
 
     assert criteria.get_by_role("listitem").all_inner_texts() == CRITERIA
     assert criteria.inner_text().split("\n") == CRITERIA

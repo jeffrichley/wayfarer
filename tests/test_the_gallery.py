@@ -96,6 +96,7 @@ def test_a_visual_change_makes_the_gallery_disagree_with_the_prototype(
         # A held ticket's rows in Needs you carry the glyph too.
         "desk-held: drawn differently",
         "need-held: drawn differently",
+        "line-held: drawn differently",
     ]
 
 

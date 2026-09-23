@@ -12,12 +12,17 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PIL import Image, ImageChops
-from playwright.sync_api import Page, ViewportSize
+from playwright.sync_api import Locator, Page, ViewportSize
 
 REFERENCE = Path(__file__).with_name("prototype_gallery.html")
 THEMES = ["light", "dark"]
 # The size every screen is checked at first (docs/design/visual-language.md).
 VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
+
+
+def specimen(page: Page, name: str) -> Locator:
+    """The specimen the page names `name`."""
+    return page.locator(f'[data-specimen="{name}"]')
 
 
 def choose(gallery: Page, theme: str) -> None:
