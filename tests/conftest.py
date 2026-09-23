@@ -147,6 +147,20 @@ def clone(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def host_repo(tmp_path: Path) -> Path:
+    """A clone with one commit and an identity, as a session's host repo."""
+    repo = tmp_path / "host"
+    repo.mkdir()
+    _git(repo, "init", "--quiet", "--initial-branch=main")
+    _git(repo, "config", "user.name", "Ada")
+    _git(repo, "config", "user.email", "ada@example.com")
+    (repo / "README.md").write_text("widgets\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "--quiet", "-m", "first")
+    return repo
+
+
+@pytest.fixture
 def github() -> Iterator[GitHub]:
     """The repo the clone was cloned from, on the GitHub stand-in."""
     stand_in = GitHub("octo", "widgets")

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from waystation import ClaudeCode, DockerSandbox, Timeouts
 
+from wayfarer import stream
 from wayfarer.gate import SESSION_GH_TOKEN
 from wayfarer.github import Repo
 from wayfarer.sessions import Sessions
@@ -31,7 +32,9 @@ def store(tmp_path: Path) -> Iterator[Store]:
 
 
 def _in_image(store: Store, settings: Settings) -> Sessions:
-    return Sessions.in_image(Path("clone"), store, Repo("octo", "widgets"), _TAG, settings)
+    return Sessions.in_image(
+        Path("clone"), store, Repo("octo", "widgets"), _TAG, settings, stream.Store(1000)
+    )
 
 
 def test_a_session_runs_claude_code_in_the_session_image(store: Store) -> None:
