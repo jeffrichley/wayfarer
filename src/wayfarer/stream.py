@@ -61,6 +61,15 @@ class Store:
         self._closed = True
         self._changed.set()
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    async def changed(self) -> None:
+        """Wait for the next change to any item, or for the store to close."""
+        if not self._closed:
+            await self._changed.wait()
+
     async def events(self, last_event_id: str | None) -> AsyncGenerator[ServerSentEvent]:
         """A page's stream: resumed after `last_event_id` if it can be, else a snapshot first."""
         seen = self._resumable(last_event_id)

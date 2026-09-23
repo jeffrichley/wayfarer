@@ -138,6 +138,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/home/arrived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Arrived
+         * @description A new visit to home: its headline counts from when the last one ended. A reload
+         *     is the same visit, and the page does not say it arrived.
+         */
+        post: operations["arrived_api_home_arrived_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/home/left": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Left
+         * @description The person left home, which ends their visit; the page says so as it goes.
+         */
+        post: operations["left_api_home_left_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/image/build": {
         parameters: {
             query?: never;
@@ -603,6 +644,52 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * Home
+         * @description The masthead and At work: the story since the person last looked.
+         */
+        Home: {
+            /**
+             * Headline
+             * @description One sentence under 14 words, leading with the top Needs you item, then the landings since the last visit.
+             */
+            headline: string;
+            /**
+             * Id
+             * @constant
+             */
+            id: "home";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "home";
+            /**
+             * Moving
+             * @description How many efforts have tickets still to land.
+             */
+            moving: number;
+            /**
+             * Repo
+             * @description `owner/name`; null when the clone has no GitHub.
+             */
+            repo: string | null;
+            /**
+             * Since
+             * @description When the person last left home, which the headline counts from; null before their first visit ends.
+             */
+            since: string | null;
+            /**
+             * Standfirst
+             * @description One sentence per active effort, from its counts.
+             */
+            standfirst: string[];
+            /**
+             * Working
+             * @description Every session running, in ticket order.
+             */
+            working: components["schemas"]["Working"][];
+        };
+        /**
          * ImageStatus
          * @description The image this repo's sessions run in: Wayfarer's base plus the repo's layer (ADR-0005).
          */
@@ -668,6 +755,62 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * LineRow
+         * @description One effort on the line: its tickets at the stations they have reached.
+         */
+        LineRow: {
+            /**
+             * Done
+             * @description Every ticket landed or closed, so its course rests in ink rather than the accent.
+             */
+            done: boolean;
+            effort: components["schemas"]["Mention"];
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "line_row";
+            /**
+             * Reached
+             * @description The furthest station any of its tickets has reached: its course is solid up to it and dashed beyond.
+             * @enum {string}
+             */
+            reached: "wayfinder" | "spec" | "tickets" | "build" | "review" | "landed";
+            stations: components["schemas"]["LineStations"];
+            /**
+             * Total
+             * @description Its tickets, but those closed without landing.
+             */
+            total: number;
+        };
+        /**
+         * LineStations
+         * @description The tickets at each station an effort's tickets can reach, one state per ticket
+         *     in the effort's order. The map and the spec are behind every effort in this slice,
+         *     which joins it at `/to-tickets`.
+         */
+        LineStations: {
+            /**
+             * Build
+             * @description Building, or stopped there on a person.
+             */
+            build: components["schemas"]["TicketState"][];
+            /** Landed */
+            landed: components["schemas"]["TicketState"][];
+            /**
+             * Review
+             * @description With a pull request, landing or not.
+             */
+            review: components["schemas"]["TicketState"][];
+            /**
+             * Tickets
+             * @description Sliced and not yet started.
+             */
+            tickets: components["schemas"]["TicketState"][];
+        };
+        /**
          * Mention
          * @description A ticket or an effort as a line names it: by its title, its number riding after.
          */
@@ -676,6 +819,120 @@ export interface components {
             number: number;
             /** Title */
             title: string;
+        };
+        /**
+         * NeedHeld
+         * @description A ticket kept back until the person decides.
+         */
+        NeedHeld: {
+            effort: components["schemas"]["Mention"];
+            /**
+             * Holds Up
+             * @description Its ticket plus every open ticket downstream of it.
+             */
+            holds_up: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "held";
+            /**
+             * Reason
+             * @description The plain-words reason; null until it is read.
+             */
+            reason: string | null;
+            /**
+             * Since
+             * @description When it started waiting, where the chronicle says; ties go to the longest waiting.
+             */
+            since: string | null;
+            /**
+             * Starts
+             * @description The tickets that become takeable the moment its ticket lands.
+             */
+            starts: number;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * NeedQuestion
+         * @description A ticket whose session ended to ask the person something.
+         */
+        NeedQuestion: {
+            effort: components["schemas"]["Mention"];
+            /**
+             * Gist
+             * @description The question's gist; null until asking gives it.
+             */
+            gist: string | null;
+            /**
+             * Holds Up
+             * @description Its ticket plus every open ticket downstream of it.
+             */
+            holds_up: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "question";
+            /**
+             * Since
+             * @description When it started waiting, where the chronicle says; ties go to the longest waiting.
+             */
+            since: string | null;
+            /**
+             * Starts
+             * @description The tickets that become takeable the moment its ticket lands.
+             */
+            starts: number;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * NeedReview
+         * @description A clean, green pull request waiting on the person's approval, auto-merge being off.
+         */
+        NeedReview: {
+            effort: components["schemas"]["Mention"];
+            /**
+             * Holds Up
+             * @description Its ticket plus every open ticket downstream of it.
+             */
+            holds_up: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "review";
+            /**
+             * Since
+             * @description When it started waiting, where the chronicle says; ties go to the longest waiting.
+             */
+            since: string | null;
+            /**
+             * Starts
+             * @description The tickets that become takeable the moment its ticket lands.
+             */
+            starts: number;
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * NeedsYou
+         * @description Everything waiting on a person, across every effort, in live order (#24): an
+         *     environment failure pinned first, then what holds up the most, then what holds up
+         *     nothing. Home shows it as it stands; the desk freezes its own copy.
+         */
+        NeedsYou: {
+            /**
+             * Id
+             * @constant
+             */
+            id: "needs_you";
+            /** Items */
+            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"])[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "needs_you";
         };
         /**
          * ProbeCheck
@@ -813,7 +1070,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -919,7 +1176,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -938,6 +1195,14 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * Working
+         * @description A session running now, named by its ticket.
+         */
+        Working: {
+            effort: components["schemas"]["Mention"];
+            ticket: components["schemas"]["Mention"];
         };
     };
     responses: never;
@@ -1139,6 +1404,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    arrived_api_home_arrived_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    left_api_home_left_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

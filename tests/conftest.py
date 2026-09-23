@@ -301,6 +301,9 @@ def post(url: str) -> httpx.Response:
 
 Items = dict[str, dict[str, Any]]
 
+# The kinds of item home is made of, all derived from the rest (`wayfarer.home`).
+_HOME = {"home", "line_row", "needs_you"}
+
 
 class Stream:
     """One page's stream, applied as the browser applies it: replaced by id, never merged.
@@ -308,6 +311,10 @@ class Stream:
     `timeout` is per read; a stream carrying an image build needs a generous one,
     because a build pauses while Docker downloads. `patience`, when given, bounds
     each wait in all, for a stream busy enough that no single read ever times out.
+
+    Home's items are derived from every other item and change along with them
+    (`wayfarer.home`), so only a test about home, passing `home`, sees them: every
+    other test reads the stream as if they were not on it, their ids included.
     """
 
     def __init__(
@@ -316,6 +323,7 @@ class Stream:
         last_event_id: str | None = None,
         timeout: float = 20.0,
         patience: float | None = None,
+        home: bool = False,
     ) -> None:
         headers = {} if last_event_id is None else {"Last-Event-ID": last_event_id}
         self._opened = httpx.stream("GET", f"{url}api/events", headers=headers, timeout=timeout)
@@ -326,6 +334,8 @@ class Stream:
         self.received: list[dict[str, Any]] = []
         self.ids: list[str] = []
         self._patience = patience
+        self._home = home
+        self._home_ids: set[str] = set()
 
     def __enter__(self) -> Stream:
         return self
@@ -348,17 +358,23 @@ class Stream:
         quiet stream pings often enough that no read ever times out.
         """
         event: dict[str, Any] | None = None
+        id: str | None = None
         for line in self._lines:
             if deadline is not None and time.monotonic() > deadline:
                 pytest.fail(f"the page never showed it; it holds {self.items}")
             if line.startswith("data:"):
                 event = json.loads(line.removeprefix("data:"))
             elif line.startswith("id:"):
-                self.ids.append(line.removeprefix("id:").strip())
+                id = line.removeprefix("id:").strip()
             elif not line and event is not None:
+                if not self._home and self._leave_out(event):
+                    event = id = None
+                    continue
                 break
         else:
             pytest.fail("the stream ended")
+        if id is not None:
+            self.ids.append(id)
         if event["kind"] == "snapshot":
             self.items = {item["id"]: item for item in event["items"]}
         elif event["kind"] == "upsert":
@@ -367,6 +383,18 @@ class Stream:
             del self.items[event["id"]]
         self.received.append(event)
         return event
+
+    def _leave_out(self, event: dict[str, Any]) -> bool:
+        """Whether `event` is only home's, leaving what a snapshot holds besides."""
+        if event["kind"] == "snapshot":
+            mine = [item for item in event["items"] if item["kind"] in _HOME]
+            self._home_ids |= {item["id"] for item in mine}
+            event["items"] = [item for item in event["items"] if item["kind"] not in _HOME]
+            return False
+        if event["kind"] == "upsert" and event["item"]["kind"] in _HOME:
+            self._home_ids.add(event["item"]["id"])
+            return True
+        return event["kind"] == "removal" and event["id"] in self._home_ids
 
     def until(self, arrived: Callable[[Items], bool]) -> list[dict[str, Any]]:
         """Read until `arrived` holds of what the page holds; the events that took."""

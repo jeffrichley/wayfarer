@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from wayfarer.models.cascade import Cascade, ShipEffort
 from wayfarer.models.chronicle import ChronicleLine
 from wayfarer.models.gate import EnvironmentFailure, GateStatus
+from wayfarer.models.home import Home, LineRow, NeedsYou
 from wayfarer.models.image import BuildFinished, BuildOutput, ImageStatus
 from wayfarer.models.read_model import Effort, EffortUnreadable, Ticket
 from wayfarer.models.sessions import Beat
@@ -39,7 +40,10 @@ Item = Annotated[
     | Cascade
     | ShipEffort
     | Beat
-    | ChronicleLine,
+    | ChronicleLine
+    | Home
+    | LineRow
+    | NeedsYou,
     Field(discriminator="kind"),
 ]
 """Anything the browser holds, keyed by its `id`."""

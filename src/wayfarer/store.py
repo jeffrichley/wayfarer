@@ -7,7 +7,8 @@ A session is recorded the moment it starts, because Waystation mints the run's
 id and writes it down nowhere else: a session that never ended is then still
 known by the row with no end. Those rows are also how a ticket is started
 automatically at most once. An armed cascade is its effort and whether it is
-paused.
+paused. The last visit is when the person last left home, and the one before it
+that the headline in front of them counts from (#58).
 """
 
 from __future__ import annotations
@@ -37,6 +38,12 @@ CREATE TABLE IF NOT EXISTS cascades (
     effort INTEGER PRIMARY KEY,
     paused INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS visits (
+    only INTEGER PRIMARY KEY CHECK (only = 0),
+    left_home TEXT,
+    since TEXT
+);
+INSERT OR IGNORE INTO visits (only) VALUES (0);
 """
 
 
@@ -163,3 +170,17 @@ class Store:
 
     def disarm(self, effort: int) -> None:
         self._db.execute("DELETE FROM cascades WHERE effort = ?", (effort,))
+
+    def left_home(self, at: datetime) -> None:
+        """The person left home at `at`: their visit is over."""
+        self._db.execute("UPDATE visits SET left_home = ?", (at.isoformat(),))
+
+    def arrived_home(self) -> None:
+        """A new visit began: its headline counts from when the last one ended. A reload
+        is the same visit, and says nothing, so its headline stays as it was."""
+        self._db.execute("UPDATE visits SET since = left_home")
+
+    def since(self) -> datetime | None:
+        """When the visit before this one ended; None before the first has."""
+        (since,) = self._db.execute("SELECT since FROM visits").fetchone()
+        return datetime.fromisoformat(since) if since else None
