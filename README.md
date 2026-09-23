@@ -35,7 +35,15 @@ FROM wayfarer-base
 USER root
 RUN apt-get update && apt-get install --yes python3 python3-venv
 USER agent
+# What `wf-test` runs when a session calls it bare, and where the runner writes
+# JUnit XML; without that, a run is red or green by its exit status alone.
+ENV WF_TEST_COMMAND="uv run pytest --junitxml=/tmp/junit.xml" \
+    WF_TEST_JUNIT=/tmp/junit.xml
 ```
+
+Every test run a session makes goes through `wf-test`, which exits with the
+tests' real status and prints one line last that Wayfarer reads to tell a red
+run from a green one. Nothing else a session prints is parsed.
 
 The layer's build context is `.wayfarer/` alone. A repo with no layer is refused;
 Wayfarer never falls back to the bare base. Images are built only when you click

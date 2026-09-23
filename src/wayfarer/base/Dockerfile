@@ -8,8 +8,9 @@ FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2
 ARG CLAUDE_CODE_VERSION
 ARG SKILLS_COMMIT
 
+# python3 is the system Python `wf-test` runs on, whatever the repo's layer adds.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates curl gh git \
+    && apt-get install --yes --no-install-recommends ca-certificates curl gh git python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code refuses bypassPermissions as root, so sessions run as `agent`, who
@@ -33,5 +34,8 @@ RUN git clone --quiet https://github.com/mattpocock/skills.git "$HOME/.wayfarer/
     && git -C "$HOME/.wayfarer/skills" checkout --quiet "$SKILLS_COMMIT" \
     && claude plugin marketplace add "$HOME/.wayfarer/skills" \
     && claude plugin install mattpocock-skills@mattpocock --scope user
+
+# The standing rules every session follows, under the repo's own CLAUDE.md.
+COPY --chown=agent:agent CLAUDE.md /home/agent/.claude/CLAUDE.md
 
 WORKDIR /workspace
