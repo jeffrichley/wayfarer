@@ -38,6 +38,9 @@ class Settings:
     docker_timeout: float = 10.0
     """Seconds the start gate waits for the Docker daemon to answer. One that has not
     answered by then is as good as down, and a wedged one must not hang every start."""
+    cap: int = 3
+    """How many sessions may run at once, one number shared by every armed cascade on
+    the repo, so the machine stays usable. Per repo, default 3."""
     auto_merge: bool = True
     """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
     stream_backlog: int = 1000
