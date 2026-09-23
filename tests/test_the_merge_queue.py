@@ -7,7 +7,8 @@ So, as with a session (`test_one_session.py`), the seam here is the queue
 itself, driven the way the read model drives it after each read. It checks in
 Waystation's `NoSandbox`, where `wf-test` is a stand-in that writes down the
 tree it was run on, fails when that tree holds a file named `red`, and takes its
-time over one holding `slow`.
+time over one holding `slow`. A conflict's resolver session is Waystation's
+scripted agent, run in `NoSandbox` like any session under test.
 
 GitHub is the stand-in, and the repo's git remote is a real bare repo it reads
 branches from, so a push that lands a pull request's commits marks it merged,
@@ -20,21 +21,28 @@ import asyncio
 import os
 import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Awaitable, Iterator
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from waystation import NoSandbox, PreflightError, SandboxBackend
+from claude_stream import DONE
+from waystation import AgentProvider, NoSandbox, PreflightError, RunResult, RunSpec, SandboxBackend
+from waystation.testing import ScriptedAgent, ScriptedCommit
 
 from github_stand_in import TOKEN, GitHub, Issue
 from github_stand_in import PullRequest as Pull
+from wayfarer import stream
 from wayfarer.github import GitHub as Client
 from wayfarer.github import Repo
-from wayfarer.merge_queue import LANDED_MARKER, MergeQueue
+from wayfarer.merge_queue import HELD_MARKER, LANDED_MARKER, MergeQueue
 from wayfarer.models import Ticket, TicketState
-from wayfarer.read_model import read_effort
+from wayfarer.outcome import Outcome
+from wayfarer.read_model import HELD, read_effort
+from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
+from wayfarer.store import Purpose, Store
 
 pytestmark = pytest.mark.git
 
@@ -44,7 +52,7 @@ _WF_TEST = """\
 #!/bin/sh
 git rev-parse 'HEAD^{tree}' >> "$TESTED"
 if test -e slow; then sleep 30; fi
-test ! -e red
+if test -e red; then echo "red is in the tree" >&2; exit 1; fi
 """
 
 
@@ -87,6 +95,33 @@ class Repos:
             **fields,
         )
 
+    def conflicting_pull(self, ticket: Issue) -> Pull:
+        """A ready pull request writing `same.py` differently from what `pull(t, "same.py")`
+        writes, cut from the effort branch as it stands."""
+        branch = f"ticket/{ticket.number}-work"
+        _git(self.clone, "checkout", "--quiet", "-B", branch, f"origin/{_EFFORT_BRANCH}")
+        (self.clone / "same.py").write_text("different\n")
+        _git(self.clone, "add", "same.py")
+        _git(self.clone, "commit", "--quiet", "-m", "Add same.py differently")
+        _git(self.clone, "push", "--quiet", "origin", branch)
+        _git(self.clone, "checkout", "--quiet", "main")
+        head = _git(self.clone, "rev-parse", branch)
+        return self.github.pull_request(ticket, head=branch, base=_EFFORT_BRANCH, head_commit=head)
+
+    def push_to_effort(self, name: str, content: str | None) -> None:
+        """A commit pushed straight to the effort branch, as a person might: writing
+        `name` with `content`, or removing it when that is None."""
+        _git(self.clone, "fetch", "--quiet", "origin")
+        _git(self.clone, "checkout", "--quiet", "-B", "by-hand", f"origin/{_EFFORT_BRANCH}")
+        if content is None:
+            _git(self.clone, "rm", "--quiet", name)
+        else:
+            (self.clone / name).write_text(content)
+            _git(self.clone, "add", name)
+        _git(self.clone, "commit", "--quiet", "-m", f"By hand: {name}")
+        _git(self.clone, "push", "--quiet", "origin", f"HEAD:{_EFFORT_BRANCH}")
+        _git(self.clone, "checkout", "--quiet", "main")
+
     def effort_tip(self) -> str:
         return _git(self.remote, "rev-parse", _EFFORT_BRANCH)
 
@@ -122,6 +157,13 @@ def repos(tmp_path: Path, github: GitHub) -> Iterator[Repos]:
     yield Repos(github, remote, clone, tested, sandbox)
 
 
+@pytest.fixture
+def record(tmp_path: Path) -> Iterator[Store]:
+    """Wayfarer's store, where a resolver session is recorded as it starts."""
+    with closing(Store.open(tmp_path / "data")) as opened:
+        yield opened
+
+
 def _client(github: GitHub) -> Client:
     return Client(
         Repo(github.owner, github.name), Settings(github_api=github.api, github_token=TOKEN)
@@ -139,14 +181,46 @@ class Driven:
         environment: bool = True,
         sandbox: SandboxBackend | None = None,
         settings: Settings | None = None,
+        resolver: AgentProvider | None = None,
+        record: Store | None = None,
     ) -> None:
-        """`environment` False is a machine with nowhere to run the re-test."""
+        """`environment` False is a machine with nowhere to run the re-test. `resolver` is
+        the agent a conflict's resolver session runs, recorded in `record`."""
         self._spec = spec
         self._client = _client(repos.github)
         chosen = (sandbox or repos.sandbox) if environment else None
+        self.stream = stream.Store(backlog=1000)
+        sessions = None
+        if resolver is not None:
+            assert record is not None
+            sessions = Sessions(
+                repos.clone,
+                record,
+                Repo(repos.github.owner, repos.github.name),
+                agent=resolver,
+                sandbox=NoSandbox(),
+                settings=Settings(),
+                stream=self.stream,
+            )
+        self.submitted: list[RunSpec[Outcome]] = []
         self.queue = MergeQueue(
-            repos.clone, self._client, settings or Settings(), sandbox=lambda: chosen
+            repos.clone,
+            self._client,
+            settings or Settings(),
+            sandbox=lambda: chosen,
+            stream=self.stream,
+            resolvers=lambda: sessions,
+            submit=self._submit,
         )
+
+    def _submit(self, spec: RunSpec[Outcome]) -> Awaitable[RunResult[Outcome]]:
+        """Where the queue runs a session: the cap's seam, so each is seen going through."""
+        self.submitted.append(spec)
+        return spec.perform()
+
+    def raised(self) -> list[str]:
+        """The reason of every environment item on the page."""
+        return [item.reason for item in self.stream.items() if item.kind == "environment"]
 
     async def read(self) -> dict[int, Ticket]:
         effort, tickets = await read_effort(
@@ -165,9 +239,9 @@ class Driven:
             await asyncio.sleep(0.05)
 
     async def settled(self) -> None:
-        """Until the queue has nothing in hand."""
+        """Until the queue has nothing in hand, and no resolver session under way."""
         deadline = time.monotonic() + 30
-        while self.queue.working:
+        while self.queue.working or self.queue.resolving:
             assert time.monotonic() < deadline, "the queue never settled"
             await asyncio.sleep(0.05)
 
@@ -269,61 +343,63 @@ def test_each_landing_ticket_has_its_place_in_line_and_a_fresh_queue_finds_the_s
     assert before == after == {first.number: 2, second.number: 1, third.number: None}
 
 
-def test_a_candidate_that_fails_its_re_test_never_lands_and_the_line_moves_on(
+def test_a_candidate_that_fails_its_re_test_is_held_with_its_pull_request_back_to_draft(
     repos: Repos,
 ) -> None:
-    spec, (broken, fine) = repos.github.effort("Widgets", tickets=2)
-    repos.pull(broken, "red")
+    spec, (fine, broken) = repos.github.effort("Widgets", tickets=2)
     repos.pull(fine, "fine.py")
+    pull = repos.pull(broken, "red")
 
     async def land() -> dict[int, Ticket]:
         driven = Driven(repos, spec)
-        await driven.until("landed", fine)
+        await driven.until("held", broken)
         await driven.settled()
         for _ in range(3):
             await driven.read()
-        await driven.settled()
+            await driven.settled()
         return await driven.read()
 
     read = asyncio.run(land())
 
-    assert repos.files_at(repos.effort_tip()) == {"README.md", "fine.py"}
-    assert read[broken.number].state == TicketState.LANDING
-    assert broken.comments == []
-    # Tested once: nothing re-runs a failed re-test by itself.
-    assert len(repos.trees_tested()) == 2
+    tip = repos.effort_tip()
+    assert repos.files_at(tip) == {"README.md", "fine.py"}
+    assert read[fine.number].state == TicketState.LANDED
+    assert read[broken.number].state == TicketState.HELD
+    assert pull.draft is True
+    assert repos.github.labels(broken.number) == [HELD]
+    [why] = broken.comments
+    # What it was tested against: the head, and what had landed on it since it was cut.
+    assert f"re-applied onto `{_EFFORT_BRANCH}` at {tip}" in why
+    assert "Add fine.py" in why
+    assert "red is in the tree" in why
+    assert why.endswith(HELD_MARKER)
+    # The fine one, the broken one, then the bare head once; nothing re-runs it by itself.
+    assert len(repos.trees_tested()) == 3
 
 
-def test_a_candidate_that_conflicts_with_the_head_never_lands(repos: Repos) -> None:
-    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
-    repos.pull(first, "same.py")
-    # The same file, written differently on the second branch.
-    branch = f"ticket/{second.number}-work"
-    _git(repos.clone, "checkout", "--quiet", "-B", branch, f"origin/{_EFFORT_BRANCH}")
-    (repos.clone / "same.py").write_text("different\n")
-    _git(repos.clone, "add", "same.py")
-    _git(repos.clone, "commit", "--quiet", "-m", "Add same.py differently")
-    _git(repos.clone, "push", "--quiet", "origin", branch)
-    _git(repos.clone, "checkout", "--quiet", "main")
-    repos.github.pull_request(
-        second, head=branch, base=_EFFORT_BRANCH, head_commit=_git(repos.clone, "rev-parse", branch)
-    )
+def test_a_held_candidate_merged_by_hand_on_github_is_accepted_as_landed(repos: Repos) -> None:
+    spec, (broken,) = repos.github.effort("Widgets", tickets=1)
+    pull = repos.pull(broken, "red")
 
     async def land() -> dict[int, Ticket]:
         driven = Driven(repos, spec)
-        await driven.until("landed", first)
+        await driven.until("held", broken)
         await driven.settled()
-        await driven.read()
-        await driven.settled()
+        repos.github.merged(pull)
+        await driven.until("landed", broken)
+        # The read that saw it merged closed it, so the next finds it closed.
         return await driven.read()
 
     read = asyncio.run(land())
 
-    assert read[second.number].state == TicketState.LANDING
-    assert len(repos.trees_tested()) == 1
+    assert read[broken.number].open is False
+    assert broken.state_reason == "COMPLETED"
+    assert broken.comments[-1] == (
+        f"Landed on `{_EFFORT_BRANCH}` at {pull.merge_commit}.\n\n{LANDED_MARKER}"
+    )
 
 
-def test_a_re_test_that_outruns_its_wall_cap_counts_as_failed(repos: Repos) -> None:
+def test_a_re_test_that_outruns_its_wall_cap_is_held_like_a_failed_one(repos: Repos) -> None:
     spec, (slow, fine) = repos.github.effort("Widgets", tickets=2)
     repos.pull(slow, "slow")
     repos.pull(fine, "fine.py")
@@ -336,8 +412,170 @@ def test_a_re_test_that_outruns_its_wall_cap_counts_as_failed(repos: Repos) -> N
 
     read = asyncio.run(land())
 
-    assert read[slow.number].state == TicketState.LANDING
+    assert read[slow.number].state == TicketState.HELD
+    [why] = slow.comments
+    assert "`wf-test` ran past its 0.5 s cap and was stopped." in why
     assert repos.files_at(repos.effort_tip()) == {"README.md", "fine.py"}
+
+
+def test_a_red_effort_branch_raises_one_item_and_blames_no_candidate_until_it_is_fixed(
+    repos: Repos,
+) -> None:
+    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
+    repos.pull(first, "one.py")
+    repos.pull(second, "two.py")
+    repos.push_to_effort("red", "broken\n")
+
+    async def wait_then_land() -> tuple[dict[int, Ticket], list[str], list[str]]:
+        driven = Driven(repos, spec)
+        for _ in range(4):
+            await driven.read()
+            await driven.settled()
+        waiting = await driven.read()
+        raised = driven.raised()
+        # A person fixes the branch: the line starts again, and both land.
+        repos.push_to_effort("red", None)
+        await driven.until("landed", first, second)
+        await driven.settled()
+        return waiting, raised, driven.raised()
+
+    waiting, raised, after = asyncio.run(wait_then_land())
+
+    assert [
+        (waiting[t.number].state, waiting[t.number].place_in_line) for t in (first, second)
+    ] == [
+        (TicketState.LANDING, 1),
+        (TicketState.LANDING, 2),
+    ]
+    [reason] = raised
+    assert f"`{_EFFORT_BRANCH}`" in reason
+    assert first.comments[:-1] == second.comments[:-1] == []
+    assert repos.github.labels(first.number) == repos.github.labels(second.number) == []
+    assert after == []
+    assert repos.files_at(repos.effort_tip()) == {"README.md", "one.py", "two.py"}
+    # Blocked by the red head: the first candidate and the bare head, once, then two landings.
+    assert len(repos.trees_tested()) == 4
+
+
+_RESOLVES = ScriptedAgent(
+    commits=[ScriptedCommit("Resolve same.py", {"same.py": "same.py\ndifferent\n"})],
+    outcome=DONE,
+)
+
+
+def test_a_conflict_gets_one_resolver_session_and_stays_landing_until_it_lands(
+    repos: Repos, record: Store
+) -> None:
+    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
+    repos.pull(first, "same.py")
+    repos.conflicting_pull(second)
+
+    async def land() -> tuple[set[str], Driven]:
+        driven = Driven(repos, spec, resolver=_RESOLVES, record=record)
+        seen: set[str] = set()
+        deadline = time.monotonic() + 30
+        while (read := await driven.read())[second.number].state != "landed":
+            seen.add(read[second.number].state)
+            assert time.monotonic() < deadline, seen
+            await asyncio.sleep(0.05)
+        await driven.settled()
+        return seen, driven
+
+    seen, driven = asyncio.run(land())
+
+    assert seen == {TicketState.LANDING}
+    assert [row.purpose for row in record.sessions()] == [Purpose.RESOLVE]
+    # Submitted through the queue's one way to run a session, which is the cap's.
+    [resolver] = driven.submitted
+    assert f"ticket/{second.number}-work" in str(resolver.prompt)
+    tip = repos.effort_tip()
+    assert _git(repos.remote, "show", f"{tip}:same.py") == "same.py\ndifferent"
+    assert second.comments == [f"Landed on `{_EFFORT_BRANCH}` at {tip}.\n\n{LANDED_MARKER}"]
+
+
+def test_a_second_conflict_after_its_resolver_session_hands_the_ticket_to_a_person(
+    repos: Repos, record: Store
+) -> None:
+    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
+    repos.pull(first, "same.py")
+    pull = repos.conflicting_pull(second)
+
+    async def land() -> dict[int, Ticket]:
+        driven = Driven(repos, spec, resolver=_RESOLVES, record=record)
+        branch = f"ticket/{second.number}-work"
+        cut = _git(repos.remote, "rev-parse", branch)
+        deadline = time.monotonic() + 30
+        # Read until the resolver has pushed, which no read lands in the same turn.
+        while _git(repos.remote, "rev-parse", branch) == cut:
+            assert time.monotonic() < deadline, "the resolver never pushed"
+            await driven.read()
+            await driven.settled()
+        # Resolved, and before it is taken again a person changes the same file.
+        repos.push_to_effort("same.py", "by hand\n")
+        return await driven.until("held", second)
+
+    read = asyncio.run(land())
+
+    assert read[second.number].state == TicketState.HELD
+    assert pull.draft is True
+    [why] = second.comments
+    assert f"conflicted with `{_EFFORT_BRANCH}` again after its resolver session" in why
+    assert [row.purpose for row in record.sessions()] == [Purpose.RESOLVE]
+
+
+def test_a_resolver_session_that_fails_hands_the_ticket_to_a_person(
+    repos: Repos, record: Store
+) -> None:
+    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
+    repos.pull(first, "same.py")
+    repos.conflicting_pull(second)
+    gave_up = ScriptedAgent(outcome={**DONE, "status": "not_done", "summary": "Both are right."})
+
+    async def land() -> dict[int, Ticket]:
+        driven = Driven(repos, spec, resolver=gave_up, record=record)
+        read = await driven.until("held", second)
+        await driven.settled()
+        return read
+
+    read = asyncio.run(land())
+
+    assert read[first.number].state == TicketState.LANDED
+    [why] = second.comments
+    assert "its resolver session could not resolve its conflict" in why
+    assert "Both are right." in why
+    assert repos.github.labels(second.number) == [HELD]
+
+
+def test_a_branch_carrying_a_merge_commit_is_refused_with_a_reason_and_never_rewritten(
+    repos: Repos,
+) -> None:
+    spec, (ticket,) = repos.github.effort("Widgets", tickets=1)
+    branch = f"ticket/{ticket.number}-work"
+    repos.branch(ticket, "widget.py")
+    repos.push_to_effort("other.py", "other\n")
+    # GitHub's "Update branch": the effort branch merged into the ticket's.
+    _git(repos.clone, "fetch", "--quiet", "origin")
+    _git(repos.clone, "checkout", "--quiet", "-B", branch, f"origin/{branch}")
+    _git(repos.clone, "merge", "--quiet", "--no-ff", "-m", "Merge", f"origin/{_EFFORT_BRANCH}")
+    _git(repos.clone, "push", "--quiet", "origin", branch)
+    _git(repos.clone, "checkout", "--quiet", "main")
+    merged = _git(repos.clone, "rev-parse", branch)
+    pull = repos.github.pull_request(ticket, head=branch, base=_EFFORT_BRANCH, head_commit=merged)
+
+    async def land() -> dict[int, Ticket]:
+        driven = Driven(repos, spec)
+        read = await driven.until("held", ticket)
+        await driven.settled()
+        return read
+
+    read = asyncio.run(land())
+
+    assert read[ticket.number].state == TicketState.HELD
+    assert pull.draft is True
+    [why] = ticket.comments
+    assert f"the branch has a merge commit; rebase it onto `{_EFFORT_BRANCH}`" in why
+    assert repos.trees_tested() == []
+    assert _git(repos.remote, "rev-parse", branch) == merged
 
 
 class _NoDaemon(NoSandbox):

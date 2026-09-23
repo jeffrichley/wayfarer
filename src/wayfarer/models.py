@@ -202,11 +202,13 @@ class GateCheck(BaseModel):
 
 
 class EnvironmentFailure(BaseModel):
-    """The one Needs you item a failed start gate raises, however many starts it refused."""
+    """The one Needs you item a failure of the environment raises: a start gate that keeps
+    refusing, however many starts it refused, or an effort branch whose tests are red,
+    however many candidates it failed."""
 
     kind: Literal["environment"]
-    id: str = Field(description="Stays the same while the gate keeps failing, so it is one item.")
-    reason: str = Field(description="Which checks failed and why, in plain words.")
+    id: str = Field(description="Stays the same while the failure lasts, so it is one item.")
+    reason: str = Field(description="What failed and why, in plain words.")
     failed: list[GateCheck]
 
 
@@ -281,6 +283,7 @@ Item = Annotated[
     | EffortUnreadable
     | Ticket
     | GateStatus
+    | EnvironmentFailure
     | Beat,
     Field(discriminator="kind"),
 ]

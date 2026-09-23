@@ -73,7 +73,7 @@ def create_app(
         current = images.current()
         return None if current is None else DockerSandbox(current)
 
-    queue = MergeQueue(repo, github, settings, sandbox)
+    queue = MergeQueue(repo, github, settings, sandbox, stream=store)
     efforts = Efforts(github, store, settings, line=queue.line)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
