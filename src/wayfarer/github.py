@@ -7,6 +7,7 @@ signal to re-read (ADR-0003), so what Wayfarer wrote is read straight back.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import subprocess
 import time
@@ -111,9 +112,14 @@ class GitHub:
     async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=self._settings.github_timeout) as client:
-                return await client.request(method, f"{self._settings.github_api}{path}", **kwargs)
+                response = await client.request(
+                    method, f"{self._settings.github_api}{path}", **kwargs
+                )
         except httpx.HTTPError as error:
+            _raise_if_cancelled(error)
             raise GitHubError(f"GitHub could not be reached: {error}") from error
+        _raise_if_cancelled()
+        return response
 
     async def query(self, document: str, **variables: Any) -> dict[str, Any]:
         """The `repository` field of `document`, run with `owner` and `name` filled in."""
@@ -184,6 +190,19 @@ class GitHub:
             headers=auth | (headers or {}),
             **kwargs,
         )
+
+
+def _raise_if_cancelled(cause: BaseException | None = None) -> None:
+    """Raise the cancel a request swallowed.
+
+    anyio reports a connect cancelled mid-attempt as a failed connect, and can
+    absorb a cancel while it closes a connection, so a request may fail or even
+    return after its task was cancelled. A cancel must still cancel, or whatever
+    awaits the task, such as the app stopping, waits forever.
+    """
+    task = asyncio.current_task()
+    if task is not None and task.cancelling():
+        raise asyncio.CancelledError from cause
 
 
 # GitHub's rules for its rate-limit responses:

@@ -9,7 +9,9 @@ watch.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
+import httpx
 import pytest
 
 from github_stand_in import TOKEN, GitHub
@@ -56,3 +58,38 @@ def test_a_refused_write_is_still_read_back_since_it_may_have_landed(github: Git
             await asyncio.wait_for(watch.changed(), timeout=1.0)
 
     asyncio.run(refused())
+
+
+async def _refused_on_cancel(self: httpx.AsyncClient, *args: Any, **kwargs: Any) -> Any:
+    """A connect that anyio, cancelled mid-attempt, reports as a failed connect."""
+    try:
+        await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        raise httpx.ConnectError("All connection attempts failed") from None
+
+
+async def _answered_on_cancel(self: httpx.AsyncClient, *args: Any, **kwargs: Any) -> Any:
+    """A request whose cancel anyio absorbed, so it answers after all."""
+    try:
+        await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        return httpx.Response(200, json={})
+
+
+@pytest.mark.parametrize("swallowing", [_refused_on_cancel, _answered_on_cancel])
+def test_a_cancelled_request_is_cancelled_even_when_the_http_library_swallows_it(
+    github: GitHub, monkeypatch: pytest.MonkeyPatch, swallowing: Any
+) -> None:
+    # Otherwise the poll reads it as a failed round, carries on, and stopping the
+    # app waits on it forever.
+    monkeypatch.setattr(httpx.AsyncClient, "request", swallowing)
+    client = _client(github)
+
+    async def cancelled_mid_request() -> None:
+        request = asyncio.create_task(client.conditional("/issues", None))
+        await asyncio.sleep(0.05)
+        request.cancel()
+        await request
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(cancelled_mid_request())
