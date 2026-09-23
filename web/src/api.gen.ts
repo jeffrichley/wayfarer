@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start Gate
+         * @description The six checks, run now. Looking raises nothing; only a refused start does.
+         */
+        get: operations["start_gate_api_gate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -105,6 +125,62 @@ export interface components {
             line: string;
         };
         /**
+         * EnvironmentFailure
+         * @description The one Needs you item a failed start gate raises, however many starts it refused.
+         */
+        EnvironmentFailure: {
+            /** Failed */
+            failed: components["schemas"]["GateCheck"][];
+            /**
+             * Id
+             * @description Stays the same while the gate keeps failing, so it is one item.
+             */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "environment";
+            /**
+             * Reason
+             * @description Which checks failed and why, in plain words.
+             */
+            reason: string;
+        };
+        /**
+         * GateCheck
+         * @description One of the start gate's six checks, and what it found.
+         */
+        GateCheck: {
+            /**
+             * Detail
+             * @description What was found, in plain words, saying how to fix it when it failed. Names a credential's variable, never its value.
+             */
+            detail: string;
+            /**
+             * Name
+             * @description What must hold, in plain words.
+             */
+            name: string;
+            /** Passed */
+            passed: boolean;
+        };
+        /**
+         * GateStatus
+         * @description The start gate as it stands now: all six checks, run afresh.
+         */
+        GateStatus: {
+            /** Checks */
+            checks: components["schemas"]["GateCheck"][];
+            /**
+             * Passed
+             * @description Every check passed, so a session may start.
+             */
+            passed: boolean;
+            /** @description The item the gate raised when it last refused a start; null when it has not refused one, or has admitted one since. */
+            raised: components["schemas"]["EnvironmentFailure"] | null;
+        };
+        /**
          * Health
          * @description That the process is up, and which Wayfarer it is.
          */
@@ -161,6 +237,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    start_gate_api_gate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateStatus"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

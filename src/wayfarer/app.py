@@ -13,8 +13,9 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
+from wayfarer.gate import StartGate
 from wayfarer.image import Build, Images, NoLayer
-from wayfarer.models import BuildEvent, Health, ImageStatus
+from wayfarer.models import BuildEvent, GateStatus, Health, ImageStatus
 
 __all__ = ["create_app"]
 
@@ -47,6 +48,7 @@ def create_app(repo: Path) -> FastAPI:
     app = FastAPI(title="Wayfarer", version=running)
     images = Images(repo)
     app.state.images = images
+    gate = StartGate(repo, images)
 
     # Handlers are async so they run on the loop every agent run shares (ADR-0001),
     # not in a thread pool beside it.
@@ -74,6 +76,14 @@ def create_app(repo: Path) -> FastAPI:
     ) -> AsyncIterable[BuildEvent]:
         async for event in build.events():
             yield event
+
+    @app.get("/api/gate")
+    async def start_gate() -> GateStatus:
+        """The six checks, run now. Looking raises nothing; only a refused start does."""
+        checks = await gate.check()
+        return GateStatus(
+            checks=checks, passed=all(check.passed for check in checks), raised=gate.raised
+        )
 
     # A mistyped API path is an error, not the page.
     @app.get("/api/{path:path}", include_in_schema=False)
