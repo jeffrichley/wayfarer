@@ -387,8 +387,16 @@ def _has(item: dict[str, Any] | None, fields: dict[str, Any]) -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip the docker tier, saying why, where no daemon answers (GitHub's macOS runners)."""
+    """Run the docker tier on one worker, one test after another; and skip it, saying
+    why, where no daemon answers (GitHub's macOS runners).
+
+    The suite runs in parallel (`-n auto`, pyproject.toml), but every image build
+    starts `FROM wayfarer-base`, and two layers alike share a tag, so builds side by
+    side would race to build the base, and one's cleanup could remove another's tag.
+    """
     needing = [item for item in items if "docker" in item.keywords]
+    for item in needing:
+        item.add_marker(pytest.mark.xdist_group("docker"))
     if not needing or _docker_answers():
         return
     for item in needing:
