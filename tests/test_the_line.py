@@ -13,30 +13,14 @@ from typing import Any
 
 import pytest
 
-from conftest import Launcher, Stream, post
+from conftest import EFFORT_BRANCH, Launcher, Stream, land, post, quick
 from github_stand_in import GitHub, Issue
-from wayfarer.merge_queue import LANDED_MARKER
 from wayfarer.read_model import ASKED
 
 pytestmark = pytest.mark.git
 
-_EFFORT_BRANCH = "effort/1-widgets"
-
 # Two questions, as Needs you lists them.
 _FLAG, _METER = "question Flag loudness", "question Meter peaks"
-
-
-def _env(tmp_path: Path) -> dict[str, str]:
-    # Quick, so a change on GitHub is read again within a test's patience.
-    return {"WAYFARER_DATA_DIR": str(tmp_path / "data"), "WAYFARER_POLL_ACTIVE": "0.2"}
-
-
-def land(github: GitHub, ticket: Issue) -> None:
-    """Closed with the marked comment, as Wayfarer closes a ticket that landed."""
-    at = github.now
-    github.comment(ticket, f"Landed on `{_EFFORT_BRANCH}` at {'a' * 40}.\n\n{LANDED_MARKER}")
-    github.now = at
-    github.close(ticket)
 
 
 def read(url: str, page: Stream, *efforts: Issue) -> None:
@@ -58,7 +42,7 @@ def test_the_headline_leads_with_what_needs_you_then_the_landings(
     spec, (flag, meter) = github.effort("Widgets", tickets=2)
     land(github, flag)
     github.label(meter, ASKED)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, spec)
@@ -77,7 +61,7 @@ def test_the_headline_stays_under_fourteen_words_however_much_happened(
     for ticket in tickets[:12]:
         land(github, ticket)
     github.label(tickets[12], ASKED)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, spec)
@@ -96,7 +80,7 @@ def test_one_standfirst_sentence_per_active_effort_from_its_own_counts(
     github.label(meter, ASKED)
     shipped, (done,) = github.effort("Gadgets", tickets=1)
     land(github, done)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, widgets, shipped)
@@ -112,13 +96,13 @@ def test_each_effort_rows_course_reaches_the_furthest_station_its_tickets_have(
 ) -> None:
     widgets, (flag, meter, scale) = github.effort("Widgets", tickets=3)
     land(github, flag)
-    github.pull_request(meter, base=_EFFORT_BRANCH, draft=True)
+    github.pull_request(meter, base=EFFORT_BRANCH, draft=True)
     github.block(scale, by=meter)
     sliced, _ = github.effort("Gadgets", tickets=2)
     shipped, (done, dropped) = github.effort("Gizmos", tickets=2)
     land(github, done)
     github.close(dropped, "NOT_PLANNED")
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, widgets, sliced, shipped)
@@ -147,7 +131,7 @@ def test_needs_you_ranks_what_holds_up_the_most_first_and_reranks_live(
     github.label(flag, ASKED)
     github.block(scale, by=meter)
     github.block(ruler, by=scale)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, spec)
@@ -172,7 +156,7 @@ def test_needs_you_gives_a_tie_to_whatever_has_waited_longest(
     flag.title, meter.title = "Flag loudness", "Meter peaks"
     github.label(meter, ASKED)
     github.label(flag, ASKED)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, spec)
@@ -197,7 +181,7 @@ def test_an_environment_failure_is_pinned_first_and_shipping_an_effort_last(
     github.block(meter, by=flag)
     gadgets, (done,) = github.effort("Gadgets", tickets=1)
     land(github, done)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         # The clone has no session image, so the start gate refuses every start.
@@ -218,7 +202,7 @@ def test_the_last_visit_ends_on_leaving_so_a_reload_keeps_the_headline(
     spec, (flag, meter) = github.effort("Widgets", tickets=2)
     github.now = datetime.now(UTC) - timedelta(days=1)
     land(github, flag)
-    url = wayfarer.start(env=_env(tmp_path)).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
 
     with Stream(url, patience=30, home=True) as page:
         read(url, page, spec)

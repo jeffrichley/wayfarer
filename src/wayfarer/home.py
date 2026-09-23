@@ -122,6 +122,7 @@ class HomePage:
             await self._stream.changed()
 
     def refresh(self) -> None:
+        """Put home as the stream now has it on the stream, where it differs."""
         since = self._record().since() if self._repo is not None else None
         home, rows, needs = derive(
             list(self._stream.items()),
@@ -225,8 +226,7 @@ def _row(effort: Effort, tickets: list[Ticket]) -> LineRow:
 def _environment(items: list[Item]) -> list[EnvironmentFailure]:
     """Whatever failure of the environment stands now: what the start gate last raised,
     and what the merge queue raised for a red effort branch."""
-    failures = [i for i in items if isinstance(i, GateStatus) and i.raised is not None]
-    raised = [status.raised for status in failures if status.raised is not None]
+    raised = [i.raised for i in items if isinstance(i, GateStatus) and i.raised is not None]
     return raised + [i for i in items if isinstance(i, EnvironmentFailure)]
 
 

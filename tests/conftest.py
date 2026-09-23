@@ -33,8 +33,9 @@ from fastapi import FastAPI
 from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
-from github_stand_in import TOKEN, GitHub
+from github_stand_in import TOKEN, GitHub, Issue
 from specimens import GALLERY_CLOCK, VIEWPORT, reference_page
+from wayfarer.merge_queue import LANDED_MARKER
 from wayfarer.stream import Store
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
@@ -468,3 +469,21 @@ def build_output(items: Items) -> list[str]:
     """The last build's output, in the order Docker printed it."""
     lines = [item for item in items.values() if item["kind"] == "build_output"]
     return [item["line"] for item in sorted(lines, key=lambda item: item["number"])]
+
+
+# The effort branch a ticket's pull request targets, in tests that need no git.
+EFFORT_BRANCH = "effort/1-widgets"
+
+
+def quick(tmp_path: Path) -> dict[str, str]:
+    """A Wayfarer's environment that reads a change on GitHub again within a test's patience."""
+    return {"WAYFARER_DATA_DIR": str(tmp_path / "data"), "WAYFARER_POLL_ACTIVE": "0.2"}
+
+
+def land(github: GitHub, ticket: Issue) -> None:
+    """Closed with the marked comment, as Wayfarer closes a ticket that landed: back to
+    back, so GitHub stamps both to the same second."""
+    at = github.now
+    github.comment(ticket, f"Landed on `{EFFORT_BRANCH}` at {'a' * 40}.\n\n{LANDED_MARKER}")
+    github.now = at
+    github.close(ticket)

@@ -14,16 +14,13 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import Browser, Page, expect
-from test_the_line import land
 
-from conftest import Launcher, post
+from conftest import EFFORT_BRANCH, Launcher, land, post, quick
 from github_stand_in import GitHub
 from specimens import VIEWPORT
 from wayfarer.read_model import ASKED
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
-
-_EFFORT_BRANCH = "effort/1-widgets"
 
 
 @pytest.fixture
@@ -35,8 +32,7 @@ def page(browser: Browser) -> Iterator[Page]:
 
 def _open(wayfarer: Launcher, tmp_path: Path, page: Page, *efforts: int) -> str:
     """Wayfarer started, its efforts read as a screen that shows them asks, and home open."""
-    env = {"WAYFARER_DATA_DIR": str(tmp_path / "data"), "WAYFARER_POLL_ACTIVE": "0.2"}
-    url = wayfarer.start(env=env).url()
+    url = wayfarer.start(env=quick(tmp_path)).url()
     for effort in efforts:
         assert post(f"{url}api/efforts/{effort}/read").status_code == 202
     page.goto(url)
@@ -58,7 +54,7 @@ def test_each_effort_row_draws_its_course_solid_to_the_furthest_station_and_dash
     wayfarer: Launcher, github: GitHub, tmp_path: Path, page: Page
 ) -> None:
     widgets, (flag, meter) = github.effort("Widgets", tickets=2)
-    github.pull_request(flag, base=_EFFORT_BRANCH, draft=True)
+    github.pull_request(flag, base=EFFORT_BRANCH, draft=True)
     github.label(meter, ASKED)
     shipped, (done,) = github.effort("Gadgets", tickets=1)
     land(github, done)
