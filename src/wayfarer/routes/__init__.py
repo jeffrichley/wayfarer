@@ -18,6 +18,7 @@ from fastapi import Depends, Request, Response
 
 from wayfarer.cascade import Cascades
 from wayfarer.gate import StartGate
+from wayfarer.home import HomePage
 from wayfarer.image import Images
 from wayfarer.read_model import Efforts
 from wayfarer.stream import Store
@@ -32,6 +33,7 @@ class Services:
 
     cascades: Cascades
     efforts: Efforts
+    home: HomePage
     images: Images
     running: str
     start_gate: StartGate

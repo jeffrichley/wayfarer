@@ -10,15 +10,16 @@ stay sorted: two tickets adding areas then insert at different places, not both
 at the end (#92). `tests/test_the_schema.py` fails for a shape in any module
 here that is missing from the schema or from this package.
 
-Needs you has no module of its own: each of its items lives with the area that
-raises it, `ShipEffort` with the cascade and `EnvironmentFailure` with the gate,
-whose `GateStatus` names the one it raised.
+Each Needs you item lives with the area that raises it, `ShipEffort` with the
+cascade and `EnvironmentFailure` with the gate, whose `GateStatus` names the one
+it raised; the list that orders them all lives with home, which shows it.
 """
 
 from wayfarer.models.cascade import *
 from wayfarer.models.chronicle import *
 from wayfarer.models.gate import *
 from wayfarer.models.health import *
+from wayfarer.models.home import *
 from wayfarer.models.image import *
 from wayfarer.models.read_model import *
 from wayfarer.models.sessions import *

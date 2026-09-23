@@ -21,6 +21,7 @@ from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
+from wayfarer.home import HomePage
 from wayfarer.image import Images
 from wayfarer.merge_queue import MergeQueue
 from wayfarer.models import ChronicleLine, Effort, Ticket
@@ -32,6 +33,7 @@ from wayfarer.routes import efforts as efforts_routes
 from wayfarer.routes import events as events_routes
 from wayfarer.routes import gate as gate_routes
 from wayfarer.routes import health as health_routes
+from wayfarer.routes import home as home_routes
 from wayfarer.routes import image as image_routes
 from wayfarer.routes import tickets as tickets_routes
 from wayfarer.sessions import Sessions
@@ -116,13 +118,18 @@ def create_app(
     cascades = Cascades(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )
+    home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003). Stopping stops every session, each
     # keeping its work, as Ctrl-C does.
     @asynccontextmanager
     async def keeping_up(app: FastAPI) -> AsyncIterator[None]:
-        tasks = [asyncio.create_task(poll(github, settings)), asyncio.create_task(efforts.follow())]
+        tasks = [
+            asyncio.create_task(poll(github, settings)),
+            asyncio.create_task(efforts.follow()),
+            asyncio.create_task(home.follow()),
+        ]
         for task in tasks:
             task.add_done_callback(_report_death)
         async with runs:
@@ -140,6 +147,7 @@ def create_app(
     app.state.services = Services(
         cascades=cascades,
         efforts=efforts,
+        home=home,
         images=images,
         running=running,
         start_gate=start_gate,
@@ -151,6 +159,7 @@ def create_app(
     app.include_router(events_routes.router)
     app.include_router(gate_routes.router)
     app.include_router(health_routes.router)
+    app.include_router(home_routes.router)
     app.include_router(image_routes.router)
     app.include_router(tickets_routes.router)
     page.include(app)

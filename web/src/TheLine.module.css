@@ -1,0 +1,28 @@
+/* Home, ported from the prototype (prototype/index.html): the page, the masthead,
+   and the lower columns. The line, the chronicle and the Needs you rows style
+   themselves. */
+.page { max-width: 1240px; margin: 0 auto; padding: 44px 40px 72px; }
+
+.masthead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: end; padding-bottom: 36px; border-bottom: 1px solid var(--rule); }
+.masthead :global(.kicker) { display: block; }
+.masthead h1 { font-size: clamp(34px, 3.6vw, 48px); line-height: 1.08; max-width: 21ch; margin-top: 14px; }
+.lead { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 60ch; margin-top: 16px; }
+.dateline { text-align: right; }
+.big { font-family: var(--font-display); font-size: 17px; }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 56px; align-items: start; }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+
+.agents { margin-top: 36px; }
+.agents li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.agents li :global(.st) { margin-top: 4px; }
+.agent { font-size: 14px; line-height: 1.4; }
+.agents li :global(.meta) { display: block; margin-top: 2px; }
+.empty { padding: 18px 0; color: var(--muted); border-top: 1px solid var(--border); }
+
+@media (max-width: 920px) {
+  .page { padding: 28px 18px 56px; }
+  .masthead { grid-template-columns: 1fr; gap: 16px; }
+  .dateline { text-align: left; }
+  .lower { grid-template-columns: 1fr; gap: 40px; }
+}

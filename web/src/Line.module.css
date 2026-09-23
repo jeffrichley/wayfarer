@@ -1,0 +1,52 @@
+/* The line, ported from the prototype's home (prototype/index.html: .line, .line-row,
+   .track-cell, .cluster). */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+.line { border-top: 1px solid var(--border); }
+.row { display: grid; grid-template-columns: 230px repeat(6, minmax(0, 1fr)); align-items: stretch; border-bottom: 1px solid var(--border); }
+.row.head { border-bottom: 0; }
+.row.head .cell { padding: 12px 8px 10px 0; }
+.skill { display: block; font-size: 11.5px; color: var(--muted); }
+.sName { font-family: var(--font-display); font-size: 15px; }
+.empty { padding: 18px 0; color: var(--muted); border-top: 1px solid var(--border); }
+
+.effort { padding: 20px 20px 20px 0; }
+.name { font-family: var(--font-display); font-size: 18px; line-height: 1.25; text-decoration: none; display: inline; }
+.name:hover { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.effort :global(.meta) { display: block; margin-top: 4px; }
+.static { font-family: var(--font-display); font-size: 18px; color: var(--ink-2); }
+
+.cell { position: relative; min-width: 0; }
+.track { padding: 34px 6px 16px 0; }
+/* an active effort's course is drawn in chart magenta; a finished one rests in ink */
+.track::before { content: ''; position: absolute; left: 0; right: 0; top: 39px; border-top: 2.5px solid var(--accent); transform-origin: left center; }
+.track.pending::before { top: 40px; border-top: 1.5px dashed var(--line); }
+.done .track::before { top: 40px; border-top: 1.5px solid var(--rule); }
+.intro .track::before { animation: draw .5s cubic-bezier(.3,.7,.2,1) both; animation-delay: var(--d, 0ms); }
+.intro .track .cluster, .intro .track .cap { animation: arrive .4s ease both; animation-delay: calc(var(--d, 0ms) + 280ms); }
+@keyframes draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes arrive { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.track.first::before { left: 6px; }
+.track.end::before { right: auto; width: 14px; }
+
+.cluster { position: relative; display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 3px; min-height: 14px; padding: 0 6px 0 0; background: var(--bg); text-decoration: none; border-radius: 2px; margin-top: -1px; }
+a.cluster:hover { background: var(--hover); box-shadow: 0 0 0 4px var(--hover); }
+.cluster :global(.st) { width: 10px; height: 10px; }
+.cluster :global(.st-ask) { width: 8px; height: 8px; margin: 1px; }
+.passed { width: 6px; height: 6px; border-radius: 50%; background: var(--fg); display: inline-block; margin-left: 3px; }
+.passed.ahead { background: var(--bg); border: 1.5px solid var(--line); width: 8px; height: 8px; }
+.cap { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); margin-top: 10px; padding-right: 8px; }
+.cap strong { color: var(--fg); font-weight: 500; }
+.done .effort :global(.meta), .done .cap { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .intro .track::before, .intro .track .cluster, .intro .track .cap { animation: none; }
+}
+@media (max-width: 1100px) {
+  .row { grid-template-columns: 180px repeat(6, minmax(0, 1fr)); }
+}
+@media (max-width: 920px) {
+  .line { overflow-x: auto; }
+  .inner { min-width: 860px; }
+}
