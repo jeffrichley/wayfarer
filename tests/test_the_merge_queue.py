@@ -183,6 +183,7 @@ class Driven:
         settings: Settings | None = None,
         resolver: AgentProvider | None = None,
         record: Store | None = None,
+        resolver_sandbox: SandboxBackend | None = None,
     ) -> None:
         """`environment` False is a machine with nowhere to run the re-test. `resolver` is
         the agent a conflict's resolver session runs, recorded in `record`."""
@@ -198,7 +199,7 @@ class Driven:
                 record,
                 Repo(repos.github.owner, repos.github.name),
                 agent=resolver,
-                sandbox=NoSandbox(),
+                sandbox=resolver_sandbox or NoSandbox(),
                 settings=Settings(),
                 stream=self.stream,
             )
@@ -449,7 +450,9 @@ def test_a_red_effort_branch_raises_one_item_and_blames_no_candidate_until_it_is
     ]
     [reason] = raised
     assert f"`{_EFFORT_BRANCH}`" in reason
-    assert first.comments[:-1] == second.comments[:-1] == []
+    # Each says only that it landed: neither was blamed for the branch.
+    assert [len(first.comments), len(second.comments)] == [1, 1]
+    assert LANDED_MARKER in first.comments[0] and LANDED_MARKER in second.comments[0]
     assert repos.github.labels(first.number) == repos.github.labels(second.number) == []
     assert after == []
     assert repos.files_at(repos.effort_tip()) == {"README.md", "one.py", "two.py"}
@@ -521,6 +524,33 @@ def test_a_second_conflict_after_its_resolver_session_hands_the_ticket_to_a_pers
     [why] = second.comments
     assert f"conflicted with `{_EFFORT_BRANCH}` again after its resolver session" in why
     assert [row.purpose for row in record.sessions()] == [Purpose.RESOLVE]
+
+
+def test_a_resolver_that_cannot_start_raises_one_item_and_costs_the_ticket_nothing(
+    repos: Repos, record: Store
+) -> None:
+    spec, (first, second) = repos.github.effort("Widgets", tickets=2)
+    repos.pull(first, "same.py")
+    repos.conflicting_pull(second)
+
+    async def wait() -> tuple[dict[int, Ticket], list[str]]:
+        driven = Driven(
+            repos, spec, resolver=_RESOLVES, record=record, resolver_sandbox=_NoDaemon()
+        )
+        await driven.until("landed", first)
+        for _ in range(3):
+            await driven.read()
+            await driven.settled()
+        return await driven.read(), driven.raised()
+
+    read, raised = asyncio.run(wait())
+
+    assert read[second.number].state == TicketState.LANDING
+    [reason] = raised
+    assert f"A resolver session could not start on `{_EFFORT_BRANCH}`" in reason
+    assert second.comments == []
+    # It never ran, so it is not the ticket's one resolver session.
+    assert record.sessions() == []
 
 
 def test_a_resolver_session_that_fails_hands_the_ticket_to_a_person(

@@ -218,10 +218,14 @@ class MergeQueue:
     async def _work(self, waiting: list[Ticket]) -> None:
         """Land the first candidate that will, in order. One that lands ends the turn: its
         writes set off a read, and that read starts the next."""
+        # A resolver builds on the head as it stands, so its line lands nothing behind
+        # its back: what it makes is re-tested on that same head.
+        if any(ticket.number in self.resolving for ticket in waiting):
+            return
         for ticket in waiting:
             pull = ticket.pull_request
             assert pull is not None
-            if ticket.number in self.resolving or self._set_aside.get(ticket.number) == pull:
+            if self._set_aside.get(ticket.number) == pull:
                 continue
             self._set_aside.pop(ticket.number, None)
             self._in_hand.add(ticket.number)
@@ -260,7 +264,7 @@ class MergeQueue:
             return True
         self._forget_red(pull.base)
         async with self._bounded():
-            merges = await _merges(git, onto=head, series=theirs)
+            merges = await _has_merge_commit(git, onto=head, series=theirs)
             candidate = None if merges else await _reapply(git, onto=head, series=theirs)
         if candidate is None:
             await self._hold(ticket, pull, _MERGE_COMMIT.format(base=pull.base))
@@ -275,7 +279,9 @@ class MergeQueue:
             if not bare.passed:
                 self._raise_red(pull.base, head, bare)
                 return True
-            await self._hold(ticket, pull, await self._failed(git, pull, head, theirs, tested))
+            await self._hold(
+                ticket, pull, await self._why_retest_failed(git, pull, head, theirs, tested)
+            )
             return False
         # Atomic, so the pull request is marked merged exactly when the effort
         # branch takes it. The effort branch is not forced: if it moved since the
@@ -338,7 +344,7 @@ class MergeQueue:
         output = "\n".join(tail for tail in (ran.stdout, ran.stderr) if tail.strip())
         return _Tested(ran.exit_code == 0, output.rstrip())
 
-    async def _failed(
+    async def _why_retest_failed(
         self, git: GitRepo, pull: PullRequest, head: str, theirs: str, tested: _Tested
     ) -> str:
         """Why a candidate that failed its re-test is held: what it was tested with, and
@@ -351,9 +357,9 @@ class MergeQueue:
             else f"Nothing had landed on `{pull.base}` since it was cut."
         )
         return (
-            f"**Held: it failed its re-test on `{pull.base}`.** Its commits were re-applied "
-            f"onto `{pull.base}` at {head}, and the suite failed there, though it passes on "
-            f"`{pull.base}` alone. Nothing re-runs it by itself.\n\n{since}\n\n"
+            f"**Held: its re-test on `{pull.base}` was red.** Its commits were re-applied "
+            f"onto `{pull.base}` at {head}, and the suite was red there, though `{pull.base}` "
+            f"alone is green. Nothing re-runs it by itself.\n\n{since}\n\n"
             f"The end of what `wf-test` said:\n\n````text\n{tested.output}\n````"
         )
 
@@ -406,14 +412,23 @@ class MergeQueue:
             finally:
                 async with self._bounded():
                     await git.git("branch", "--delete", "--force", local)
-            await self._resolved(git, ticket, pull, theirs, result)
-        except (PreflightError, StageError, OSError, TimeoutError, GitHubError):
+            await self._take_resolution(git, ticket, pull, theirs, result)
+        except (PreflightError, StageError, OSError, TimeoutError, GitHubError) as error:
             # The environment's, before the resolver's agent ran: that is not its one
-            # resolver session, so the next read tries again, from its place in line.
+            # resolver session, so the next read tries again, from its place in line,
+            # with one item raised however many times it cannot (#21, decision 8).
             _log.warning("Ticket #%s's resolver could not run.", ticket.number, exc_info=True)
             self._set_aside.pop(ticket.number, None)
+            self._raise(
+                _unresolved_id(pull.base),
+                f"A resolver session could not start on `{pull.base}`, so its line waits.",
+                check=f"A resolver session can start on `{pull.base}`",
+                detail=str(error) or type(error).__name__,
+            )
+            return
+        self._stream.remove(_unresolved_id(pull.base))
 
-    async def _resolved(
+    async def _take_resolution(
         self,
         git: GitRepo,
         ticket: Ticket,
@@ -460,20 +475,20 @@ class MergeQueue:
         candidate keeps its place at the front of a line that lands nothing until the
         branch moves."""
         self._red[branch] = head
+        self._raise(
+            _red_id(branch),
+            f"The effort branch's tests are red: `{branch}` at {head[:7]} is red on its own, "
+            "so nothing lands on it until that is fixed.",
+            check=f"The tests are green on `{branch}`",
+            detail=bare.output or "`wf-test` was red and said nothing.",
+        )
+
+    def _raise(self, id: str, reason: str, *, check: str, detail: str) -> None:
+        """One Needs you item for a failure of the environment while landing, the same
+        shape a failed start gate raises. Raising it again changes nothing."""
+        failed = [GateCheck(name=check, passed=False, detail=detail)]
         self._stream.upsert(
-            EnvironmentFailure(
-                kind="environment",
-                id=_red_id(branch),
-                reason=f"The effort branch's tests are red: `{branch}` at {head[:7]} fails "
-                "`wf-test` on its own, so nothing lands on it until that is fixed.",
-                failed=[
-                    GateCheck(
-                        name=f"The tests pass on `{branch}`",
-                        passed=False,
-                        detail=bare.output or "`wf-test` failed and said nothing.",
-                    )
-                ],
-            )
+            EnvironmentFailure(kind="environment", id=id, reason=reason, failed=failed)
         )
 
     def _forget_red(self, branch: str) -> None:
@@ -539,11 +554,15 @@ def _red_id(branch: str) -> str:
     return f"environment:red:{branch}"
 
 
+def _unresolved_id(branch: str) -> str:
+    return f"environment:resolver:{branch}"
+
+
 def _duration(seconds: float) -> str:
     return f"{seconds / 60:g} min" if seconds >= 60 else f"{seconds:g} s"
 
 
-async def _merges(git: GitRepo, *, onto: str, series: str) -> bool:
+async def _has_merge_commit(git: GitRepo, *, onto: str, series: str) -> bool:
     """Whether `series` carries a merge commit that `onto` does not."""
     base = await git.git("merge-base", onto, series)
     return bool(await git.git("rev-list", "--merges", f"{base}..{series}"))
