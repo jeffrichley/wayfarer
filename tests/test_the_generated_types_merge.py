@@ -8,6 +8,7 @@ in a throwaway repo, so the test holds what a clone actually gets.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,13 +21,17 @@ ROOT = Path(__file__).resolve().parents[1]
 TYPES = Path("web/src/api.gen.ts")
 
 
+# The person's own git config (signing, a driver of their own) stays out of it.
+_ENV = os.environ | {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=repo, env=_ENV, capture_output=True, text=True)
 
 
 @pytest.fixture
 def diverged(tmp_path: Path) -> Path:
-    """A repo whose `left` and `right` branches each added a model to the types."""
+    """A repo whose `left` and `right` branches each added a model; `right` is checked out."""
     repo = tmp_path / "repo"
     (repo / TYPES.parent).mkdir(parents=True)
     shutil.copy(ROOT / ".gitattributes", repo / ".gitattributes")
@@ -56,6 +61,7 @@ def test_the_regenerated_types_merge_without_a_conflict_once_just_hooks_has_run(
 ) -> None:
     subprocess.run(
         ["just", "--justfile", ROOT / "justfile", "--working-directory", diverged, "merge-driver"],
+        env=_ENV,
         check=True,
         capture_output=True,
     )
@@ -67,7 +73,7 @@ def test_the_regenerated_types_merge_without_a_conflict_once_just_hooks_has_run(
     assert _git(diverged, "status", "--porcelain").stdout == ""
 
 
-def test_a_clone_without_the_driver_still_merges_with_the_old_conflict(diverged: Path) -> None:
+def test_a_clone_without_the_driver_conflicts_as_before(diverged: Path) -> None:
     merge = _git(diverged, "merge", "--no-edit", "left")
 
     assert merge.returncode != 0

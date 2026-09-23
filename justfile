@@ -53,7 +53,7 @@ hooks: merge-driver
     uv run pre-commit install
 
 # Let a merge keep our side of a generated file (.gitattributes) rather than
-# conflict: it is rebuilt from the models, and `types-drift` catches it stale.
+# conflict: it is rebuilt from the models (ADR-0004), and `types-drift` catches it stale.
 # The same `true` driver gitattributes(5) gives as its example of keeping ours.
 merge-driver:
     git config merge.generated.name "keep ours; regenerate with just types"
