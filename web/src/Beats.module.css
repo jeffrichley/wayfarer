@@ -1,0 +1,37 @@
+/* The beat list, as live build draws a session's story (prototype/live-build.html),
+   its rules copied rather than re-derived: the gallery's snapshot check compares
+   it against the prototype (tests/test_the_gallery.py), as ADR-0004 decides. */
+.pane { padding: 8px 32px 28px; }
+.beats { max-width: 760px; }
+
+.chap { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; padding: 22px 0 8px; }
+.chap .label { grid-column: 2; font-family: var(--font-display); font-size: 17.5px; line-height: 1.3; }
+.chap .label :global(.kicker) { display: block; margin-bottom: 2px; }
+
+.beat { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 7px 0; align-items: start; }
+/* The prototype rises every beat as it draws the story. Only a beat that arrives
+   while the pane is open rises here (#49): the story already told is read, not
+   watched arriving. */
+.arrived { animation: rise .35s ease both; }
+.beat time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+.mk { display: grid; place-items: center; height: 21px; }
+.txt { font-size: 14.5px; line-height: 1.55; }
+
+.read { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.remark { width: 9px; height: 1.5px; background: var(--fg); }
+.refactor { width: 10px; height: 10px; border: 1.5px solid var(--fg); }
+/* The session's end: a ringed dot, #49's, as the prototype has no outcome beat. */
+.outcome { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--fg); background: radial-gradient(circle, var(--fg) 0 2px, transparent 2.5px); }
+
+.toggle { background: none; border: 0; padding: 2px 0; margin-top: 2px; cursor: pointer; font-size: 12.5px; color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.toggle:hover { text-decoration-color: var(--fg); }
+.out { margin: 8px 0 2px; padding: 10px 12px; background: var(--wash); border: 1px solid var(--border); border-radius: 3px; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+
+.working { display: grid; grid-template-columns: 52px 18px minmax(0, 1fr); gap: 12px; padding: 9px 0; color: var(--ink-2); font-size: 14px; }
+.working :global(.num) { color: var(--muted); font-size: 12px; margin-left: 6px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 1320px) { .pane { padding-inline: 24px; } }
+/* A beat arrives gently, and for a reader who asked for no motion, at once. */
+@media (prefers-reduced-motion: reduce) { .arrived { animation: none; } }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageChops
@@ -18,6 +19,9 @@ REFERENCE = Path(__file__).with_name("prototype_gallery.html")
 THEMES = ["light", "dark"]
 # The size every screen is checked at first (docs/design/visual-language.md).
 VIEWPORT: ViewportSize = {"width": 1440, "height": 900}
+# The gallery's clock stands still here, local time, so a counter reads the same
+# every time it is drawn; the gallery's own dates sit a little before it.
+GALLERY_CLOCK = datetime(2026, 9, 15, 9, 42)
 
 
 def specimen(page: Page, name: str) -> Locator:
