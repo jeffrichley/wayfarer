@@ -8,6 +8,8 @@ hue, and that no name is ever cut off.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import pytest
 from playwright.sync_api import Locator, Page
 
@@ -15,49 +17,42 @@ from specimens import THEMES, choose, disagreements, set_theme
 
 pytestmark = [pytest.mark.git, pytest.mark.browser]
 
-# Every state a ticket shows a card in, with the foot it carries there
-# (docs/screens/ticket-graph.md). Landed has no card: it folds into the start line.
-FEET = {
-    "landing": "In the merge queue",
-    "building": "Working \N{MIDDLE DOT} 12 min",
-    "asked": "Asked you a question",
-    "held": "Held \N{MIDDLE DOT} a blocking finding",
-    "takeable": "Nobody on it yet",
-    "takeable-at-cap": "Starts when a slot frees",
-    "blocked-on-one": "Waiting on Check room tone",
-    "blocked-on-many": "Waiting on 5 tickets",
+
+class Card(NamedTuple):
+    word: str
+    name: str
+    number: int
+    foot: str
+
+
+# Every state a ticket shows a card in, as the gallery draws it, with the foot it
+# carries there (docs/screens/ticket-graph.md). Landed has no card: it folds into
+# the start line.
+CARDS = {
+    "landing": Card("Landing", "Flag peaks above \N{MINUS SIGN}3 dB", 127, "In the merge queue"),
+    "building": Card(
+        "Building",
+        "Flag a noise floor above \N{MINUS SIGN}60 dB",
+        128,
+        "Working \N{MIDDLE DOT} 12 min",
+    ),
+    "asked": Card("Asked", "Check room tone", 130, "Asked you a question"),
+    "held": Card(
+        "Held",
+        "Warn when no retail sample is chosen",
+        129,
+        "Held \N{MIDDLE DOT} a blocking finding",
+    ),
+    "takeable": Card("Takeable", "Show compliance status on My Books", 132, "Nobody on it yet"),
+    "takeable-at-cap": Card(
+        "Takeable", "Show compliance status on My Books", 132, "Starts when a slot frees"
+    ),
+    "blocked-on-one": Card(
+        "Blocked", "Explain a failing chapter", 131, "Waiting on Check room tone"
+    ),
+    "blocked-on-many": Card("Blocked", "Block ACX export", 133, "Waiting on 5 tickets"),
 }
-WORDS = {
-    "landing": "Landing",
-    "building": "Building",
-    "asked": "Asked",
-    "held": "Held",
-    "takeable": "Takeable",
-    "takeable-at-cap": "Takeable",
-    "blocked-on-one": "Blocked",
-    "blocked-on-many": "Blocked",
-}
-NAMES = {
-    "landing": "Flag peaks above \N{MINUS SIGN}3 dB",
-    "building": "Flag a noise floor above \N{MINUS SIGN}60 dB",
-    "asked": "Check room tone",
-    "held": "Warn when no retail sample is chosen",
-    "takeable": "Show compliance status on My Books",
-    "takeable-at-cap": "Show compliance status on My Books",
-    "blocked-on-one": "Explain a failing chapter",
-    "blocked-on-many": "Block ACX export",
-}
-NUMBERS = {
-    "landing": 127,
-    "building": 128,
-    "asked": 130,
-    "held": 129,
-    "takeable": 132,
-    "takeable-at-cap": 132,
-    "blocked-on-one": 131,
-    "blocked-on-many": 133,
-}
-SIZES = ["card", "name-only"]
+SIZES = ["full", "name-only"]
 
 
 def _card(page: Page, specimen: str) -> Locator:
@@ -75,7 +70,7 @@ def _foot(card: Locator) -> Locator:
 
 
 def _is_card(name: str) -> bool:
-    return name.startswith(("card-", "name-only-"))
+    return name.startswith(("full-", "name-only-"))
 
 
 def test_both_card_sizes_render_in_every_state(gallery: Page) -> None:
@@ -84,19 +79,19 @@ def test_both_card_sizes_render_in_every_state(gallery: Page) -> None:
     )
 
     for size in SIZES:
-        for state in FEET:
+        for state in CARDS:
             assert f"{size}-{state}" in drawn
 
 
-@pytest.mark.parametrize("state", FEET)
+@pytest.mark.parametrize("state", CARDS)
 def test_a_full_card_carries_its_state_word_its_name_and_its_foot(
     gallery: Page, state: str
 ) -> None:
-    card = _card(gallery, f"card-{state}")
+    card = CARDS[state]
 
-    parts = card.locator(":scope > span").all_text_contents()
+    parts = _card(gallery, f"full-{state}").locator(":scope > span").all_text_contents()
 
-    assert parts == [f"{WORDS[state]}#{NUMBERS[state]}", NAMES[state], FEET[state]]
+    assert parts == [f"{card.word}#{card.number}", card.name, card.foot]
 
 
 def test_a_name_only_card_is_its_glyph_name_and_id(gallery: Page) -> None:
@@ -111,9 +106,9 @@ def test_a_name_only_card_is_its_glyph_name_and_id(gallery: Page) -> None:
 def test_a_card_names_its_ticket_and_its_state_to_a_person_who_cannot_see_it(
     gallery: Page, size: str
 ) -> None:
-    for state, word in WORDS.items():
-        name = _card(gallery, f"{size}-{state}").get_attribute("aria-label")
-        assert name is not None and name.endswith(f", {word}"), f"{size}-{state}: {name}"
+    for state, card in CARDS.items():
+        label = _card(gallery, f"{size}-{state}").get_attribute("aria-label")
+        assert label == f"{card.name}, {card.word}", f"{size}-{state}"
 
 
 def test_a_selected_card_says_it_is_selected(gallery: Page) -> None:
@@ -141,7 +136,7 @@ _EDGE = """card => {
 
 @pytest.mark.parametrize("size", SIZES)
 def test_a_cards_state_is_told_by_the_shape_and_tone_of_its_edge(gallery: Page, size: str) -> None:
-    edges = {state: _card(gallery, f"{size}-{state}").evaluate(_EDGE) for state in FEET}
+    edges = {state: _card(gallery, f"{size}-{state}").evaluate(_EDGE) for state in CARDS}
 
     assert edges == {
         "landing": ["solid", "quiet"],
@@ -172,7 +167,7 @@ def test_no_card_paints_in_a_hue(gallery: Page, theme: str) -> None:
                 return a === 0 ? 0 : Math.max(r, g, b) - Math.min(r, g, b);
             };
             return specimens
-                .filter(s => /^(card|name-only)-/.test(s.dataset.specimen))
+                .filter(s => /^(full|name-only)-/.test(s.dataset.specimen))
                 .flatMap(s => [s, ...s.querySelectorAll("*")].map(e => {
                     const style = getComputedStyle(e);
                     return [s.dataset.specimen,
@@ -212,11 +207,11 @@ def test_a_long_ticket_name_wraps_and_is_never_cut_off(gallery: Page, size: str)
         """e => Math.round(
             e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight))"""
     )
-    assert lines > {"card": 3, "name-only": 2}[size], "the long name no longer overruns its clamp"
+    assert lines > {"full": 3, "name-only": 2}[size], "the long name no longer overruns its clamp"
 
 
 def test_a_blocker_named_in_a_foot_is_never_cut_off(gallery: Page) -> None:
-    foot = _foot(_card(gallery, "card-long-name"))
+    foot = _foot(_card(gallery, "full-long-name"))
 
     assert foot.inner_text() == "Waiting on Normalise loudness to the ACX range on request"
     assert foot.evaluate(_UNCUT), "the blocker's name is cut off"

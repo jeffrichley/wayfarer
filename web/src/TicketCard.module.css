@@ -4,7 +4,7 @@
    the card departs from it, the comment says which ticket decided. */
 .card {
   width: 184px; padding: 10px 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 5px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 3px; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); text-align: left; cursor: pointer;
   transition: background-color .15s ease, border-color .15s ease;
 }
 .card:hover { background: var(--hover); border-color: var(--line); }

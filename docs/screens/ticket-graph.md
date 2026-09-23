@@ -34,7 +34,7 @@ Decided in [The ticket graph's automatic layout, and past 20 tickets](https://gi
 - **Rows are ELK's.** Crossing minimisation picks them. There are no streams: `/to-tickets` records only a title, blockers and a parent, and a stream derived from the edges alone runs across unrelated work.
 - **Wires leave the start line level with the ticket they feed**, so the rail has no trunk and never moves.
 - **Implied edges are hidden** by transitive reduction and listed in the panel under Blocked by.
-- **Two card sizes.** A full card when a ticket is in flight (Building, Landing), waiting on you (Asked, Held), Takeable, or one step out (every open blocker is on the frontier or in flight). A name-only card, about half the height, further out. Nothing clips a name.
+- **Two card sizes.** A full card when a ticket is in flight (Building, Landing), waiting on you (Asked, Held), Takeable, or one step out (every open blocker is on the frontier or in flight). A name-only card, about half the height, further out. Nothing clips a name. So a card with a long name is taller than its size, and the layout gives ELK each card's measured height, not the nominal one.
 - **Motion.** When a ticket lands, its card slides into the start line, its dependents slide left, and name-only cards grow into full cards as they come within a step. Nothing else moves the layout.
 - **Past 20 tickets** nothing else changes. The fold keeps the graph the size of the work left, and the canvas scrolls under the 0.7 scale floor rather than shrinking text below 11px.
 

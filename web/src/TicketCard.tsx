@@ -9,9 +9,10 @@ export type CardState = Exclude<TicketState, "landed" | "closed" | "in_review">;
 
 // What a card's foot needs to say the one fact that matters for its state
 // (docs/screens/ticket-graph.md): how long a session has run, whether the slots
-// are full, and which open tickets a blocked one waits on.
+// are full, and which open tickets a blocked one waits on. Every other state's
+// foot is fixed, so a state the model gains joins them until it says otherwise.
 export type Doing =
-  | { state: "landing" | "asked" | "held" }
+  | { state: Exclude<CardState, "building" | "takeable" | "blocked"> }
   | { state: "building"; minutes: number }
   | { state: "takeable"; atCap: boolean }
   | { state: "blocked"; waitingOn: string[] };
@@ -46,7 +47,7 @@ function foot(doing: Doing): string {
 
 export type TicketCardProps = Doing & {
   name: string;
-  id: number;
+  number: number;
   // Full near the frontier, name-only further out; the graph's layout picks
   // (docs/screens/ticket-graph.md).
   size: "full" | "name-only";
@@ -56,11 +57,11 @@ export type TicketCardProps = Doing & {
 
 // A ticket on the graph. The full card is its state word, its name and a foot
 // that says what it is doing; the name-only card is its glyph, name and id.
-// State is told by the edge's shape and tone and the ground's wash, never by hue.
+// State is told by the edge's shape and tone, never by hue.
 // A name is never cut off: it wraps, and a name longer than the card's clamp
 // grows the card rather than losing its end (#48). The canvas places the card
 // and the graph owns selection; the card only says whether it is selected.
-export function TicketCard({ name, id, size, selected = false, onSelect, ...doing }: TicketCardProps) {
+export function TicketCard({ name, number, size, selected = false, onSelect, ...doing }: TicketCardProps) {
   const { glyph, word } = LOOKS[doing.state];
   const mark = <span className={`st st-${glyph}`} aria-hidden="true" />;
   return (
@@ -76,7 +77,7 @@ export function TicketCard({ name, id, size, selected = false, onSelect, ...doin
           <span className={styles.top}>
             {mark}
             {word}
-            <span className="id">{`#${id}`}</span>
+            <span className="id">{`#${number}`}</span>
           </span>
           <span className={styles.name}>{name}</span>
           <span className={styles.foot}>{foot(doing)}</span>
@@ -85,7 +86,7 @@ export function TicketCard({ name, id, size, selected = false, onSelect, ...doin
         <>
           {mark}
           <span className={styles.name}>
-            {name} <span className="id">{`#${id}`}</span>
+            {name} <span className="id">{`#${number}`}</span>
           </span>
         </>
       )}
