@@ -94,8 +94,10 @@ The shape of a session paused to ask something:
 - an optional note ("Anything the agent should know")
 - a primary action: "Send answer and resume"
 
+One ask can carry up to four questions, as `AskUserQuestion` does. Each further question is the agent's next message, with its own options under it, and the one note and the send row follow the last ([#52](https://github.com/jeffrichley/wayfarer/issues/52)).
+
 It's used inline in live build and on the desk. Rules:
-- Sending requires an option or a note.
+- Sending requires an option or a note. With several questions it requires an option for each, or a note.
 - After sending, the controls lock and the hint says where the answer was posted ("Posted to #130. The session resumes.").
 
 ## Conversation (`.convo`)
