@@ -1,0 +1,5 @@
+/* prototype/index.html: .section-head */
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin: 40px 0 18px; }
+.head h2 { display: inline; font-size: 24px; }
+.head :global(.meta) { margin-left: 12px; }
+.flush { margin-top: 0; }

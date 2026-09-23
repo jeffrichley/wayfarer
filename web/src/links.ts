@@ -10,3 +10,15 @@ export function effortHref(effort: number): string {
 export function ticketHref(effort: number, ticket: number): string {
   return `${effortHref(effort)}#${ticket}`;
 }
+
+// At work, where running sessions are watched; a ticket opens its session there
+// (docs/screens/live-build.md).
+export function atWorkHref(ticket?: number): string {
+  return ticket === undefined ? "/at-work" : `/at-work#${ticket}`;
+}
+
+// The desk, where what needs the person is worked through; an item opens there,
+// selected (docs/screens/review-desk.md).
+export function deskHref(item?: string): string {
+  return item === undefined ? "/desk" : `/desk#${item}`;
+}

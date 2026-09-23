@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 
 import { Gallery } from "./gallery/Gallery";
-import { SessionImage } from "./SessionImage";
 import { connect } from "./store";
+import { TheLine } from "./TheLine";
 
 export function App() {
   // The server answers every path that is not the API with this page, and the
@@ -15,11 +15,5 @@ export function App() {
 
 function Home() {
   useEffect(connect, []);
-
-  return (
-    <main>
-      <h1>Wayfarer</h1>
-      <SessionImage />
-    </main>
-  );
+  return <TheLine />;
 }
