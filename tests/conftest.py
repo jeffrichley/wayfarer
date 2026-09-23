@@ -27,9 +27,6 @@ import pytest
 
 from github_stand_in import TOKEN, GitHub
 
-# The port Wayfarer tries first; the Vite dev server proxies the API to it.
-DEFAULT_PORT = 7431
-
 # The names a GitHub token may be set under; a person's real one never reaches a test.
 _GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
 
@@ -99,6 +96,9 @@ class Launcher:
             "BROWSER": f"{sys.executable} {self._recorder} {opened} %s",
             "PYTHONUNBUFFERED": "1",
             "WAYFARER_GITHUB_API": self._github.api,
+            # Whatever port the OS has free, so no test contends with another
+            # suite on the machine for the default one.
+            "WAYFARER_PORT": "0",
             "GH_TOKEN": TOKEN,
         }
         for name, value in (env or {}).items():

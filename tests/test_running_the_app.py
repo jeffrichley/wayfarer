@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-from conftest import DEFAULT_PORT, Launcher, get
+from conftest import Launcher, get
 
 pytestmark = pytest.mark.git
 
@@ -58,15 +58,33 @@ def test_outside_a_clone_it_refuses_and_says_why(wayfarer: Launcher, tmp_path: P
     assert "not inside a git clone" in instance.output()
 
 
-def test_when_the_default_port_is_taken_it_serves_on_another(wayfarer: Launcher) -> None:
+def test_it_serves_on_the_port_its_setting_names(wayfarer: Launcher) -> None:
+    port = _free_port()
+
+    url = wayfarer.start(env={"WAYFARER_PORT": str(port)}).url()
+
+    assert urlsplit(url).port == port
+    assert get(url).status_code == 200
+
+
+def test_when_its_port_is_taken_it_serves_on_another(wayfarer: Launcher) -> None:
+    # A port the OS gave this test alone, so no other suite can be holding it.
     with socket.socket() as squatter:
-        squatter.bind(("127.0.0.1", DEFAULT_PORT))
+        squatter.bind(("127.0.0.1", 0))
         squatter.listen()
+        taken = squatter.getsockname()[1]
 
-        url = wayfarer.start().url()
+        url = wayfarer.start(env={"WAYFARER_PORT": str(taken)}).url()
 
-        assert urlsplit(url).port != DEFAULT_PORT
+        assert urlsplit(url).port != taken
         assert get(url).status_code == 200
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port: int = probe.getsockname()[1]
+    return port
 
 
 def _everything_in(directory: Path) -> set[Path]:
