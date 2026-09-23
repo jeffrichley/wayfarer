@@ -11,7 +11,9 @@ from pathlib import Path
 import uvicorn
 
 from wayfarer.app import create_app
+from wayfarer.github import GitHub, repo_of
 from wayfarer.instance import AlreadyRunning, InstanceLock, NotAClone, find_clone, find_worktree
+from wayfarer.settings import Settings
 
 __all__ = ["main"]
 
@@ -39,7 +41,9 @@ async def _serve(lock: InstanceLock, repo: Path) -> None:
     port = sock.getsockname()[1]
     url = f"http://{_HOST}:{port}/"
 
-    server = uvicorn.Server(uvicorn.Config(create_app(repo), log_level="warning"))
+    settings = Settings.from_env()
+    app = create_app(repo, settings, GitHub(repo_of(repo), settings))
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     while not server.started and not serving.done():
         await asyncio.sleep(0.05)

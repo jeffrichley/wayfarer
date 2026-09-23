@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/efforts/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Effort */
+        get: operations["effort_api_efforts__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -105,6 +122,29 @@ export interface components {
             line: string;
         };
         /**
+         * Checks
+         * @description A pull request's checks, rolled up. A PR with no checks has none of these.
+         * @enum {string}
+         */
+        Checks: "passing" | "pending" | "failing";
+        /**
+         * Effort
+         * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
+         */
+        Effort: {
+            /** Number */
+            number: number;
+            /** Tickets */
+            tickets: components["schemas"]["Ticket"][];
+            /** Title */
+            title: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
          * Health
          * @description That the process is up, and which Wayfarer it is.
          */
@@ -152,6 +192,62 @@ export interface components {
             /** Passed */
             passed: boolean;
         };
+        /**
+         * PullRequest
+         * @description The pull request carrying a ticket's work, from the ticket's own branch.
+         */
+        PullRequest: {
+            /** Approved */
+            approved: boolean;
+            checks: components["schemas"]["Checks"] | null;
+            /** Draft */
+            draft: boolean;
+            /** Merged */
+            merged: boolean;
+            /** Number */
+            number: number;
+        };
+        /**
+         * Ticket
+         * @description One ticket in an effort, as GitHub has it now.
+         */
+        Ticket: {
+            /** Assignees */
+            assignees: string[];
+            /** Blocked By */
+            blocked_by: number[];
+            /** Labels */
+            labels: string[];
+            /** Number */
+            number: number;
+            /** Open Blockers */
+            open_blockers: number;
+            pull_request: components["schemas"]["PullRequest"] | null;
+            state: components["schemas"]["TicketState"];
+            /** Title */
+            title: string;
+        };
+        /**
+         * TicketState
+         * @description Where a ticket stands, derived from GitHub on every read and never stored.
+         *
+         *     When a ticket matches more than one, it takes the first in this order.
+         * @enum {string}
+         */
+        TicketState: "landed" | "closed" | "asked" | "held" | "landing" | "in_review" | "building" | "takeable" | "blocked";
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -161,6 +257,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    effort_api_efforts__number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Effort"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

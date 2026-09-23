@@ -13,8 +13,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 
+from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
 from wayfarer.image import Build, Images, NoLayer
-from wayfarer.models import BuildEvent, Health, ImageStatus
+from wayfarer.models import BuildEvent, Effort, Health, ImageStatus
+from wayfarer.read_model import read_effort
+from wayfarer.settings import Settings
 
 __all__ = ["create_app"]
 
@@ -41,8 +44,13 @@ async def _last_build(request: Request) -> Build:
 LastBuild = Annotated[Build, Depends(_last_build)]
 
 
-def create_app(repo: Path) -> FastAPI:
-    """The app for the clone whose working tree is `repo`."""
+def create_app(
+    repo: Path, settings: Settings | None = None, github: GitHub | None = None
+) -> FastAPI:
+    """The app for the clone whose working tree is `repo`, reading GitHub through
+    `github`; without one, every read of GitHub says so."""
+    settings = settings or Settings()
+    github = github or GitHub(None, settings)
     running = version("wayfarer")
     app = FastAPI(title="Wayfarer", version=running)
     images = Images(repo)
@@ -53,6 +61,25 @@ def create_app(repo: Path) -> FastAPI:
     @app.get("/api/health")
     async def health() -> Health:
         return Health(version=running)
+
+    # Read afresh on every ask; nothing is kept between reads (ADR-0002). A plain
+    # GET until the SSE stream exists (#31), which then carries this as its
+    # snapshot, the only way data reaches the browser (ADR-0004).
+    @app.get("/api/efforts/{number}")
+    async def effort(number: int) -> Effort:
+        try:
+            return await read_effort(
+                github,
+                number,
+                per_page=settings.tickets_per_page,
+                auto_merge=settings.auto_merge,
+            )
+        except NotConnected as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except NoSuchIssue as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except GitHubError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
 
     @app.get("/api/image")
     async def image() -> ImageStatus:

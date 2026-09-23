@@ -2,6 +2,10 @@
 
 `BROWSER` is the standard `webbrowser` override; pointing it at a recorder is how
 a test sees the browser being opened without opening one.
+
+Every Wayfarer a test starts talks to the GitHub stand-in (`github_stand_in.py`),
+never to GitHub: its API address and token are set in the environment it is
+launched from, as a person's would be.
 """
 
 from __future__ import annotations
@@ -21,8 +25,13 @@ from typing import Any
 import httpx
 import pytest
 
+from github_stand_in import TOKEN, GitHub
+
 # The port Wayfarer tries first; the Vite dev server proxies the API to it.
 DEFAULT_PORT = 7431
+
+# The names a GitHub token may be set under; a person's real one never reaches a test.
+_GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
 
 _RECORDER = """\
 import pathlib, sys
@@ -72,24 +81,35 @@ class Instance:
 class Launcher:
     """Starts `wayfarer` processes in one directory, and cleans up after them."""
 
-    def __init__(self, cwd: Path, scratch: Path) -> None:
+    def __init__(self, cwd: Path, scratch: Path, github: GitHub) -> None:
         self.cwd = cwd
         self._scratch = scratch
+        self._github = github
         self._recorder = scratch / "recorder.py"
         self._recorder.write_text(_RECORDER)
         self._instances: list[Instance] = []
 
-    def start(self, *args: str) -> Instance:
+    def start(self, *args: str, env: dict[str, str | None] | None = None) -> Instance:
+        """Run `wayfarer`; `env` overrides the environment, and `None` unsets a name."""
         opened = self._scratch / f"opened-{len(self._instances)}.txt"
-        env = {
-            **os.environ,
+        environment = {
+            name: value for name, value in os.environ.items() if name not in _GITHUB_TOKENS
+        }
+        environment |= {
             "BROWSER": f"{sys.executable} {self._recorder} {opened} %s",
             "PYTHONUNBUFFERED": "1",
+            "WAYFARER_GITHUB_API": self._github.api,
+            "GH_TOKEN": TOKEN,
         }
+        for name, value in (env or {}).items():
+            if value is None:
+                environment.pop(name, None)
+            else:
+                environment[name] = value
         process = subprocess.Popen(
             [_console_script(), *args],
             cwd=self.cwd,
-            env=env,
+            env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -125,10 +145,19 @@ def clone(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def wayfarer(clone: Path, tmp_path: Path) -> Iterator[Launcher]:
+def github() -> Iterator[GitHub]:
+    """The repo the clone was cloned from, on the GitHub stand-in."""
+    stand_in = GitHub("octo", "widgets")
+    stand_in.start()
+    yield stand_in
+    stand_in.stop()
+
+
+@pytest.fixture
+def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Launcher]:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    launcher = Launcher(clone, scratch)
+    launcher = Launcher(clone, scratch, github)
     yield launcher
     launcher.close()
 
