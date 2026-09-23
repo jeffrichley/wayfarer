@@ -60,7 +60,7 @@ def test_a_ready_pull_request_with_no_checks_joins_the_queue_at_the_front(
     assert landing["open"] is True
 
 
-def test_a_queued_ticket_holds_its_dependents_until_it_has_really_landed(
+def test_a_landing_ticket_holds_its_dependents_until_it_has_really_landed(
     wayfarer: Launcher, github: GitHub
 ) -> None:
     spec, (first, second) = github.effort("Widgets", tickets=2)

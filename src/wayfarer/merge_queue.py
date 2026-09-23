@@ -179,14 +179,15 @@ class MergeQueue:
         if backend is None:
             return True
         try:
-            await backend.preflight()
-        except PreflightError:
+            async with self._bounded():
+                await backend.preflight()
+        except (PreflightError, TimeoutError):
             # Nowhere to re-test: the candidate keeps its place, and the line waits.
             _log.warning("The merge queue has nowhere to re-test.", exc_info=True)
             return True
         try:
             landed = await self._land(pull, backend)
-        except (StageError, OSError):
+        except (StageError, OSError, TimeoutError):
             _log.warning("Ticket #%s could not be re-tested.", ticket.number, exc_info=True)
             landed = None
         if landed is None:
@@ -203,28 +204,36 @@ class MergeQueue:
 
     async def _land(self, pull: PullRequest, backend: SandboxBackend) -> str | None:
         """Re-apply, re-test and land `pull`: the commit that landed, or None if it did not."""
-        git = await GitRepo.open(self._clone)
-        head = await self._fetch(git, pull.base)
-        theirs = await self._fetch(git, pull.branch)
-        candidate = await _reapply(git, onto=head, series=theirs)
+        async with self._bounded():
+            git = await GitRepo.open(self._clone)
+            head = await self._fetch(git, pull.base)
+            theirs = await self._fetch(git, pull.branch)
+            candidate = await _reapply(git, onto=head, series=theirs)
         if isinstance(candidate, Conflict) or not await self._passes(backend, candidate):
             return None
         # Atomic, so the pull request is marked merged exactly when the effort
         # branch takes it. The effort branch is not forced: if it moved since the
         # fetch, the push is refused and nothing lands.
-        pushed = await git.run(
-            "push",
-            "--atomic",
-            "--quiet",
-            f"--force-with-lease=refs/heads/{pull.branch}:{theirs}",
-            "origin",
-            f"{candidate}:refs/heads/{pull.branch}",
-            f"{candidate}:refs/heads/{pull.base}",
-        )
+        async with self._bounded():
+            pushed = await git.run(
+                "push",
+                "--atomic",
+                "--quiet",
+                f"--force-with-lease=refs/heads/{pull.branch}:{theirs}",
+                "origin",
+                f"{candidate}:refs/heads/{pull.branch}",
+                f"{candidate}:refs/heads/{pull.base}",
+            )
         if pushed.exit_code != 0:
             _log.warning("Pushing #%s's landing was refused: %s", pull.number, pushed.stderr)
             return None
         return candidate
+
+    def _bounded(self) -> asyncio.Timeout:
+        """The cap on every step but the re-test itself, which only a hang would reach:
+        a hung step would otherwise hold its line forever. The same stage cap a
+        session's own steps run under."""
+        return asyncio.timeout(self._settings.stage_timeout)
 
     async def _fetch(self, git: GitRepo, branch: str) -> str:
         ref = f"{_FETCHED}/{branch}"
@@ -240,7 +249,8 @@ class MergeQueue:
 
     async def _passes(self, backend: SandboxBackend, candidate: str) -> bool:
         """The repo's suite, run in a sandbox over exactly `candidate`, passed in time."""
-        workspace = await prepare_workspace(self._clone, base=candidate)
+        async with self._bounded():
+            workspace = await prepare_workspace(self._clone, base=candidate)
         try:
             async with backend.start(workspace, env={}) as sandbox:
                 async with asyncio.timeout(self._settings.landing_check_wall):
