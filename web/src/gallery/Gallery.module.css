@@ -19,3 +19,6 @@
 /* A frame fills its specimen's box, not the viewport. */
 .frame { width: 720px; height: 280px; }
 .frame > :global(.app) { height: 100%; }
+/* A story is as wide as live build's centre column, and its pane scrolls inside
+   whatever height its box is given. */
+.story { display: grid; width: 824px; }

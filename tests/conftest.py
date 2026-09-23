@@ -28,7 +28,7 @@ from playwright.sync_api import Browser, Page, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from github_stand_in import TOKEN, GitHub
-from specimens import REFERENCE, VIEWPORT
+from specimens import GALLERY_CLOCK, REFERENCE, VIEWPORT
 
 # The names a GitHub token may be set under; a person's real one never reaches a test.
 _GITHUB_TOKENS = ("GH_TOKEN", "GITHUB_TOKEN")
@@ -198,6 +198,7 @@ def browser() -> Iterator[Browser]:
 def gallery(wayfarer: Launcher, browser: Browser) -> Iterator[Page]:
     """The app's /gallery: every primitive in every state on one page."""
     page = browser.new_page(viewport=VIEWPORT)
+    page.clock.set_fixed_time(GALLERY_CLOCK)
     page.goto(wayfarer.start().url().rstrip("/") + "/gallery")
     page.wait_for_selector("[data-specimen]")
     yield page
