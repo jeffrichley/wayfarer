@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { ChronicleLine, Home, LineRow, Need, NeedsYou } from "./api";
 import { Button } from "./Button";
 import { Chronicle } from "./Chronicle";
+import { useNow } from "./clock";
 import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
@@ -53,16 +54,6 @@ function useVisit() {
       window.removeEventListener("pagehide", onHide);
     };
   }, []);
-}
-
-// The clock the dateline reads, to the minute.
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const tick = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(tick);
-  }, []);
-  return now;
 }
 
 const NOTHING: Need[] = [];

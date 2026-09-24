@@ -21,9 +21,12 @@ export type BuildFinished = Schemas["BuildFinished"];
 export type ChronicleLine = Schemas["ChronicleLine"];
 export type Mention = Schemas["Mention"];
 export type Someone = Schemas["Someone"];
+export type GraphCard = Schemas["GraphCard"];
 export type Home = Schemas["Home"];
 export type LineRow = Schemas["LineRow"];
 export type NeedsYou = Schemas["NeedsYou"];
+export type TicketGraph = Schemas["TicketGraph"];
+export type Wire = Schemas["Wire"];
 export type Need = NeedsYou["items"][number];
 
 // Everything the page's one stream carries, and the items it holds by id.
