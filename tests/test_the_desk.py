@@ -14,7 +14,7 @@ import pytest
 
 from conftest import EFFORT_BRANCH, Launcher, Stream, land, post, quick
 from github_stand_in import GitHub, Issue
-from wayfarer.read_model import ASKED
+from wayfarer.read_model import ASKED, HELD
 
 pytestmark = pytest.mark.git
 
@@ -147,6 +147,29 @@ def test_a_resolved_item_stays_in_place_saying_what_happened(
         page.until(lambda items: _desk(items) == ["Scale bars"])
 
 
+def test_a_hold_let_go_and_a_ticket_closed_unlanded_each_say_so(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, HELD)
+    github.label(meter, ASKED)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: len(_desk(items)) == 2)
+        _arrive(url)
+
+        github.unlabel(flag, HELD)
+        github.close(meter, "NOT_PLANNED")
+        page.until(
+            lambda items: (
+                _desk(items) == ["Flag loudness (Released)", "Meter peaks (Closed without landing)"]
+            )
+        )
+
+
 def test_a_review_names_the_tickets_that_start_the_moment_it_lands(
     wayfarer: Launcher, github: GitHub, tmp_path: Path
 ) -> None:
@@ -165,3 +188,26 @@ def test_a_review_names_the_tickets_that_start_the_moment_it_lands(
     # It holds up all three, and only the next one starts when it lands.
     assert review["holds_up"] == 3
     assert review["starting"] == [{"number": meter.number, "title": "Meter peaks"}]
+
+
+def test_an_environment_failure_arriving_while_the_person_works_still_goes_first(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, _) = github.effort("Widgets", tickets=2)
+    flag.title = "Flag loudness"
+    github.label(flag, ASKED)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: _desk(items) == ["Flag loudness"])
+        _arrive(url)
+
+        # The clone has no session image, so the start gate refuses the cascade.
+        post(f"{url}api/efforts/{spec.number}/arm")
+        page.until(lambda items: len(items["desk"]["entries"]) == 2)
+        first, second = page.items["desk"]["entries"]
+
+    # It stopped everything, so nothing sits above it, new or not.
+    assert (first["need"]["kind"], first["new"]) == ("environment", True)
+    assert second["need"]["ticket"]["title"] == "Flag loudness"

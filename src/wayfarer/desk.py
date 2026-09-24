@@ -3,7 +3,8 @@ works through it (#57, docs/screens/review-desk.md).
 
 Home shows Needs you in live order; the desk freezes its own copy when the person
 arrives, so the list never reshuffles under their cursor. What each item says
-stays live. An item that arrives later joins at the bottom, marked new, and one
+stays live. An item that arrives later joins at the bottom, marked new, unless it
+is an environment failure: that stopped everything, so it goes first. An item
 that no longer needs the person stays where it was, saying what happened, so
 their place in the queue never jumps. Arriving again re-ranks it.
 
@@ -72,6 +73,10 @@ class DeskPage:
             for k, need in live.items():
                 if k not in self._frozen:
                     self._new.add(k)
+                    if isinstance(need, EnvironmentFailure):
+                        # It stopped everything, so it is never below anything, even
+                        # arriving late (#24): the one new item that goes first.
+                        self._frozen = {k: need, **self._frozen}
                 self._frozen[k] = need
             entries = [
                 DeskEntry(

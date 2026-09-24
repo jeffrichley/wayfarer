@@ -446,6 +446,7 @@ def test_resuming_once_the_environment_is_fixed_clears_its_item_and_starts_again
         app.gate.refusing = True
         app.arm(effort)
         seen.until(lambda items: _kinds(items) == ["environment"])
+        post(f"{app.url}api/desk/arrived")
 
         # Still refusing: resuming raises it again and starts nothing.
         assert post(f"{app.url}api/cascades/resume").status_code == 202
@@ -458,6 +459,12 @@ def test_resuming_once_the_environment_is_fixed_clears_its_item_and_starts_again
         seen.until(lambda items: _kinds(items) == [])
         cascade = seen.item(_cascade(effort), paused=False)
         assert seen.items[_cascade(by_hand)]["paused"] is True
+        # The desk keeps it in place, saying so.
+        seen.until(
+            lambda items: (
+                items["desk"]["entries"][0]["resolved"] == "Cleared · the cascades can start again"
+            )
+        )
         app.let_go(theirs)
         app.let_go(ticket)
 
