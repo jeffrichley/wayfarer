@@ -18,6 +18,7 @@ from wayfarer.models.graph import TicketGraph
 from wayfarer.models.home import Home, LineRow, NeedsYou
 from wayfarer.models.image import BuildFinished, BuildOutput, ImageStatus
 from wayfarer.models.read_model import Effort, EffortUnreadable, Ticket
+from wayfarer.models.restart import Orphan, UnknownContainer
 from wayfarer.models.sessions import Beat
 
 __all__ = [
@@ -40,6 +41,8 @@ Item = Annotated[
     | EnvironmentFailure
     | Cascade
     | ShipEffort
+    | Orphan
+    | UnknownContainer
     | Beat
     | ChronicleLine
     | Home

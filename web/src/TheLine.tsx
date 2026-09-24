@@ -86,6 +86,15 @@ function row(need: Need): Row {
       return { kind: "environment", reason: need.reason };
     case "ship":
       return { kind: "ship", effort: need.title, name: need.title };
+    case "orphan":
+      // Named by its number alone when GitHub could not be read as Wayfarer started.
+      return {
+        kind: "orphan",
+        effort: need.effort?.title ?? "No effort",
+        ticket: { name: need.title ?? `Ticket ${need.ticket}`, id: need.ticket },
+      };
+    case "unknown_container":
+      return { kind: "unknown", runId: need.run_id };
     case "closed":
       return {
         kind: "closed",
@@ -112,7 +121,15 @@ function row(need: Need): Row {
 }
 
 function needKey(need: Need): string {
-  return "ticket" in need ? `ticket:${need.ticket.number}` : need.id;
+  switch (need.kind) {
+    case "question":
+    case "held":
+    case "review":
+    case "closed":
+      return `ticket:${need.ticket.number}`;
+    default:
+      return need.id;
+  }
 }
 
 export function TheLine() {

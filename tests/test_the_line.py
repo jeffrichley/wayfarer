@@ -184,7 +184,7 @@ def test_needs_you_is_one_list_across_efforts_where_the_bigger_stall_goes_first(
     github.block(ruler, by=scale)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, widgets, gadgets)
         page.until(lambda items: _needs(items) == [_METER, _FLAG])
         needs = page.items["needs_you"]["items"]
@@ -207,7 +207,7 @@ def test_two_items_stalling_one_ticket_both_count_it_and_nothing_sums_them(
     github.block(ruler, by=meter)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(lambda items: len(_needs(items)) == 2)
         needs = page.items["needs_you"]["items"]
@@ -225,7 +225,7 @@ def test_a_review_waits_from_when_its_pull_request_opened_and_the_longest_goes_f
     github.pull_request(flag, base=EFFORT_BRANCH)
     url = wayfarer.start(env={**quick(tmp_path), "WAYFARER_AUTO_MERGE": "0"}).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(lambda items: _needs(items) == ["review Meter peaks", "review Flag loudness"])
         first = page.items["needs_you"]["items"][0]
