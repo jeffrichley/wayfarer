@@ -310,7 +310,6 @@ class GitHub:
         self._live = _Repo()
         self._frozen: _Repo | None = None
         self._next_number = 1
-        self._clock = 0
         self.git: Path | None = None
         """The repo's git remote, a bare repo; None when a test needs no git."""
         self._lock = threading.Lock()
@@ -440,10 +439,10 @@ class GitHub:
 
     def _now(self) -> str:
         """A moment later than the last one asked for: each event gets its own second."""
-        self._clock += 1
-        return (datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=self._clock)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        # The clock every event keeps, so a pull request's moments and an issue's compare.
+        at = self.now
+        self.now += timedelta(seconds=1)
+        return at.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _follow_git(self) -> None:
         """Each open pull request's head as its branch stands on the remote, merged once
