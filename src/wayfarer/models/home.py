@@ -16,6 +16,7 @@ from wayfarer.models.cascade import ShipEffort
 from wayfarer.models.chronicle import Mention
 from wayfarer.models.gate import EnvironmentFailure
 from wayfarer.models.read_model import TicketState
+from wayfarer.models.restart import Orphan, UnknownContainer
 
 __all__ = [
     "Home",
@@ -134,7 +135,13 @@ class NeedReview(BaseModel):
 
 
 Need = Annotated[
-    EnvironmentFailure | NeedQuestion | NeedHeld | NeedReview | ShipEffort,
+    EnvironmentFailure
+    | NeedQuestion
+    | NeedHeld
+    | NeedReview
+    | ShipEffort
+    | Orphan
+    | UnknownContainer,
     Field(discriminator="kind"),
 ]
 """Anything waiting on a person."""
@@ -143,7 +150,8 @@ Need = Annotated[
 class NeedsYou(BaseModel):
     """Everything waiting on a person, across every effort, in live order (#24): an
     environment failure pinned first, then what holds up the most, then what holds up
-    nothing. Home shows it as it stands; the desk freezes its own copy."""
+    nothing: shipping an effort, then what a Wayfarer before this one left. Home shows
+    it as it stands; the desk freezes its own copy."""
 
     kind: Literal["needs_you"]
     id: Literal["needs_you"]

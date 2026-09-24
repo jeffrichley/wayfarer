@@ -28,6 +28,7 @@ from wayfarer.models import ChronicleLine, Effort, Ticket
 from wayfarer.poll import poll
 from wayfarer.queue import Queue
 from wayfarer.read_model import Efforts, History
+from wayfarer.restart import Containers, DockerContainers, Restart
 from wayfarer.routes import Services, page
 from wayfarer.routes import efforts as efforts_routes
 from wayfarer.routes import events as events_routes
@@ -35,6 +36,7 @@ from wayfarer.routes import gate as gate_routes
 from wayfarer.routes import health as health_routes
 from wayfarer.routes import home as home_routes
 from wayfarer.routes import image as image_routes
+from wayfarer.routes import sessions as sessions_routes
 from wayfarer.routes import tickets as tickets_routes
 from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
@@ -62,6 +64,7 @@ def create_app(
     *,
     sessions: SessionsFor | None = None,
     gate: Gate | None = None,
+    containers: Containers | None = None,
 ) -> FastAPI:
     """The app for the clone whose working tree is `repo`, reading GitHub through
     `github`; without one, every read of GitHub says so. `store` is what the page's
@@ -70,6 +73,8 @@ def create_app(
     Sessions run Claude Code in the session image, admitted by the start gate
     (ADR-0005). `sessions` and `gate` replace both only for a test, which runs
     Waystation's scripted agent outside Docker; Wayfarer offers no way to do so.
+    Such a session leaves no container, so the test says what `containers` a
+    restart finds in place of Docker's.
     """
     settings = settings or Settings()
     github = github or GitHub(None, settings)
@@ -119,16 +124,21 @@ def create_app(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
+    restart = Restart(store, github, cascades, efforts, containers or DockerContainers(settings))
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003). Stopping stops every session, each
     # keeping its work, as Ctrl-C does.
     @asynccontextmanager
     async def keeping_up(app: FastAPI) -> AsyncIterator[None]:
+        # What the last Wayfarer recorded is read before anything is served; GitHub
+        # and Docker after, while it serves.
+        restart.recall()
         tasks = [
             asyncio.create_task(poll(github, settings)),
             asyncio.create_task(efforts.follow()),
             asyncio.create_task(home.follow()),
+            asyncio.create_task(restart.recover()),
         ]
         for task in tasks:
             task.add_done_callback(_report_death)
@@ -149,6 +159,7 @@ def create_app(
         efforts=efforts,
         home=home,
         images=images,
+        restart=restart,
         running=running,
         start_gate=start_gate,
         store=store,
@@ -161,6 +172,7 @@ def create_app(
     app.include_router(health_routes.router)
     app.include_router(home_routes.router)
     app.include_router(image_routes.router)
+    app.include_router(sessions_routes.router)
     app.include_router(tickets_routes.router)
     page.include(app)
     return app

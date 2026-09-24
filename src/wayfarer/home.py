@@ -13,7 +13,8 @@ the same visit, so a refresh keeps the headline they were reading.
 Needs you is ranked as #24 decided: an environment failure pinned first and
 unscored; then each ticket's item by what it holds up, its own ticket plus every
 open ticket downstream, ties going to whatever has waited longest; then what holds
-up no ticket, shipping an effort last.
+up no ticket: shipping an effort, then the sessions a Wayfarer before this one never
+saw finish, then the containers nobody here can account for.
 """
 
 from __future__ import annotations
@@ -39,10 +40,12 @@ from wayfarer.models import (
     NeedQuestion,
     NeedReview,
     NeedsYou,
+    Orphan,
     ShipEffort,
     Station,
     Ticket,
     TicketState,
+    UnknownContainer,
     Working,
 )
 from wayfarer.models.read_model import Checks
@@ -78,6 +81,8 @@ _LEADS = {
     "held": "A ticket is held, waiting on you",
     "review": "A pull request is waiting on your approval",
     "ship": "An effort is ready to ship",
+    "orphan": "A session was cut off before it finished",
+    "unknown_container": "An unknown container is still running",
 }
 
 _NUMBERS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
@@ -167,6 +172,8 @@ def derive(
             *_environment(held),
             *sorted(waiting, key=_rank),
             *sorted((i for i in held if isinstance(i, ShipEffort)), key=lambda s: s.effort),
+            *sorted((i for i in held if isinstance(i, Orphan)), key=lambda o: o.started),
+            *sorted((i for i in held if isinstance(i, UnknownContainer)), key=lambda c: c.id),
         ],
     )
 
