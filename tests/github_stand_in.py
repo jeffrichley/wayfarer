@@ -741,6 +741,9 @@ def _rest_issue(issue: Issue) -> dict[str, Any]:
         "state": issue.state.lower(),
         "labels": [{"name": n} for n in issue.labels],
         "assignees": [{"login": a} for a in issue.assignees],
+        # As GitHub's does, so the listing changes with every event, even one that puts
+        # a label back as it was when the poll last looked.
+        "updated_at": issue.timeline[-1].at.isoformat() if issue.timeline else None,
     }
 
 
