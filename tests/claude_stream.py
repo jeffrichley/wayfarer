@@ -52,12 +52,17 @@ class Playing:
     A ticket in `asking` asks instead: its first session plays `first`, writes the
     question down where the image's hook does, and ends without reporting, as a
     deferred call ends one (#42). The session that carries on plays `then`.
+
+    A ticket in `recorded` streams that recorded session's file instead, a line
+    every `pace` seconds as a busy session narrates, and keeps running once through.
     """
 
     released: Path
     first: dict[int, list[str]] = field(default_factory=dict)
     then: dict[int, list[str]] = field(default_factory=dict)
     asking: dict[int, dict[str, Any]] = field(default_factory=dict)
+    recorded: dict[int, Path] = field(default_factory=dict)
+    pace: float = 0.05
     _asked: set[int] = field(default_factory=set)
 
     def let_go(self, ticket: int) -> None:
@@ -70,7 +75,11 @@ class Playing:
         found = re.search(r"implement (\d+)", prompt)
         # A resume is told only to carry on; the one ticket that asked is its ticket.
         ticket = int(found[1]) if found else next(iter(self._asked))
-        if ticket in self._asked:
+        if ticket in self.recorded:
+            played = shlex.quote(str(self.recorded[ticket]))
+            paced = f"printf '%s\\n' \"$line\"; sleep {self.pace}"
+            script = [f"while IFS= read -r line; do {paced}; done < {played}", *_LINGER]
+        elif ticket in self._asked:
             script = [*_printed([init(), *self.then.get(ticket, [])]), *_LINGER]
         elif ticket in self.asking:
             self._asked.add(ticket)
@@ -164,6 +173,21 @@ def runs_tests(
         calls(id, "Bash", command="wf-test", description="Run the tests"),
         returns(id, printed, is_error=bool(exit)),
     ]
+
+
+def busy(path: Path, cycles: int = 200) -> Path:
+    """A recorded session written to `path`: an Orient, then `cycles` of reading,
+    editing and testing, each saying what it did, as a long session narrates."""
+    lines = [init(), says("Reading the ticket.")]
+    for n in range(cycles):
+        lines += [
+            says(f"Cycle {n}: the next criterion."),
+            *reads(f"r{n}", f"/workspace/src/part_{n}.py"),
+            *edits(f"e{n}", f"/workspace/src/part_{n}.py"),
+            *runs_tests(f"t{n}", exit=n % 2, passed=n, failed=n % 2),
+        ]
+    path.write_text("".join(f"{line}\n" for line in lines))
+    return path
 
 
 def reports(outcome: dict[str, Any]) -> str:
