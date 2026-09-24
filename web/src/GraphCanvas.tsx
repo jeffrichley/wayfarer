@@ -261,6 +261,17 @@ export function GraphCanvas({
   const chosen = graph.cards.find((card) => card.ticket.number === selected);
   const lit =
     chosen === undefined ? null : new Set([START, ...[chosen.ticket.number, ...chosen.upstream, ...chosen.downstream].map(String)]);
+  // A wire is on the thread when it runs back from the selected ticket along what
+  // it waits on, or on from it along what it frees; a ticket it frees may have
+  // other blockers, whose wires are another thread.
+  const thread =
+    chosen === undefined
+      ? null
+      : { back: new Set([chosen.ticket.number, ...chosen.upstream]), on: new Set([chosen.ticket.number, ...chosen.downstream]) };
+  const onThread = (wire: Wire) =>
+    thread !== null &&
+    ((thread.back.has(wire.blocked) && (wire.blocker === null || thread.back.has(wire.blocker))) ||
+      (wire.blocker !== null && thread.on.has(wire.blocker) && thread.on.has(wire.blocked)));
   const hot = (wire: Wire) => chosen !== undefined && (wire.blocker === selected || wire.blocked === selected);
   // The selected ticket's wires are drawn last, over the rest.
   const wires = [...graph.wires].sort((a, b) => Number(hot(a)) - Number(hot(b)));
@@ -303,8 +314,7 @@ export function GraphCanvas({
           <svg width={width} height={layout?.height ?? 0} aria-hidden="true">
             {wires.map((wire) => {
               const id = wireId(wire);
-              const both = lit !== null && lit.has(nodeId(wire.blocker)) && lit.has(String(wire.blocked));
-              const tone = hot(wire) ? styles.hot : lit !== null && !both ? styles.dim : "";
+              const tone = hot(wire) ? styles.hot : thread !== null && !onThread(wire) ? styles.dim : "";
               return (
                 <path
                   key={id}

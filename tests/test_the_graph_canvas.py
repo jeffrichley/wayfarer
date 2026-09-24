@@ -199,6 +199,25 @@ def test_selecting_a_ticket_lights_what_it_waits_on_and_what_it_frees_and_dims_t
     assert not _dimmed(page.locator("[data-piece=start-line]"))
     assert _dimmed(_wire(page, None, room))
     assert not _dimmed(_wire(page, meter, flag))
+    assert not _dimmed(_wire(page, None, meter))
+
+
+def test_the_trace_follows_only_the_selected_tickets_thread(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path, page: Page
+) -> None:
+    spec, (meter, flag, scale) = github.effort("Widgets", tickets=3)
+    github.block(scale, by=meter)
+    github.block(scale, by=flag)
+    land(github, flag)
+    _open(wayfarer, tmp_path, page, spec)
+
+    _card(page, meter).click()
+
+    # Scale is freed by Meter, but its wire from the course is another thread.
+    assert not _dimmed(_card(page, scale))
+    assert not _dimmed(_wire(page, meter, scale))
+    assert not _dimmed(_wire(page, None, meter))
+    assert _dimmed(_wire(page, None, scale))
 
 
 def test_escape_clears_the_selection_and_focus_stays_where_it_was(

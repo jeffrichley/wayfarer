@@ -33,8 +33,17 @@ from wayfarer.stream import Store as Stream
 
 __all__ = ["Graphs", "derive"]
 
-# A card is full this many steps out from the frontier, and name-only beyond.
+# A card is full this many steps out from the frontier, and name-only beyond,
+# unless its ticket is in flight or waiting on the person (docs/screens/ticket-graph.md).
 _FULL_WITHIN = 1
+_ALWAYS_FULL = (
+    TicketState.BUILDING,
+    TicketState.LANDING,
+    TicketState.IN_REVIEW,
+    TicketState.ASKED,
+    TicketState.HELD,
+    TicketState.TAKEABLE,
+)
 
 
 class Graphs:
@@ -77,22 +86,23 @@ def derive(items: Iterable[Item], *, started: dict[int, datetime]) -> list[Ticke
     tickets = {item.id: item for item in held if isinstance(item, Ticket)}
     cascades = {item.effort: item for item in held if isinstance(item, Cascade)}
     efforts = sorted((i for i in held if isinstance(i, Effort)), key=lambda e: e.number)
-    building = sum(t.state is TicketState.BUILDING for t in tickets.values())
+    # The slots taken, as the cascades count them: claimed or running, every effort's.
+    taken = sum(cascade.running for cascade in cascades.values())
     return [
         _graph(
             effort,
             [tickets[id] for id in effort.tickets if id in tickets],
             started,
-            at_cap=_at_cap(cascades.get(effort.number), building),
+            at_cap=_at_cap(cascades.get(effort.number), taken),
         )
         for effort in efforts
     ]
 
 
-def _at_cap(cascade: Cascade | None, building: int) -> bool:
+def _at_cap(cascade: Cascade | None, taken: int) -> bool:
     """Whether a takeable ticket waits on a slot: its cascade is armed and running, and
     the cap every cascade shares is full."""
-    return cascade is not None and cascade.armed and not cascade.paused and building >= cascade.cap
+    return cascade is not None and cascade.armed and not cascade.paused and taken >= cascade.cap
 
 
 def _graph(
@@ -162,7 +172,9 @@ def _graph(
                 ticket=_mention(ticket),
                 state=ticket.state,
                 step=step(n),
-                size="full" if step(n) <= _FULL_WITHIN else "name-only",
+                size="full"
+                if step(n) <= _FULL_WITHIN or ticket.state in _ALWAYS_FULL
+                else "name-only",
                 waiting_on=[_mention(by[b]) for b in blockers(n) if b in live],
                 since=started.get(n) if ticket.state is TicketState.BUILDING else None,
                 at_cap=at_cap and ticket.state is TicketState.TAKEABLE,

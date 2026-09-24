@@ -307,7 +307,14 @@ def test_the_graph_says_how_long_a_ticket_has_built_and_that_the_next_waits_on_a
         eventually(lambda: app.started() == [first.number])
         seen.item(_ticket(first), state="building")
         graph = f"graph:{effort.number}"
-        seen.until(lambda items: graph in items and items[graph]["cards"][1]["at_cap"])
+        # The slot is taken from the claim, before the session is building.
+        seen.until(
+            lambda items: (
+                graph in items
+                and items[graph]["cards"][0]["state"] == "building"
+                and items[graph]["cards"][1]["at_cap"]
+            )
+        )
         drawn = seen.items[graph]
 
     building, waiting = drawn["cards"]

@@ -15,6 +15,7 @@ import pytest
 
 from conftest import EFFORT_BRANCH, Launcher, Stream, land, post, quick
 from github_stand_in import GitHub, Issue
+from wayfarer.read_model import ASKED
 
 pytestmark = pytest.mark.git
 
@@ -196,6 +197,20 @@ def test_cards_near_the_frontier_are_full_and_further_out_name_only(
     drawn = graph(wayfarer, tmp_path, spec)
 
     assert [card["size"] for card in drawn["cards"]] == ["full", "full", "name-only", "name-only"]
+
+
+def test_a_ticket_waiting_on_you_keeps_a_full_card_however_far_out(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, tickets = github.effort("Widgets", tickets=3)
+    for blocker, blocked in pairwise(tickets):
+        github.block(blocked, by=blocker)
+    github.label(tickets[2], ASKED)
+
+    drawn = graph(wayfarer, tmp_path, spec)
+
+    assert drawn["cards"][2]["step"] == 2
+    assert drawn["cards"][2]["size"] == "full"
 
 
 def test_a_ticket_knows_everything_it_waits_on_and_everything_it_frees(
