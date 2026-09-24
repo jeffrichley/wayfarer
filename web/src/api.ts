@@ -29,6 +29,7 @@ export type LineRow = Schemas["LineRow"];
 export type Neighbour = Schemas["Neighbour"];
 export type NeedsYou = Schemas["NeedsYou"];
 export type Tally = Schemas["Tally"];
+export type ThreadStep = Schemas["ThreadStep"];
 export type TicketGraph = Schemas["TicketGraph"];
 export type Wire = Schemas["Wire"];
 export type Need = NeedsYou["items"][number];

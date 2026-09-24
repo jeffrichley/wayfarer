@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 
-import type { Effort, GraphCard, Mention, Neighbour, Ticket, TicketGraph } from "./api";
+import type { Blocker, GraphCard, Mention, Neighbour, ThreadStep, Ticket } from "./api";
 import { Button } from "./Button";
 import { Criteria } from "./Criteria";
 import type { Selection } from "./GraphCanvas";
 import { atWorkHref, deskHref } from "./links";
 import { Mark, State } from "./State";
+import { STATIONS } from "./Route";
 import { type Step, Thread } from "./Thread";
 import { LOOKS } from "./TicketCard";
 import { Chip, Kicker, Named } from "./Type";
@@ -18,23 +19,23 @@ import styles from "./TicketDetail.module.css";
 // one action, so a ticket's block says where it stands and where to go for it.
 export function TicketDetail({
   selected,
-  graph,
-  effort,
+  landed,
+  card,
   ticket,
   onFollow,
 }: {
   selected: Selection;
-  graph: TicketGraph;
-  effort: Effort;
-  // The selected ticket as the stream holds it, once it does.
+  // What has folded into the start line, in the order it depended on.
+  landed: Mention[];
+  // The selected ticket's card, and the ticket as the stream holds it, once it does.
+  card: GraphCard | undefined;
   ticket: Ticket | undefined;
   // Following a ticket it names: its card, or the start line once it has landed.
   onFollow: (selection: Exclude<Selection, null>) => void;
 }) {
   if (selected === "start") {
-    return <Landed landed={graph.landed} />;
+    return <Landed landed={landed} />;
   }
-  const card = graph.cards.find((c) => c.ticket.number === selected);
   if (card === undefined || ticket === undefined) {
     return (
       <Block kicker="Nothing selected">
@@ -84,7 +85,7 @@ export function TicketDetail({
       </Block>
       <Block kicker="Blocked by">
         {card.blocked_by.length === 0 ? (
-          <p className="meta">Nothing: it could start the moment the cascade is armed.</p>
+          <p className="meta">Nothing blocks it.</p>
         ) : (
           <Edges label="Blocked by" edges={card.blocked_by} onFollow={follow} />
         )}
@@ -96,7 +97,7 @@ export function TicketDetail({
         )}
       </Block>
       <Block kicker="Thread">
-        <Thread steps={thread(effort, ticket)} />
+        <Thread steps={card.thread.map(step)} />
       </Block>
     </>
   );
@@ -119,7 +120,7 @@ function Edges({
   onFollow,
 }: {
   label: string;
-  edges: (Neighbour & { via?: Mention | null })[];
+  edges: (Blocker | Neighbour)[];
   onFollow: (neighbour: Neighbour) => void;
 }) {
   return (
@@ -131,7 +132,7 @@ function Edges({
             <button type="button" className={styles.link} onClick={() => onFollow(edge)}>
               {edge.ticket.title}
             </button>
-            {edge.via && <span className="meta">{` · implied through ${edge.via.title}`}</span>}
+            {"via" in edge && edge.via && <span className="meta">{` · implied through ${edge.via.title}`}</span>}
           </span>
         </li>
       ))}
@@ -166,7 +167,11 @@ function Standing({ card, ticket }: { card: GraphCard; ticket: Ticket }) {
     case "asked":
       return (
         <Block kicker="Paused for you">
-          <p className={styles.quote}>{ticket.question?.questions[0]?.question ?? "It stopped to ask you something."}</p>
+          {(ticket.question?.questions ?? [{ question: "It stopped to ask you something." }]).map(({ question }) => (
+            <p key={question} className={styles.quote}>
+              {question}
+            </p>
+          ))}
           <Button variant="secondary" arrow href={deskHref(`ticket:${ticket.number}`)} piece="answer-question">
             Answer on the desk
           </Button>
@@ -201,8 +206,8 @@ function Standing({ card, ticket }: { card: GraphCard; ticket: Ticket }) {
       return (
         <Block kicker="Not yet">
           <p className={styles.prose}>
-            {card.waiting_on.length === 0
-              ? `${ticket.assignees.join(" and ")} took it by hand, so the cascade leaves it alone.`
+            {card.taken_by.length > 0
+              ? `${card.taken_by.join(" and ")} took it by hand, so the cascade leaves it alone.`
               : `Reaches the frontier once ${names(card.waiting_on)} ${card.waiting_on.length === 1 ? "lands" : "land"}.`}
           </p>
         </Block>
@@ -245,43 +250,18 @@ function Landed({ landed }: { landed: Mention[] }) {
   );
 }
 
-// The ticket traced from its map to landing (CONTEXT.md): solid through what has
-// happened, pending into what has not.
-function thread(effort: Effort, ticket: Ticket): Step[] {
-  const { state, pull_request: pull } = ticket;
-  const done = { glyph: "done", word: "Done" } as const;
-  const pending = { glyph: "pending", word: "Not reached yet" } as const;
-  const past = state === "landed" || state === "landing" || state === "in_review";
-  const session: Pick<Step, "glyph" | "word" | "meta"> =
-    state === "building"
-      ? { glyph: "building", word: "Building", meta: "Running now" }
-      : state === "asked"
-        ? { glyph: "ask", word: "Asked", meta: "Asked you a question" }
-        : state === "held"
-          ? { glyph: "held", word: "Held", meta: "Held until you decide" }
-          : past || pull !== null
-            ? done
-            : pending;
-  return [
-    effort.map === null
-      ? { skill: "/wayfinder", name: "No map", ...pending }
-      : { skill: "/wayfinder", name: <Named name={effort.map.title} id={effort.map.number} />, ...done },
-    { skill: "/to-spec", name: <Named name={effort.title} id={effort.number} />, ...done },
-    { skill: "/to-tickets", name: <Named name={ticket.title} id={ticket.number} />, ...done },
-    { skill: "/tdd", name: session === pending ? "No session yet" : "A session", ...session },
-    pull === null
-      ? { skill: "/code-review", name: "No PR yet", ...pending }
-      : {
-          skill: "/code-review",
-          name: `PR #${pull.number}`,
-          ...(pull.merged ? done : { glyph: "review", word: "Open", meta: "Open" }),
-        },
-    state === "landed"
-      ? { skill: "merge", name: "Landed", ...done }
-      : state === "landing"
-        ? { skill: "merge", name: "In the merge queue", glyph: "review", word: "Landing" }
-        : { skill: "merge", name: "Not landed", ...pending },
-  ];
+// A station of the thread as the server traced it (CONTEXT.md): done behind the
+// ticket, its own state where it is, pending ahead.
+function step(at: ThreadStep): Step {
+  const skill = STATIONS.find((station) => station.key === at.station)?.skill ?? at.station;
+  const name = at.number === null ? at.name : <Named name={at.name} id={at.number} />;
+  if (at.reached === "done") {
+    return { skill, name, glyph: "done", word: "Done" };
+  }
+  if (at.reached === "ahead" || at.state === null) {
+    return { skill, name, glyph: "pending", word: "Not reached yet" };
+  }
+  return { skill, name, ...LOOKS[at.state] };
 }
 
 function names(tickets: Mention[]): string {

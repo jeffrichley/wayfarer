@@ -24,7 +24,10 @@ from wayfarer.models import (
     Item,
     Mention,
     Neighbour,
+    Reached,
+    Station,
     Tally,
+    ThreadStep,
     Ticket,
     TicketGraph,
     TicketState,
@@ -187,6 +190,10 @@ def _graph(
                     for d in sorted(live)
                     if n in by[d].blocked_by
                 ],
+                taken_by=ticket.assignees
+                if ticket.state is TicketState.BLOCKED and not any(b in live for b in blockers(n))
+                else [],
+                thread=_thread(effort, ticket),
                 upstream=sorted(ancestors(n, still) & still),
                 downstream=sorted(downstream[n]),
             )
@@ -220,6 +227,45 @@ def _in_dependency_order(numbers: set[int], by: dict[int, Ticket]) -> list[int]:
         ordered.append(ready)
         left.remove(ready)
     return ordered
+
+
+def _thread(effort: Effort, ticket: Ticket) -> list[ThreadStep]:
+    """`ticket` traced from its map to landing: done behind the station it is at, and
+    ahead beyond it. A ticket still to land is always past its spec and its slicing."""
+    state, pull = ticket.state, ticket.pull_request
+
+    def step(
+        station: Station, name: str, reached: Reached, number: int | None = None
+    ) -> ThreadStep:
+        here = state if reached == "here" else None
+        return ThreadStep(station=station, name=name, number=number, reached=reached, state=here)
+
+    # A session runs until it opens a pull request, and asks or is held on the way.
+    session: Reached = (
+        "done"
+        if pull is not None
+        else "here"
+        if state in (TicketState.BUILDING, TicketState.ASKED, TicketState.HELD)
+        else "ahead"
+    )
+    return [
+        step("wayfinder", "No map", "ahead")
+        if effort.map is None
+        else step("wayfinder", effort.map.title, "done", effort.map.number),
+        step("spec", effort.title, "done", effort.number),
+        step("tickets", ticket.title, "done", ticket.number),
+        step("build", "No session yet" if session == "ahead" else "A session", session),
+        step("review", "No PR yet", "ahead")
+        if pull is None
+        else step(
+            "review",
+            f"PR #{pull.number}",
+            "done" if pull.merged or state is TicketState.LANDING else "here",
+        ),
+        step("landed", "In the merge queue", "here")
+        if state is TicketState.LANDING
+        else step("landed", "Not landed", "ahead"),
+    ]
 
 
 def _mention(ticket: Ticket) -> Mention:

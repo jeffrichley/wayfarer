@@ -486,7 +486,8 @@ def build_output(items: Items) -> list[str]:
 EFFORT_BRANCH = "effort/1-widgets"
 
 
-# A ticket's body as `/to-tickets` writes one, its first criterion ticked on GitHub.
+# A ticket's body as `/to-tickets` writes one: its first criterion ticked on GitHub,
+# and its last wrapped onto a second line.
 TICKET_BODY = """## Parent
 
 #1
@@ -500,7 +501,8 @@ and flag the loud ones.
 
 - [x] Measure the noise floor of every chapter
 - [ ] Chapters above -60 dB fail the check
-* Failures explain the value, the limit, and the timestamp
+* Failures explain the value, the limit,
+  and the timestamp
 
 ## Blocked by
 

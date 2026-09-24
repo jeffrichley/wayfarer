@@ -775,6 +775,16 @@ export interface components {
              * @description How many tickets that have not landed stand between it and a session: 0 on the frontier, the column beside the start line.
              */
             step: number;
+            /**
+             * Taken By
+             * @description Who took it by hand, when that and no blocker is what keeps it from the frontier; empty otherwise.
+             */
+            taken_by: string[];
+            /**
+             * Thread
+             * @description Its thread, a step per station.
+             */
+            thread: components["schemas"]["ThreadStep"][];
             ticket: components["schemas"]["Mention"];
             /**
              * Unblocks
@@ -1418,6 +1428,35 @@ export interface components {
              * @description Null when the runner wrote no JUnit report.
              */
             passed: number | null;
+        };
+        /**
+         * ThreadStep
+         * @description One station of a ticket's thread, from its map to landing (CONTEXT.md).
+         */
+        ThreadStep: {
+            /**
+             * Name
+             * @description What it made there, or that it has not yet.
+             */
+            name: string;
+            /**
+             * Number
+             * @description The issue it made there; null when it is none.
+             */
+            number: number | null;
+            /**
+             * Reached
+             * @description Done and behind it, where it is now, or not reached yet.
+             * @enum {string}
+             */
+            reached: "done" | "here" | "ahead";
+            /** @description The ticket's state, at the station it is at; null at every other. */
+            state: components["schemas"]["TicketState"] | null;
+            /**
+             * Station
+             * @enum {string}
+             */
+            station: "wayfinder" | "spec" | "tickets" | "build" | "review" | "landed";
         };
         /**
          * Ticket

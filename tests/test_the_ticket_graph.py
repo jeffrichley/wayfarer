@@ -315,3 +315,67 @@ def test_the_tally_says_how_many_tickets_stand_in_each_state(
         {"state": "takeable", "count": 1},
         {"state": "blocked", "count": 2},
     ]
+
+
+def _thread(card: dict[str, Any]) -> list[tuple[str, str, str, str | None]]:
+    return [(s["station"], s["name"], s["reached"], s["state"]) for s in card["thread"]]
+
+
+def test_a_ticket_is_traced_from_its_map_through_its_session_and_pull_request_to_landing(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    chart = github.issue("Where noise comes from")
+    spec, tickets = github.effort("Widgets", tickets=3)
+    spec.parent = chart.number
+    _, landing, asked = _named("Fresh", "Landing", "Asked", tickets=tickets)
+    pull = github.pull_request(landing, base=EFFORT_BRANCH)
+    github.label(asked, ASKED)
+
+    cards = _cards(graph(wayfarer, tmp_path, spec))
+
+    head = [
+        ("wayfinder", "Where noise comes from", "done", None),
+        ("spec", "Widgets", "done", None),
+    ]
+    assert _thread(cards["Fresh"]) == [
+        *head,
+        ("tickets", "Fresh", "done", None),
+        ("build", "No session yet", "ahead", None),
+        ("review", "No PR yet", "ahead", None),
+        ("landed", "Not landed", "ahead", None),
+    ]
+    assert _thread(cards["Landing"]) == [
+        *head,
+        ("tickets", "Landing", "done", None),
+        ("build", "A session", "done", None),
+        ("review", f"PR #{pull.number}", "done", None),
+        ("landed", "In the merge queue", "here", "landing"),
+    ]
+    assert _thread(cards["Asked"])[3] == ("build", "A session", "here", "asked")
+
+
+def test_a_spec_with_no_map_has_its_thread_start_with_none(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, _ = github.effort("Widgets", tickets=1)
+
+    card = graph(wayfarer, tmp_path, spec)["cards"][0]
+
+    assert _thread(card)[0] == ("wayfinder", "No map", "ahead", None)
+
+
+def test_a_ticket_taken_by_hand_says_who_took_it(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, tickets = github.effort("Widgets", tickets=3)
+    meter, taken, waiting = _named("Meter", "Taken", "Waiting", tickets=tickets)
+    taken.assignees.append("grace")
+    github.block(waiting, by=meter)
+    waiting.assignees.append("grace")
+
+    cards = _cards(graph(wayfarer, tmp_path, spec))
+
+    assert cards["Taken"]["taken_by"] == ["grace"]
+    # Waiting on a blocker, so that and not the hand is what keeps it back.
+    assert cards["Waiting"]["taken_by"] == []
+    assert cards["Meter"]["taken_by"] == []

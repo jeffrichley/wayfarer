@@ -396,13 +396,16 @@ def _section(body: str, heading: str) -> str | None:
 
 
 def _criteria(section: str) -> list[str]:
-    """Each item of a criteria list, its box dropped whether ticked or not."""
-    return [
-        match.group(1).strip()
-        for match in re.finditer(
-            r"^[ \t]*[-*+][ \t]+(?:\[[ xX]\][ \t]+)?(.+)$", section, re.MULTILINE
-        )
-    ]
+    """Each item of a criteria list, its box dropped whether ticked or not, and a line
+    that carries an item on joined to it."""
+    items: list[str] = []
+    for line in section.splitlines():
+        item = re.match(r"[ \t]*[-*+][ \t]+(?:\[[ xX]\][ \t]+)?(.+)$", line)
+        if item is not None:
+            items.append(item.group(1).strip())
+        elif items and line.strip():
+            items[-1] += f" {line.strip()}"
+    return items
 
 
 def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | None:

@@ -57,9 +57,15 @@ export function EffortGraph({ effort: number }: { effort: number }) {
         right={{
           label: "The selected ticket",
           width: 400,
-          children: graph && effort && (
+          children: graph && (
             <div data-piece="ticket-detail" aria-live="polite">
-              <TicketDetail selected={selected} graph={graph} effort={effort} ticket={ticket} onFollow={follow} />
+              <TicketDetail
+                selected={selected}
+                landed={graph.landed}
+                card={graph.cards.find((c) => c.ticket.number === selected)}
+                ticket={ticket}
+                onFollow={follow}
+              />
             </div>
           ),
         }}
