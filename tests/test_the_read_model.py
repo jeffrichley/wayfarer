@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from conftest import Launcher, Stream, post
+from conftest import TICKET_BODY, Launcher, Stream, post
 from github_stand_in import GitHub
 from wayfarer.read_model import ASKED, HELD
 
@@ -159,6 +159,57 @@ def test_blocking_comes_from_issue_dependencies_not_body_text(
 
     assert ticket["blocked_by"] == []
     assert ticket["state"] == "takeable"
+
+
+def test_a_ticket_carries_what_to_build_and_its_criteria_as_written_with_no_ticks(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Noise", tickets=1)
+    ticket.body = TICKET_BODY
+    url = wayfarer.start().url()
+
+    read = _tickets(_read(url, spec.number))[ticket.number]
+
+    assert read["build"] == "Measure every chapter's noise floor,\nand flag the loud ones."
+    # A box ticked on GitHub is not proof, so it is read as written and nothing more.
+    assert read["criteria"] == [
+        "Measure the noise floor of every chapter",
+        "Chapters above -60 dB fail the check",
+        "Failures explain the value, the limit, and the timestamp",
+    ]
+
+
+def test_a_ticket_whose_body_has_neither_section_says_so(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Noise", tickets=1)
+    ticket.body = "Just make it quieter."
+    url = wayfarer.start().url()
+
+    read = _tickets(_read(url, spec.number))[ticket.number]
+
+    assert read["build"] is None
+    assert read["criteria"] == []
+
+
+def test_an_effort_names_the_map_its_spec_was_charted_on(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    chart = github.issue("Where the noise comes from")
+    spec, _ = github.effort("Noise", tickets=1)
+    spec.parent = chart.number
+    url = wayfarer.start().url()
+
+    effort = _read(url, spec.number)
+
+    assert effort["map"] == {"number": chart.number, "title": "Where the noise comes from"}
+
+
+def test_an_effort_with_no_map_says_so(wayfarer: Launcher, github: GitHub) -> None:
+    spec, _ = github.effort("Noise", tickets=1)
+    url = wayfarer.start().url()
+
+    assert _read(url, spec.number)["map"] is None
 
 
 def test_a_tickets_acceptance_criteria_are_read_from_its_body_as_written(

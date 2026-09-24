@@ -39,6 +39,7 @@ from wayfarer.models import (
     ChronicleLine,
     Effort,
     EffortUnreadable,
+    Mention,
     PullRequest,
     Ticket,
     TicketState,
@@ -62,6 +63,7 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
     issue(number: $effort) {
       number
       title
+      parent { number title }
       subIssues(first: $perPage, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
@@ -316,6 +318,7 @@ async def read_effort(
         id=f"effort:{number}",
         number=issue["number"],
         title=issue["title"],
+        map=_mention(issue["parent"]),
         trunk=repository["defaultBranchRef"]["name"],
         tickets=[ticket.id for ticket in tickets],
     )
@@ -370,29 +373,39 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
         pull_request=pull_request,
         live=number in building,
         question=latest(events),
-        criteria=criteria(node["body"]),
         # The merge queue's to say, from an order this read does not ask for.
         place_in_line=None,
+        build=_section(node["body"], "What to build"),
+        criteria=_criteria(_section(node["body"], "Acceptance criteria") or ""),
     )
 
 
-# A ticket's criteria are the items under its "Acceptance criteria" heading, ticked or
-# not, as `/to-tickets` writes them.
-_CRITERIA = re.compile(r"^#+\s*acceptance criteria\s*$", re.IGNORECASE)
-_HEADING = re.compile(r"^#+\s")
-_ITEM = re.compile(r"^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$")
+def _mention(node: dict[str, Any] | None) -> Mention | None:
+    return None if node is None else Mention(number=node["number"], title=node["title"])
 
 
-def criteria(body: str) -> list[str]:
-    """The acceptance criteria in a ticket's `body`, in order and as worded."""
-    found: list[str] = []
-    within = False
-    for line in body.splitlines():
-        if _HEADING.match(line):
-            within = bool(_CRITERIA.match(line))
-        elif within and (item := _ITEM.match(line)):
-            found.append(item[1])
-    return found
+def _section(body: str, heading: str) -> str | None:
+    """The text under `heading` in a ticket's body, as `/to-tickets` writes one, up to the
+    next heading; None when it has no such heading."""
+    sections = re.split(r"^#{1,6}[ \t]+(.*?)[ \t#]*$", body, flags=re.MULTILINE)
+    # Split on its headings, a body is its preamble, then each heading and its text.
+    for title, text in zip(sections[1::2], sections[2::2], strict=True):
+        if title.strip().casefold() == heading.casefold():
+            return text.strip()
+    return None
+
+
+def _criteria(section: str) -> list[str]:
+    """Each item of a criteria list, its box dropped whether ticked or not, and a line
+    that carries an item on joined to it."""
+    items: list[str] = []
+    for line in section.splitlines():
+        item = re.match(r"[ \t]*[-*+][ \t]+(?:\[[ xX]\][ \t]+)?(.+)$", line)
+        if item is not None:
+            items.append(item.group(1).strip())
+        elif items and line.strip():
+            items[-1] += f" {line.strip()}"
+    return items
 
 
 def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | None:

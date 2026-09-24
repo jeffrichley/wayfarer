@@ -235,11 +235,11 @@ class Issue:
     title: str
     state: str = "OPEN"
     state_reason: str | None = None
+    body: str = ""
     labels: list[str] = field(default_factory=list)
     assignees: list[str] = field(default_factory=list)
     parent: int | None = None
     blocked_by: list[int] = field(default_factory=list)
-    body: str = ""
     # Every comment's body, oldest first.
     comments: list[str] = field(default_factory=list)
     # What happened to it, oldest first, as its timeline shows.

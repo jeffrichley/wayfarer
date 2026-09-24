@@ -14,21 +14,58 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from wayfarer.models.chronicle import Mention
+from wayfarer.models.home import Station
 from wayfarer.models.read_model import TicketState
 
 __all__ = [
+    "Blocker",
     "GraphCard",
-    "ImpliedEdge",
+    "Neighbour",
+    "Reached",
+    "Tally",
+    "ThreadStep",
     "TicketGraph",
     "Wire",
 ]
 
 
-class ImpliedEdge(BaseModel):
-    """A blocker the ticket already waits on through another, so it is not drawn."""
+class Neighbour(BaseModel):
+    """A ticket one step away on the graph, landed or still to land, as the panel lists it."""
 
-    blocker: Mention
-    via: Mention = Field(description="The drawn blocker that itself waits on `blocker`.")
+    ticket: Mention
+    state: TicketState
+
+
+class Blocker(Neighbour):
+    """A ticket that blocks another directly."""
+
+    via: Mention | None = Field(
+        description="The drawn blocker that itself waits on this one, when the edge is "
+        "implied and so not drawn; null when it is drawn."
+    )
+
+
+Reached = Literal["done", "here", "ahead"]
+"""Where a ticket's thread stands at a station: behind it, at it, or not reached yet."""
+
+
+class ThreadStep(BaseModel):
+    """One station of a ticket's thread, from its map to landing (CONTEXT.md)."""
+
+    station: Station
+    name: str = Field(description="What it made there, or that it has not yet.")
+    number: int | None = Field(description="The issue it made there; null when it is none.")
+    reached: Reached = Field(description="Done and behind it, where it is now, or not reached yet.")
+    state: TicketState | None = Field(
+        description="The ticket's state, at the station it is at; null at every other."
+    )
+
+
+class Tally(BaseModel):
+    """How many of an effort's tickets stand in one state."""
+
+    state: TicketState
+    count: int
 
 
 class GraphCard(BaseModel):
@@ -53,7 +90,18 @@ class GraphCard(BaseModel):
         description="Takeable under an armed cascade whose slots are full: it starts when a "
         "slot frees."
     )
-    implied: list[ImpliedEdge] = Field(description="Its blockers not drawn, and through which.")
+    blocked_by: list[Blocker] = Field(
+        description="Every ticket blocking it, landed or still to land, in ticket order; "
+        "one closed without landing blocks nothing."
+    )
+    unblocks: list[Neighbour] = Field(
+        description="Every ticket still to land that it blocks, in ticket order."
+    )
+    taken_by: list[str] = Field(
+        description="Who took it by hand, when that and no blocker is what keeps it from "
+        "the frontier; empty otherwise."
+    )
+    thread: list[ThreadStep] = Field(description="Its thread, a step per station.")
     upstream: list[int] = Field(
         description="Every ticket still on the graph it waits on, however far back."
     )
@@ -77,6 +125,10 @@ class TicketGraph(BaseModel):
     kind: Literal["ticket_graph"]
     id: str = Field(description="`graph:<effort>`.")
     effort: int
+    tally: list[Tally] = Field(
+        description="How many tickets stand in each state, in the order states rank; a "
+        "state no ticket is in is left out, and so is closed, which is off the graph."
+    )
     landed: list[Mention] = Field(
         description="Every landed ticket, folded into the start line, in dependency order."
     )

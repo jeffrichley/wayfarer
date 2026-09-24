@@ -13,13 +13,13 @@ type: reference
 - what each ticket is waiting on, and what it will unblock
 - how far each running ticket has got
 
-From the frontier, they can start an agent.
+Its one action is arming the effort's cascade, which starts every takeable ticket up to the cap (#55).
 
 ## Layout
 
 - **Top bar** and **route band**, with `/to-tickets` current.
 - **Graph column** (`ticket-graph`):
-  - head: kicker "/to-tickets · 9 tracer bullets from spec #124", title "Pre-delivery compliance checks, sliced", the reading instruction "Read left to right. A ticket reaches the frontier when every ticket feeding into it has landed.", and a **tally** of states ("2 landed · 1 in review · 2 building · 1 waiting on you · 1 takeable now · 2 blocked")
+  - head: kicker "/to-tickets · 9 tickets from spec #124", the spec's title, the reading instruction "Read left to right. A ticket reaches the frontier when every ticket feeding into it has landed.", a **tally** of states in the words the cards use ("1 landed · 2 building · 1 asked · 1 takeable · 2 blocked"), and **Arm the cascade** (`cascade`)
   - the canvas, sized by the layout and scaled (see [Layout](#layout-rules))
 - **Detail panel** (`ticket-detail`), on the right: the selected ticket.
 
@@ -75,30 +75,34 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 - **Gate note:** beside the last card, "Every check feeds the export gate. It is the last ticket to reach the frontier."
 
 ### Detail panel (`ticket-detail`)
-- **Head:** chips (Issue #, `ready-for-agent`, and Prefactor when it is one), the ticket name, and its state with context ("Building · 3 of 4 criteria").
-- **Action block, by state:**
+- **Head:** chips (Issue # and the ticket's labels), the ticket name, and its state, with its PR when it has one ("Landing · PR #141").
+- **Where it stands, by state.** Nothing here starts or queues work: arming is the cascade's, and the spec cut "Start an agent" and "Queue an agent".
 
   | State | Block |
   |---|---|
-  | Takeable (`start-agent-block`) | "On the frontier". A setup list: Agent *Claude Code*, Skill */tdd*, Worktree *wt/books-status from main*. Primary **Start an agent on this ticket** (`start-agent`). |
-  | Building | "In a session": what it's doing, and a secondary **Watch the session** (`watch-session`) |
-  | Waiting on you | "Paused for you": the question quoted, and a secondary **Answer on the desk** (`answer-question`) |
-  | In review | "Waiting on review": the review verdict, and a secondary **Review PR #141** (`review-pr`) |
-  | Blocked | "Not yet": "Reaches the frontier once *X* and *Y* land.", and a ghost toggle **Queue an agent for when it unblocks** (`queue-agent`, `aria-pressed`) |
+  | Takeable | "On the frontier": an armed cascade starts it, or "starts it when a slot frees" at the cap |
+  | Building | "In a session", and a secondary **Watch the session** (`watch-session`) |
+  | Asked | "Paused for you": the question quoted, and a secondary **Answer on the desk** (`answer-question`) |
+  | Held | "Held for you", and a secondary **Decide on the desk** (`decide-held`) |
+  | Landing | Its place in the merge queue |
+  | In review | Its pull request is open and not yet landing |
+  | Blocked | "Not yet": "Reaches the frontier once *X* and *Y* land.", or who took it by hand |
 
-- **What to build:** the ticket's end-to-end behaviour, in plain language.
-- **Acceptance criteria:** the shared criteria list, as written and read-only (see [`../design/shell.md`](../design/shell.md)).
-- **Blocked by / Unblocks:** linked tickets with glyphs. Following one selects its card and moves focus there.
+- **What to build:** the ticket body's `What to build` section, as written.
+- **Acceptance criteria:** the body's criteria as written and read-only: a box ticked on GitHub is not read, and nothing counts them (see [`../design/shell.md`](../design/shell.md)).
+- **Blocked by / Unblocks:** the tickets one step away, with glyphs; an implied blocker says which blocker implies it. Following one selects its card and moves focus there; a landed one folds into the start line, so following it selects the start line.
 - **Thread:** map → spec → ticket → session → PR → landed (see [`../design/shell.md`](../design/shell.md#thread)).
+- **The start line selected:** "N tickets landed", listing them in the order they depended on.
+- **Nothing selected:** a line saying what selecting shows. A ticket's link (`/efforts/<n>#<ticket>`) opens it selected.
 
-**Start an agent:**
-- The button becomes a disabled "Agent started in wt/books-status", and nothing else changes: the prototype keeps no demo state.
-- The card, tally, top bar and route band update *around* the clicked button without rebuilding it, so focus stays put.
+**Arm the cascade** (the screen's only primary):
+- Clicking it asks in one line, in the button's place, naming how many tickets are takeable and the cap ("4 tickets are takeable now, up to 3 at a time."), with **Arm** and **Not yet**.
+- Once armed it says how the cascade stands: running and the cap, waiting on you, or paused with its reason and **Resume the cascade**.
 
 ## Flows
 
-- **What can start now?** Look for bold-bordered cards → select one → read What to build and its criteria → Start an agent.
-- **Why is the export gate still blocked?** Select it → Blocked by lists five tickets and their states → queue an agent so it starts when they land.
+- **What can start now?** Look for bold-bordered cards → select one → read What to build and its criteria → arm the cascade.
+- **Why is the export gate still blocked?** Select it → Blocked by lists five tickets and their states → follow one to its card.
 - **Where does this ticket come from?** Thread → the spec story → the map decision.
 
 ## Why it looks this way
@@ -107,7 +111,7 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 - **Done work folds into the start line:** the graph is the size of the work left, not the work done, and the course stays drawn as the one magenta thing on the left.
 - **The foot changes by state:** each card surfaces the one fact that matters for its state, and a card never carries every field at once.
 - **Magenta wires only where a blocker landed:** the course, again. The landed part of the graph reads as a route already travelled.
-- **"Queue an agent" is a ghost toggle, not a primary:** the only primary on this screen belongs to starting work that can start *now*.
+- **Arming is the only primary:** a session starts only when a cascade starts it, so there is no per-ticket start or queue.
 
 ## Prototype shortcuts
 
@@ -118,7 +122,5 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
 ## Open questions
 
 - **Several specs at once** in one effort's graph.
-- **Where "Queue an agent" lives,** and what it does if the blocker is abandoned.
-- **Starting an agent with other settings** (another skill, model or base branch): is the setup list editable?
 - **Tickets from more than one spec:** separate graphs, or one graph grouped by spec?
 - **Mobile layout.**

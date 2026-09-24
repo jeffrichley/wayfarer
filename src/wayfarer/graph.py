@@ -17,12 +17,17 @@ from datetime import datetime
 from functools import cache
 
 from wayfarer.models import (
+    Blocker,
     Cascade,
     Effort,
     GraphCard,
-    ImpliedEdge,
     Item,
     Mention,
+    Neighbour,
+    Reached,
+    Station,
+    Tally,
+    ThreadStep,
     Ticket,
     TicketGraph,
     TicketState,
@@ -151,14 +156,8 @@ def _graph(
     cards: list[GraphCard] = []
     for n in sorted(live):
         ticket = by[n]
-        drawn: list[int] = []
-        implied: list[ImpliedEdge] = []
-        for b in blockers(n):
-            via = implied_via(n, b)
-            if via is None:
-                drawn.append(b)
-            else:
-                implied.append(ImpliedEdge(blocker=_mention(by[b]), via=_mention(by[via])))
+        vias = {b: implied_via(n, b) for b in blockers(n)}
+        drawn = [b for b, via in vias.items() if via is None]
         opened = [b for b in drawn if b in live]
         wires += [Wire(blocker=b, blocked=n, kind="open") for b in opened]
         # Every landed blocker leaves the start line on one wire, and a ticket with
@@ -178,7 +177,23 @@ def _graph(
                 waiting_on=[_mention(by[b]) for b in blockers(n) if b in live],
                 since=started.get(n) if ticket.state is TicketState.BUILDING else None,
                 at_cap=at_cap and ticket.state is TicketState.TAKEABLE,
-                implied=implied,
+                blocked_by=[
+                    Blocker(
+                        ticket=_mention(by[b]),
+                        state=by[b].state,
+                        via=None if via is None else _mention(by[via]),
+                    )
+                    for b, via in vias.items()
+                ],
+                unblocks=[
+                    Neighbour(ticket=_mention(by[d]), state=by[d].state)
+                    for d in sorted(live)
+                    if n in by[d].blocked_by
+                ],
+                taken_by=ticket.assignees
+                if ticket.state is TicketState.BLOCKED and not any(b in live for b in blockers(n))
+                else [],
+                thread=_thread(effort, ticket),
                 upstream=sorted(ancestors(n, still) & still),
                 downstream=sorted(downstream[n]),
             )
@@ -188,6 +203,11 @@ def _graph(
         kind="ticket_graph",
         id=f"graph:{effort.number}",
         effort=effort.number,
+        tally=[
+            Tally(state=state, count=count)
+            for state in TicketState
+            if state is not TicketState.CLOSED and (count := sum(t.state is state for t in tickets))
+        ],
         landed=[_mention(by[n]) for n in _in_dependency_order(landed, by)],
         cards=cards,
         wires=wires,
@@ -207,6 +227,45 @@ def _in_dependency_order(numbers: set[int], by: dict[int, Ticket]) -> list[int]:
         ordered.append(ready)
         left.remove(ready)
     return ordered
+
+
+def _thread(effort: Effort, ticket: Ticket) -> list[ThreadStep]:
+    """`ticket` traced from its map to landing: done behind the station it is at, and
+    ahead beyond it. A ticket still to land is always past its spec and its slicing."""
+    state, pull = ticket.state, ticket.pull_request
+
+    def step(
+        station: Station, name: str, reached: Reached, number: int | None = None
+    ) -> ThreadStep:
+        here = state if reached == "here" else None
+        return ThreadStep(station=station, name=name, number=number, reached=reached, state=here)
+
+    # A session runs until it opens a pull request, and asks or is held on the way.
+    session: Reached = (
+        "done"
+        if pull is not None
+        else "here"
+        if state in (TicketState.BUILDING, TicketState.ASKED, TicketState.HELD)
+        else "ahead"
+    )
+    return [
+        step("wayfinder", "No map", "ahead")
+        if effort.map is None
+        else step("wayfinder", effort.map.title, "done", effort.map.number),
+        step("spec", effort.title, "done", effort.number),
+        step("tickets", ticket.title, "done", ticket.number),
+        step("build", "No session yet" if session == "ahead" else "A session", session),
+        step("review", "No PR yet", "ahead")
+        if pull is None
+        else step(
+            "review",
+            f"PR #{pull.number}",
+            "done" if pull.merged or state is TicketState.LANDING else "here",
+        ),
+        step("landed", "In the merge queue", "here")
+        if state is TicketState.LANDING
+        else step("landed", "Not landed", "ahead"),
+    ]
 
 
 def _mention(ticket: Ticket) -> Mention:

@@ -1,0 +1,4 @@
+/* Arming sits at the right of the graph's head, and its confirmation is one line
+   in the button's place: the offer, then Arm and Not yet. */
+.arming { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.line { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 13px; white-space: nowrap; }
