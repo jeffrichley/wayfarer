@@ -4,6 +4,7 @@ import type { DeskEntry, Home, Mention, Need, Ticket } from "./api";
 import { Button } from "./Button";
 import styles from "./Desk.module.css";
 import { ticketHref } from "./links";
+import { holdsUpAndStarts, row, tickets } from "./NeedsYou";
 import { QuestionCard } from "./Question";
 import { State } from "./State";
 import { command, useItems } from "./store";
@@ -13,8 +14,6 @@ import { Kicker, Named } from "./Type";
 // decision, each with exactly one primary action, and what that action will do
 // said before it (docs/screens/review-desk.md, principle 5). A resolved item says
 // what happened, and offers nothing more.
-
-const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
 
 function Head({
   kicker,
@@ -41,11 +40,6 @@ function named(ticket: Mention, effort: Mention) {
   return <Named name={ticket.title} id={ticket.number} href={ticketHref(effort.number, ticket.number)} />;
 }
 
-function holdsUp(n: number, starts: number): string {
-  const all = `Holds up ${tickets(n)}`;
-  return starts === 0 ? all : `${all} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
-}
-
 // Names joined as a sentence says them: "A", "A and B", "A, B and C".
 function joined(names: ReactNode[]): ReactNode {
   return names.map((name, i) => (
@@ -59,11 +53,11 @@ function joined(names: ReactNode[]): ReactNode {
 export function DeskItem({ entry }: { entry: DeskEntry }) {
   const repo = useItems((items) => (items["home"] as Home | undefined)?.repo ?? null);
   const need = entry.need;
-  const ticket = useItems((items) =>
-    "ticket" in need && typeof need.ticket === "object"
-      ? (items[`ticket:${need.ticket.number}`] as Ticket | undefined)
-      : undefined,
-  );
+  // An item on a ticket is keyed by the ticket's own id (wayfarer.desk).
+  const ticket = useItems((items) => {
+    const item = items[entry.key];
+    return item?.kind === "ticket" ? item : undefined;
+  });
   return (
     <div className={styles.inner}>
       <Surface need={need} ticket={ticket} repo={repo} resolved={entry.resolved} />
@@ -99,7 +93,7 @@ function Surface({
             facts={
               <>
                 <State glyph="ask">Waiting on you</State>
-                <span>{holdsUp(need.holds_up, need.starts)}</span>
+                <span>{holdsUpAndStarts({ holdsUp: need.holds_up, starts: need.starts })}</span>
               </>
             }
           />
@@ -140,7 +134,7 @@ function Surface({
             facts={
               <>
                 <State glyph="held">Held</State>
-                <span>{holdsUp(need.holds_up, need.starts)}</span>
+                <span>{holdsUpAndStarts({ holdsUp: need.holds_up, starts: need.starts })}</span>
               </>
             }
           />
@@ -176,6 +170,8 @@ function Surface({
     case "review": {
       const pull = ticket?.pull_request ?? null;
       const starting = need.starting.map((t) => named(t, need.effort));
+      // What it holds up, less itself and what starts at once, is still behind something.
+      const waiting = need.holds_up - 1 - need.starting.length;
       return (
         <>
           <Head
@@ -187,8 +183,9 @@ function Surface({
             facts={
               <>
                 <State glyph="review">In review</State>
+                {/* A review is raised only for a pull request green or with no checks. */}
                 <span>{pull?.checks === "passing" ? "Checks passed" : "No checks"}</span>
-                <span>{holdsUp(need.holds_up, need.starts)}</span>
+                <span>{holdsUpAndStarts({ holdsUp: need.holds_up, starts: need.starts })}</span>
               </>
             }
           />
@@ -204,6 +201,7 @@ function Surface({
                     {joined(starting)} {starting.length === 1 ? "starts" : "start"} the moment it does.
                   </>
                 )}
+                {waiting > 0 && ` ${tickets(waiting)} further on still ${waiting === 1 ? "waits" : "wait"}.`}
               </p>
               {pull !== null && repo !== null && (
                 <div className={styles.actions}>
@@ -283,17 +281,19 @@ function Surface({
         </>
       );
     case "orphan": {
+      const said = row(need);
+      const title = "ticket" in said ? said.ticket.name : "";
       const name =
         need.effort === null ? (
-          <Named name={need.title ?? `Ticket ${need.ticket}`} id={need.ticket} />
+          <Named name={title} id={need.ticket} />
         ) : (
-          named({ number: need.ticket, title: need.title ?? `Ticket ${need.ticket}` }, need.effort)
+          named({ number: need.ticket, title }, need.effort)
         );
       return (
         <>
           <Head
             piece="orphan-header"
-            kicker={`Leftover container · ${need.effort?.title ?? "No effort"}`}
+            kicker={`Leftover container · ${"effort" in said ? said.effort : ""}`}
             name={name}
             facts={<State glyph="ask">Left over</State>}
           />

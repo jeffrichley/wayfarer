@@ -79,7 +79,7 @@ type Words = {
   heldUp?: HeldUp;
 };
 
-const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
+export const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
 
 function words(need: Need): Words {
   const named = "ticket" in need && <Named name={need.ticket.name} id={need.ticket.id} />;
@@ -173,7 +173,7 @@ function words(need: Need): Words {
 // say zero.
 const holdsUp = (n: number) => `Holds up ${tickets(n)}`;
 
-function holdsUpAndStarts({ holdsUp: n, starts }: HeldUp): string {
+export function holdsUpAndStarts({ holdsUp: n, starts }: HeldUp): string {
   return starts === 0 ? holdsUp(n) : `${holdsUp(n)} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
 }
 

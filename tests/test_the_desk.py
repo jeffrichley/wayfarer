@@ -211,3 +211,24 @@ def test_an_environment_failure_arriving_while_the_person_works_still_goes_first
     # It stopped everything, so nothing sits above it, new or not.
     assert (first["need"]["kind"], first["new"]) == ("environment", True)
     assert second["need"]["ticket"]["title"] == "Flag loudness"
+
+
+def test_an_item_that_comes_back_after_resolving_joins_the_bottom_marked_new(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, ASKED)
+    github.label(meter, ASKED)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: len(_desk(items)) == 2)
+        _arrive(url)
+
+        github.unlabel(flag, ASKED)
+        page.until(lambda items: _desk(items) == ["Flag loudness (Answered)", "Meter peaks"])
+        # Now it is held: a new item, not the old one brought back to life in place.
+        github.label(flag, HELD)
+        page.until(lambda items: _desk(items) == ["Meter peaks", "Flag loudness (new)"])

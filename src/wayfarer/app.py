@@ -34,6 +34,7 @@ from wayfarer.queue import Queue
 from wayfarer.read_model import Efforts, History
 from wayfarer.restart import Containers, DockerContainers, Restart
 from wayfarer.routes import Services, page
+from wayfarer.routes import cascades as cascades_routes
 from wayfarer.routes import desk as desk_routes
 from wayfarer.routes import efforts as efforts_routes
 from wayfarer.routes import events as events_routes
@@ -186,6 +187,7 @@ def create_app(
     )
     # One line per feature, sorted, so two tickets adding routers insert at
     # different places rather than both appending at the end.
+    app.include_router(cascades_routes.router)
     app.include_router(desk_routes.router)
     app.include_router(efforts_routes.router)
     app.include_router(events_routes.router)

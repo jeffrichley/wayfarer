@@ -9,7 +9,8 @@ that no longer needs the person stays where it was, saying what happened, so
 their place in the queue never jumps. Arriving again re-ranks it.
 
 The frozen order is the only thing kept, and only in memory: a restarted Wayfarer
-has a desk nobody is on, so it shows the live order until someone arrives.
+has a desk nobody is on, so it shows the live order until someone arrives. There
+is one desk, as there is one person: a second tab arriving re-ranks the first's.
 """
 
 from __future__ import annotations
@@ -52,11 +53,13 @@ class DeskPage:
         # someone arrives, when the desk is the live order.
         self._frozen: dict[str, Need] | None = None
         self._new: set[str] = set()
+        self._resolved: set[str] = set()
 
     def arrived(self) -> None:
         """The person arrived at the desk: its order is re-ranked, and holds from now."""
         self._frozen = {key(need): need for need in self._live()}
         self._new = set()
+        self._resolved = set()
         self.refresh()
 
     async def follow(self) -> None:
@@ -66,11 +69,17 @@ class DeskPage:
             await self._stream.changed()
 
     def refresh(self) -> None:
+        """Put the desk as Needs you now has it on the stream, in the order it froze."""
         live = {key(need): need for need in self._live()}
         if self._frozen is None:
             entries = [DeskEntry(key=k, need=n, new=False, resolved=None) for k, n in live.items()]
         else:
             for k, need in live.items():
+                if k in self._resolved:
+                    # Resolved and then raised again: a new item, so it goes to the
+                    # bottom rather than coming back to life in its old place.
+                    del self._frozen[k]
+                    self._resolved.discard(k)
                 if k not in self._frozen:
                     self._new.add(k)
                     if isinstance(need, EnvironmentFailure):
@@ -87,6 +96,7 @@ class DeskPage:
                 )
                 for k, need in self._frozen.items()
             ]
+            self._resolved = {entry.key for entry in entries if entry.resolved is not None}
         self._stream.upsert(Desk(kind="desk", id="desk", entries=entries))
 
     def _live(self) -> list[Need]:

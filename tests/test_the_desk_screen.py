@@ -184,6 +184,7 @@ def test_a_review_says_what_landing_it_frees_before_its_button(
     lands = _surface(page).locator("[data-piece=lands]")
     expect(lands).to_have_text(
         "Landing it lands Flag loudness. Meter peaks#3 starts the moment it does."
+        " 1 ticket further on still waits."
     )
     expect(_surface(page).locator("[data-piece=pr-header]")).to_contain_text("Holds up 3 tickets")
     button = _surface(page).locator(".btn-primary")
