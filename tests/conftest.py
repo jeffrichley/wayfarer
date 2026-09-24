@@ -302,8 +302,9 @@ def post(url: str) -> httpx.Response:
 
 Items = dict[str, dict[str, Any]]
 
-# The kinds of item home is made of, all derived from the rest (`wayfarer.home`).
-_HOME = {"home", "line_row", "needs_you"}
+# The kinds of item derived from the rest: home (`wayfarer.home`) and each
+# effort's ticket graph (`wayfarer.graph`).
+_DERIVED = {"home", "line_row", "needs_you", "ticket_graph"}
 
 
 class Stream:
@@ -313,8 +314,8 @@ class Stream:
     because a build pauses while Docker downloads. `patience`, when given, bounds
     each wait in all, for a stream busy enough that no single read ever times out.
 
-    Home's items are derived from every other item and change along with them
-    (`wayfarer.home`), so only a test about home, passing `home`, sees them: every
+    Home's items and the ticket graphs are derived from every other item and change
+    along with them, so only a test about them, passing `derived`, sees them: every
     other test reads the stream as if they were not on it, their ids included.
     """
 
@@ -324,7 +325,7 @@ class Stream:
         last_event_id: str | None = None,
         timeout: float = 20.0,
         patience: float | None = None,
-        home: bool = False,
+        derived: bool = False,
     ) -> None:
         headers = {} if last_event_id is None else {"Last-Event-ID": last_event_id}
         self._opened = httpx.stream("GET", f"{url}api/events", headers=headers, timeout=timeout)
@@ -335,8 +336,8 @@ class Stream:
         self.received: list[dict[str, Any]] = []
         self.ids: list[str] = []
         self._patience = patience
-        self._home = home
-        self._home_ids: set[str] = set()
+        self._derived = derived
+        self._derived_ids: set[str] = set()
 
     def __enter__(self) -> Stream:
         return self
@@ -368,7 +369,7 @@ class Stream:
             elif line.startswith("id:"):
                 id = line.removeprefix("id:").strip()
             elif not line and event is not None:
-                if not self._home and self._leave_out(event):
+                if not self._derived and self._leave_out(event):
                     event = id = None
                     continue
                 break
@@ -386,16 +387,16 @@ class Stream:
         return event
 
     def _leave_out(self, event: dict[str, Any]) -> bool:
-        """Whether `event` is only home's, leaving what a snapshot holds besides."""
+        """Whether `event` is only a derived item's, leaving what a snapshot holds besides."""
         if event["kind"] == "snapshot":
-            mine = [item for item in event["items"] if item["kind"] in _HOME]
-            self._home_ids |= {item["id"] for item in mine}
-            event["items"] = [item for item in event["items"] if item["kind"] not in _HOME]
+            mine = [item for item in event["items"] if item["kind"] in _DERIVED]
+            self._derived_ids |= {item["id"] for item in mine}
+            event["items"] = [item for item in event["items"] if item["kind"] not in _DERIVED]
             return False
-        if event["kind"] == "upsert" and event["item"]["kind"] in _HOME:
-            self._home_ids.add(event["item"]["id"])
+        if event["kind"] == "upsert" and event["item"]["kind"] in _DERIVED:
+            self._derived_ids.add(event["item"]["id"])
             return True
-        return event["kind"] == "removal" and event["id"] in self._home_ids
+        return event["kind"] == "removal" and event["id"] in self._derived_ids
 
     def until(self, arrived: Callable[[Items], bool]) -> list[dict[str, Any]]:
         """Read until `arrived` holds of what the page holds; the events that took."""
