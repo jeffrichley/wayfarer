@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from conftest import Launcher, Stream, post
+from conftest import TICKET_BODY, Launcher, Stream, post
 from github_stand_in import GitHub
 from wayfarer.read_model import ASKED, HELD
 
@@ -161,32 +161,11 @@ def test_blocking_comes_from_issue_dependencies_not_body_text(
     assert ticket["state"] == "takeable"
 
 
-_TICKET_BODY = """## Parent
-
-#1
-
-## What to build
-
-Measure every chapter's noise floor,
-and flag the loud ones.
-
-## Acceptance criteria
-
-- [x] Measure the noise floor of every chapter
-- [ ] Chapters above -60 dB fail the check
-* Failures explain the value, the limit, and the timestamp
-
-## Blocked by
-
-- #2
-"""
-
-
 def test_a_ticket_carries_what_to_build_and_its_criteria_as_written_with_no_ticks(
     wayfarer: Launcher, github: GitHub
 ) -> None:
     spec, (ticket,) = github.effort("Noise", tickets=1)
-    ticket.body = _TICKET_BODY
+    ticket.body = TICKET_BODY
     url = wayfarer.start().url()
 
     read = _tickets(_read(url, spec.number))[ticket.number]

@@ -486,6 +486,28 @@ def build_output(items: Items) -> list[str]:
 EFFORT_BRANCH = "effort/1-widgets"
 
 
+# A ticket's body as `/to-tickets` writes one, its first criterion ticked on GitHub.
+TICKET_BODY = """## Parent
+
+#1
+
+## What to build
+
+Measure every chapter's noise floor,
+and flag the loud ones.
+
+## Acceptance criteria
+
+- [x] Measure the noise floor of every chapter
+- [ ] Chapters above -60 dB fail the check
+* Failures explain the value, the limit, and the timestamp
+
+## Blocked by
+
+- #2
+"""
+
+
 def quick(tmp_path: Path) -> dict[str, str]:
     """A Wayfarer's environment that reads a change on GitHub again within a test's patience."""
     return {"WAYFARER_DATA_DIR": str(tmp_path / "data"), "WAYFARER_POLL_ACTIVE": "0.2"}

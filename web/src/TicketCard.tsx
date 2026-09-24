@@ -18,7 +18,10 @@ export type Doing =
   | { state: "takeable"; atCap: boolean }
   | { state: "blocked"; waitingOn: string[] };
 
-const LOOKS: Record<CardState, { glyph: Glyph; word: string }> = {
+// How each state looks, beyond a card too: landed is done, and closed is off.
+export const LOOKS: Record<TicketState, { glyph: Glyph; word: string }> = {
+  landed: { glyph: "done", word: "Landed" },
+  closed: { glyph: "out", word: "Closed" },
   landing: { glyph: "review", word: "Landing" },
   in_review: { glyph: "review", word: "In review" },
   building: { glyph: "building", word: "Building" },
