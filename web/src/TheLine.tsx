@@ -2,18 +2,19 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { ChronicleLine, Home, LineRow, Need, NeedsYou } from "./api";
+import { AppBar } from "./AppBar";
 import { Button } from "./Button";
 import { Chronicle } from "./Chronicle";
 import { useNow } from "./clock";
 import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
-import { NeedRow, NeedsList, type Need as Row } from "./NeedsYou";
+import { NeedRow, NeedsList, row } from "./NeedsYou";
 import { SectionHead } from "./SectionHead";
 import { SessionImage } from "./SessionImage";
-import { command, useItems } from "./store";
-import { TopBar } from "./TopBar";
+import { useItems } from "./store";
 import { Kicker, Named } from "./Type";
+import { useArrival } from "./visit";
 import styles from "./TheLine.module.css";
 
 // Home: what changed while the person was away, where everything is on the line,
@@ -22,37 +23,14 @@ import styles from "./TheLine.module.css";
 // with no primary action, since the tracks already spend the accent.
 
 // The visit the headline counts from ends when the person leaves home, and a new
-// one begins when they arrive afresh. A reload is the same visit, so the page
-// never says it arrived after one, and a refresh keeps the headline (#58).
-let arrived = false;
-
-function arrive() {
-  const [navigation] = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
-  // Once a document: React may mount the screen twice while developing.
-  if (!arrived && navigation?.type !== "reload") {
-    void command("/api/home/arrived");
-  }
-  arrived = true;
-}
-
+// one begins when they arrive afresh (#58).
 function useVisit() {
+  useArrival("/api/home/arrived");
   useEffect(() => {
-    arrive();
-    // The page may be kept whole in the back-forward cache and shown again: that is
-    // coming back, not reloading.
-    const onShow = (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        void command("/api/home/arrived");
-      }
-    };
     // A beacon outlives the page it is sent from, which a fetch may not.
     const onHide = () => navigator.sendBeacon("/api/home/left");
-    window.addEventListener("pageshow", onShow);
     window.addEventListener("pagehide", onHide);
-    return () => {
-      window.removeEventListener("pageshow", onShow);
-      window.removeEventListener("pagehide", onHide);
-    };
+    return () => window.removeEventListener("pagehide", onHide);
   }, []);
 }
 
@@ -76,48 +54,6 @@ function shown(lines: ChronicleLine[], now: Date, earlier: number) {
   );
   const from = before[Math.min(earlier, before.length) - 1] ?? yesterday;
   return { lines: lines.filter((l) => dayOf(l.at) >= from), more: before.length > earlier };
-}
-
-// The server's item as a row says it: a ticket by its name, what it holds up, and
-// the question or reason, in plain words even before the session has given them.
-function row(need: Need): Row {
-  switch (need.kind) {
-    case "environment":
-      return { kind: "environment", reason: need.reason };
-    case "ship":
-      return { kind: "ship", effort: need.title, name: need.title };
-    case "orphan":
-      // Named by its number alone when GitHub could not be read as Wayfarer started.
-      return {
-        kind: "orphan",
-        effort: need.effort?.title ?? "No effort",
-        ticket: { name: need.title ?? `Ticket ${need.ticket}`, id: need.ticket },
-      };
-    case "unknown_container":
-      return { kind: "unknown", runId: need.run_id };
-    case "closed":
-      return {
-        kind: "closed",
-        effort: need.effort.title,
-        ticket: { name: need.ticket.title, id: need.ticket.number },
-      };
-    default: {
-      const on = {
-        effort: need.effort.title,
-        ticket: { name: need.ticket.title, id: need.ticket.number },
-        holdsUp: need.holds_up,
-        starts: need.starts,
-      };
-      switch (need.kind) {
-        case "question":
-          return { ...on, kind: "question", question: need.gist ?? "It stopped to ask you something" };
-        case "held":
-          return { ...on, kind: "held", reason: need.reason ?? "It is held until you decide" };
-        case "review":
-          return { ...on, kind: "review" };
-      }
-    }
-  }
 }
 
 function needKey(need: Need): string {
@@ -155,24 +91,8 @@ export function TheLine() {
   const moving = home?.moving ?? 0;
   const working = home?.working ?? [];
 
-  const bar = (
-    <TopBar
-      repo={repo}
-      repos={[
-        {
-          name: repo,
-          meta: `${moving} ${moving === 1 ? "effort" : "efforts"} on the line`,
-          href: "/",
-          current: true,
-        },
-      ]}
-      working={{ count: working.length, href: atWorkHref() }}
-      needsYou={{ count: needs.length, href: deskHref() }}
-    />
-  );
-
   return (
-    <Frame bar={bar}>
+    <Frame bar={<AppBar />}>
       <Pane>
         <div className={styles.page}>
           <section className={styles.masthead} data-piece="masthead">

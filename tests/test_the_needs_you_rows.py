@@ -132,8 +132,8 @@ def test_what_an_item_holds_up_drops_its_second_half_when_nothing_starts(gallery
 def test_nothing_in_needs_you_says_unblocks(gallery: Page) -> None:
     rows = gallery.locator('[data-specimen^="desk-"], [data-specimen^="need-"]')
 
-    # Every kind on the desk and at home, and the desk's open and resolved items.
-    assert rows.count() == 2 * len(KINDS) + 2
+    # Every kind on the desk and at home, and the desk's open, new and resolved items.
+    assert rows.count() == 2 * len(KINDS) + 3
     assert [text for text in rows.all_text_contents() if "nblock" in text] == []
 
 

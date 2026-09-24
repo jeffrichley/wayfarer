@@ -14,13 +14,16 @@ type Props = {
   // Who asked, from where and when: "Claude Code · wt/credits · 09:18".
   by: string;
   questions: Question[];
+  // Posts the answer: each question's, keyed by its text, as an option's label or
+  // the person's own words.
+  onSend?: (answers: Record<string, string>) => void;
 };
 
 // What a session paused to ask, and where a person answers it (docs/design/shell.md,
 // "Question card"). Sending needs a choice for every question, or a note; once
 // sent, the controls lock and the card says the answer was posted to the ticket.
-// Posting the answer is the screen's, once one carries the card.
-export function QuestionCard({ ticket, by, questions }: Props) {
+// Posting the answer is the screen's that carries the card.
+export function QuestionCard({ ticket, by, questions, onSend }: Props) {
   const [choices, setChoices] = useState<(string | null)[]>(() => questions.map(() => null));
   const [note, setNote] = useState("");
   const [refused, setRefused] = useState(false);
@@ -36,6 +39,9 @@ export function QuestionCard({ ticket, by, questions }: Props) {
     const answered = note.trim() !== "" || !choices.includes(null);
     setRefused(!answered);
     setSent(answered);
+    if (answered) {
+      onSend?.(answers(questions, choices, note.trim()));
+    }
   }
 
   const each = questions.length > 1 ? " for each question" : "";
@@ -103,5 +109,17 @@ export function QuestionCard({ ticket, by, questions }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Each question's answer: the option picked, with the note after it when there is
+// one; the note alone answers a question left without a pick.
+function answers(questions: Question[], choices: (string | null)[], note: string): Record<string, string> {
+  return Object.fromEntries(
+    questions.map((question, i) => {
+      const choice = choices[i] ?? null;
+      const answer = choice === null ? note : note === "" ? choice : `${choice}. ${note}`;
+      return [question.text, answer];
+    }),
   );
 }

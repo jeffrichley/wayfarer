@@ -1,0 +1,374 @@
+import type { ReactNode } from "react";
+
+import type { DeskEntry, Home, Mention, Need, Ticket } from "./api";
+import { Button } from "./Button";
+import styles from "./Desk.module.css";
+import { ticketHref } from "./links";
+import { QuestionCard } from "./Question";
+import { State } from "./State";
+import { command, useItems } from "./store";
+import { Kicker, Named } from "./Type";
+
+// The working surface for the item open on the desk: one built for each kind of
+// decision, each with exactly one primary action, and what that action will do
+// said before it (docs/screens/review-desk.md, principle 5). A resolved item says
+// what happened, and offers nothing more.
+
+const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
+
+function Head({
+  kicker,
+  name,
+  facts,
+  piece,
+}: {
+  kicker: string;
+  name: ReactNode;
+  facts?: ReactNode;
+  piece: string;
+}) {
+  return (
+    <header className={styles.head} data-piece={piece}>
+      <Kicker>{kicker}</Kicker>
+      <h2>{name}</h2>
+      {facts && <div className={styles.facts}>{facts}</div>}
+    </header>
+  );
+}
+
+// A ticket's name, linking to its card on its effort's graph.
+function named(ticket: Mention, effort: Mention) {
+  return <Named name={ticket.title} id={ticket.number} href={ticketHref(effort.number, ticket.number)} />;
+}
+
+function holdsUp(n: number, starts: number): string {
+  const all = `Holds up ${tickets(n)}`;
+  return starts === 0 ? all : `${all} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
+}
+
+// Names joined as a sentence says them: "A", "A and B", "A, B and C".
+function joined(names: ReactNode[]): ReactNode {
+  return names.map((name, i) => (
+    <span key={i}>
+      {i === 0 ? "" : i === names.length - 1 ? " and " : ", "}
+      {name}
+    </span>
+  ));
+}
+
+export function DeskItem({ entry }: { entry: DeskEntry }) {
+  const repo = useItems((items) => (items["home"] as Home | undefined)?.repo ?? null);
+  const need = entry.need;
+  const ticket = useItems((items) =>
+    "ticket" in need && typeof need.ticket === "object"
+      ? (items[`ticket:${need.ticket.number}`] as Ticket | undefined)
+      : undefined,
+  );
+  return (
+    <div className={styles.inner}>
+      <Surface need={need} ticket={ticket} repo={repo} resolved={entry.resolved} />
+    </div>
+  );
+}
+
+function Surface({
+  need,
+  ticket,
+  repo,
+  resolved,
+}: {
+  need: Need;
+  ticket: Ticket | undefined;
+  repo: string | null;
+  resolved: string | null;
+}) {
+  const done = resolved !== null && (
+    <p className={styles.resolved} data-piece="desk-resolved" role="status">
+      <State glyph="done">{resolved}</State>
+    </p>
+  );
+  switch (need.kind) {
+    case "question": {
+      const asking = ticket?.question ?? null;
+      return (
+        <>
+          <Head
+            piece="question-header"
+            kicker={`Question · ${need.effort.title}`}
+            name={named(need.ticket, need.effort)}
+            facts={
+              <>
+                <State glyph="ask">Waiting on you</State>
+                <span>{holdsUp(need.holds_up, need.starts)}</span>
+              </>
+            }
+          />
+          {done || (
+            <section className={styles.sec}>
+              {asking === null || asking.answered ? (
+                <p className={styles.prose}>
+                  Its question comment is missing on GitHub, so it cannot be answered here. Answer it on
+                  the ticket, and take the label off.
+                </p>
+              ) : (
+                <div className={styles.panel}>
+                  <QuestionCard
+                    ticket={need.ticket.number}
+                    by={`Claude Code · ${need.effort.title}`}
+                    questions={asking.questions.map((q) => ({
+                      text: q.question,
+                      options: q.options.map((o) => ({ label: o.label, consequence: o.description })),
+                    }))}
+                    onSend={(answers) =>
+                      void command(`/api/tickets/${need.ticket.number}/answer`, { answers })
+                    }
+                  />
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      );
+    }
+    case "held":
+      return (
+        <>
+          <Head
+            piece="held-header"
+            kicker={`Held · ${need.effort.title}`}
+            name={named(need.ticket, need.effort)}
+            facts={
+              <>
+                <State glyph="held">Held</State>
+                <span>{holdsUp(need.holds_up, need.starts)}</span>
+              </>
+            }
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>{need.reason ?? "It is held until you decide."}</p>
+              <p className={styles.consequence}>
+                Continuing starts a session where the last one stopped. Starting over begins again from the
+                effort branch, and closes its pull request.
+              </p>
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  piece="retry-continue"
+                  onClick={() => void command(`/api/tickets/${need.ticket.number}/retry`, { start: "continue" })}
+                >
+                  Continue
+                </Button>
+                <Button
+                  variant="secondary"
+                  piece="retry-start-over"
+                  onClick={() =>
+                    void command(`/api/tickets/${need.ticket.number}/retry`, { start: "start_over" })
+                  }
+                >
+                  Start over
+                </Button>
+              </div>
+            </section>
+          )}
+        </>
+      );
+    case "review": {
+      const pull = ticket?.pull_request ?? null;
+      const starting = need.starting.map((t) => named(t, need.effort));
+      return (
+        <>
+          <Head
+            piece="pr-header"
+            kicker={
+              pull === null ? `In review · ${need.effort.title}` : `PR #${pull.number} · ${pull.branch} → ${pull.base}`
+            }
+            name={named(need.ticket, need.effort)}
+            facts={
+              <>
+                <State glyph="review">In review</State>
+                <span>{pull?.checks === "passing" ? "Checks passed" : "No checks"}</span>
+                <span>{holdsUp(need.holds_up, need.starts)}</span>
+              </>
+            }
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>Clean and green, waiting on your approval.</p>
+              <p className={styles.consequence} data-piece="lands">
+                Landing it lands <b>{need.ticket.title}</b>.{" "}
+                {starting.length === 0 ? (
+                  "Nothing else starts the moment it does."
+                ) : (
+                  <>
+                    {joined(starting)} {starting.length === 1 ? "starts" : "start"} the moment it does.
+                  </>
+                )}
+              </p>
+              {pull !== null && repo !== null && (
+                <div className={styles.actions}>
+                  <Button variant="primary" arrow piece="open-pull-request" href={`https://github.com/${repo}/pull/${pull.number}`}>
+                    Review it on GitHub
+                  </Button>
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      );
+    }
+    case "environment":
+      return (
+        <>
+          <Head
+            piece="environment-header"
+            kicker="Environment · Every effort"
+            name="Every cascade is paused"
+            facts={<State glyph="blocked">Paused</State>}
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>{need.reason}</p>
+              <ul className={styles.checks}>
+                {need.failed.map((check) => (
+                  <li key={check.name}>
+                    <State glyph="blocked">{check.name}</State>
+                    <p className="meta">{check.detail}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.consequence}>
+                Once it is fixed, resuming checks the environment again and starts what every paused cascade
+                can. A cascade you paused yourself stays paused.
+              </p>
+              <div className={styles.actions}>
+                <Button variant="primary" piece="resume-cascades" onClick={() => void command("/api/cascades/resume")}>
+                  Resume the cascades
+                </Button>
+              </div>
+            </section>
+          )}
+        </>
+      );
+    case "ship":
+      return (
+        <>
+          <Head
+            piece="ship-header"
+            kicker={`Ship the effort · ${need.title}`}
+            name={need.title}
+            facts={<State glyph="take">Ready to ship</State>}
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>Every ticket landed on {need.branch}.</p>
+              <p className={styles.consequence}>
+                Shipping it is one review: its pull request from {need.branch} into {need.trunk}, where the
+                repo&apos;s own checks apply.
+              </p>
+              {repo !== null && (
+                <div className={styles.actions}>
+                  <Button
+                    variant="primary"
+                    arrow
+                    piece="open-effort-pull-request"
+                    href={`https://github.com/${repo}/compare/${need.trunk}...${need.branch}?expand=1`}
+                  >
+                    Open its pull request
+                  </Button>
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      );
+    case "orphan": {
+      const name =
+        need.effort === null ? (
+          <Named name={need.title ?? `Ticket ${need.ticket}`} id={need.ticket} />
+        ) : (
+          named({ number: need.ticket, title: need.title ?? `Ticket ${need.ticket}` }, need.effort)
+        );
+      return (
+        <>
+          <Head
+            piece="orphan-header"
+            kicker={`Leftover container · ${need.effort?.title ?? "No effort"}`}
+            name={name}
+            facts={<State glyph="ask">Left over</State>}
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>
+                The Wayfarer running its session stopped before the session finished, and its container may
+                still be running.
+              </p>
+              <p className={styles.consequence}>
+                Reaping removes whatever it left running, and holds the ticket. Its work is not recovered.
+              </p>
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  piece="reap"
+                  onClick={() => void command(`/api/sessions/${encodeURIComponent(need.run_id)}/reap`)}
+                >
+                  Reap it
+                </Button>
+              </div>
+            </section>
+          )}
+        </>
+      );
+    }
+    case "closed":
+      return (
+        <>
+          <Head
+            piece="closed-header"
+            kicker={`Closed with a live session · ${need.effort.title}`}
+            name={named(need.ticket, need.effort)}
+            facts={<State glyph="building">Still running</State>}
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>
+                GitHub closed this ticket while its session runs. GitHub owns the ticket, so Wayfarer leaves the
+                session alone.
+              </p>
+              <p className={styles.consequence}>Stopping it keeps its work, and holds the ticket.</p>
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  piece="stop-session"
+                  onClick={() => void command(`/api/tickets/${need.ticket.number}/stop`)}
+                >
+                  Stop its session
+                </Button>
+              </div>
+            </section>
+          )}
+        </>
+      );
+    case "unknown_container":
+      // Its label carries no repo, so it may be another repo's Wayfarer's: nothing
+      // here reaps it (#43), and the person decides outside Wayfarer.
+      return (
+        <>
+          <Head
+            piece="unknown-header"
+            kicker="Unknown container · No effort"
+            name={`A container from run ${need.run_id}`}
+            facts={<State glyph="building">Unknown</State>}
+          />
+          {done || (
+            <section className={styles.sec}>
+              <p className={styles.prose}>
+                No session here accounts for it. It may belong to another repo&apos;s Wayfarer, so it is never
+                removed from here. When you know it is not, remove it with Docker.
+              </p>
+            </section>
+          )}
+        </>
+      );
+  }
+}
