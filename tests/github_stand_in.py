@@ -5,8 +5,8 @@ reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; t
 REST issue listing and commit checks the conditional poll uses (ADR-0003); and the
 REST reads of a pull request and its changed files, each with its patch, a page at
 a time as GitHub pages them; the REST writes Wayfarer makes: claiming and
-releasing, labelling and unlabelling,
-commenting on and closing an issue, and opening, editing and closing a pull request;
+releasing, labelling and unlabelling, commenting on and closing an issue, and
+opening, editing and closing a pull request;
 and the two GraphQL writes, returning a pull request to draft and marking one ready.
 A test changes it as a person on GitHub would, and it can be made to misbehave on
 purpose:
@@ -360,7 +360,8 @@ class GitHub:
             pull.merge_commit = hashlib.sha1(f"merge {pull.number}".encode()).hexdigest()
 
     def push(self, pull: PullRequest, files: dict[str, str | None]) -> None:
-        """A push to its branch: it now changes `files`, and its head has moved."""
+        """A push to its branch: it now changes `files`, and its head has moved. Given
+        the repo's git remote, the head is its branch's there instead."""
         with self._lock:
             pull.files = files
             pull.head_commit = hashlib.sha1(json.dumps(files).encode()).hexdigest()
@@ -608,6 +609,7 @@ class GitHub:
         @app.get("/repos/{owner}/{name}/pulls/{number}/files")
         async def pull_files(owner: str, name: str, number: int, request: Request) -> Response:
             with self._lock:
+                self._follow_git()
                 pull = self._visible().pulls.get(number)
             if pull is None:
                 return JSONResponse({"message": "Not Found"}, status_code=404)

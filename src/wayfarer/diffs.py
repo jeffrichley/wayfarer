@@ -32,7 +32,7 @@ from wayfarer.models import (
 from wayfarer.settings import Settings
 from wayfarer.stream import Store as Stream
 
-__all__ = ["Diffs", "lines"]
+__all__ = ["Diffs", "lines_of"]
 
 # GitHub's most files to a page, so a pull request takes the fewest reads.
 _PER_PAGE = 100
@@ -41,7 +41,7 @@ _PER_PAGE = 100
 _HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
-def lines(patch: str) -> list[DiffLine]:
+def lines_of(patch: str) -> list[DiffLine]:
     """A file's patch, as GitHub gives it, as its lines with their old and new numbers."""
     parsed: list[DiffLine] = []
     old = new = 0
@@ -120,10 +120,10 @@ class Diffs:
         room = self._settings.diff_lines
         files: list[DiffFile] = []
         left_out: list[LeftOut] = []
-        read = 0
+        seen = 0
         full = False
         page = 1
-        while not full and read < changed:
+        while not full and seen < changed:
             listed = await self._github.read(
                 f"/pulls/{pull}/files", {"per_page": str(_PER_PAGE), "page": str(page)}
             )
@@ -132,9 +132,9 @@ class Diffs:
             if not listed:
                 break
             for file in listed:
-                read += 1
+                seen += 1
                 patch: str | None = file.get("patch")
-                shown = None if patch is None or full else lines(patch)
+                shown = None if patch is None or full else lines_of(patch)
                 if shown is not None and len(shown) <= room:
                     room -= len(shown)
                     files.append(DiffFile(path=file["filename"], lines=shown))
@@ -157,5 +157,5 @@ class Diffs:
             head_commit=found["head"]["sha"],
             files=files,
             left_out=left_out,
-            unread=changed - read,
+            unread=changed - seen,
         )
