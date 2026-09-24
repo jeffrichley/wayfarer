@@ -48,3 +48,5 @@ class ShipEffort(BaseModel):
     id: str
     effort: int
     title: str
+    branch: str = Field(description="The effort branch, which its own pull request goes from.")
+    trunk: str = Field(description="The repo's default branch, which it goes into.")

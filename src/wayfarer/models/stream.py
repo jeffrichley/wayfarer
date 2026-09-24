@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from wayfarer.models.cascade import Cascade, ShipEffort
 from wayfarer.models.chronicle import ChronicleLine
+from wayfarer.models.desk import Desk
 from wayfarer.models.gate import EnvironmentFailure, GateStatus
 from wayfarer.models.graph import TicketGraph
 from wayfarer.models.home import Home, LineRow, NeedsYou
@@ -48,6 +49,7 @@ Item = Annotated[
     | Home
     | LineRow
     | NeedsYou
+    | Desk
     | TicketGraph,
     Field(discriminator="kind"),
 ]

@@ -1,4 +1,4 @@
-"""An effort: read its ticket graph, and steer its cascade."""
+"""An effort: read its ticket graph, and steer its cascade; and every cascade at once."""
 
 from __future__ import annotations
 
@@ -31,3 +31,10 @@ async def pause(number: int, services: Wired) -> Response:
 async def resume(number: int, services: Wired) -> Response:
     """Resume the effort's cascade, starting what it can as of a fresh read."""
     return services.accept(services.cascades.resume(number))
+
+
+@router.post("/api/cascades/resume", status_code=202)
+async def resume_paused(services: Wired) -> Response:
+    """Resume every cascade the environment paused, once the start gate admits a start;
+    a cascade the person paused stays paused."""
+    return services.accept(services.cascades.resume_paused())

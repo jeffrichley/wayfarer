@@ -49,7 +49,7 @@ from waystation import (
 )
 
 from wayfarer.asking import ANSWER, QUESTION, RESUMED, answers_for_resume, cold_prompt
-from wayfarer.endings import STOPPED, Endings, fault, what_happened
+from wayfarer.endings import STOPPED, Endings, effort_branch, fault, what_happened
 from wayfarer.github import GitHub, GitHubError
 from wayfarer.models import (
     Cascade,
@@ -174,6 +174,18 @@ class Cascades:
         self._why.pop(effort, None)
         self._stream.remove(_RAISED)
         await self._efforts.read(effort)
+
+    async def resume_paused(self) -> None:
+        """Resume every cascade a failure of the environment paused, once the start gate
+        admits a start again; while it still refuses, say so afresh and resume none."""
+        async with self._deciding:
+            refused = await self._gate.admit()
+            self._stream.upsert(await self._gate.status())
+            if refused is not None:
+                return
+            paused = list(self._why)
+        for effort in paused:
+            await self.resume(effort)
 
     async def stop(self, ticket: int) -> None:
         """Cancel the session on `ticket`, keeping its work, and hold the ticket: a failed
@@ -327,7 +339,14 @@ class Cascades:
             store.disarm(number)
             armed = paused = False
             self._stream.upsert(
-                ShipEffort(kind="ship", id=f"ship:{number}", effort=number, title=effort.title)
+                ShipEffort(
+                    kind="ship",
+                    id=f"ship:{number}",
+                    effort=number,
+                    title=effort.title,
+                    branch=effort_branch(effort),
+                    trunk=effort.trunk,
+                )
             )
         elif armed and not paused and not await self._start(number, tickets, store):
             paused = True
