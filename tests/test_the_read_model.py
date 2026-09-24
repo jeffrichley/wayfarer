@@ -73,6 +73,7 @@ def test_one_read_returns_every_ticket_with_its_labels_assignees_blockers_and_pr
         "merge_commit": None,
         "checks": "pending",
         "approved": False,
+        "opened": pull.created_at,
     }
     assert tickets[first.number]["pull_request"] is None
     assert len(github.queries) == 1

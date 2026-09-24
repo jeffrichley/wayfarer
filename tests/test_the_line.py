@@ -172,6 +172,67 @@ def test_needs_you_gives_a_tie_to_whatever_has_waited_longest(
         )
 
 
+def test_needs_you_is_one_list_across_efforts_where_the_bigger_stall_goes_first(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    widgets, (flag,) = github.effort("Widgets", tickets=1)
+    gadgets, (meter, scale, ruler) = github.effort("Gadgets", tickets=3)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, ASKED)
+    github.label(meter, ASKED)
+    github.block(scale, by=meter)
+    github.block(ruler, by=scale)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, home=True) as page:
+        read(url, page, widgets, gadgets)
+        page.until(lambda items: _needs(items) == [_METER, _FLAG])
+        needs = page.items["needs_you"]["items"]
+
+    # A three-ticket stall in the later effort sits above a one-ticket question.
+    assert [(n["effort"]["title"], n["holds_up"]) for n in needs] == [
+        ("Gadgets", 3),
+        ("Widgets", 1),
+    ]
+
+
+def test_two_items_stalling_one_ticket_both_count_it_and_nothing_sums_them(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter, ruler) = github.effort("Widgets", tickets=3)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, ASKED)
+    github.label(meter, ASKED)
+    github.block(ruler, by=flag)
+    github.block(ruler, by=meter)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, home=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: len(_needs(items)) == 2)
+        needs = page.items["needs_you"]["items"]
+
+    # Each holds up itself and the ruler; neither alone starts it.
+    assert [(n["holds_up"], n["starts"]) for n in needs] == [(2, 0), (2, 0)]
+
+
+def test_a_review_waits_from_when_its_pull_request_opened_and_the_longest_goes_first(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    older = github.pull_request(meter, base=EFFORT_BRANCH)
+    github.pull_request(flag, base=EFFORT_BRANCH)
+    url = wayfarer.start(env={**quick(tmp_path), "WAYFARER_AUTO_MERGE": "0"}).url()
+
+    with Stream(url, patience=30, home=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: _needs(items) == ["review Meter peaks", "review Flag loudness"])
+        first = page.items["needs_you"]["items"][0]
+
+    assert datetime.fromisoformat(first["since"]) == datetime.fromisoformat(older.created_at)
+
+
 def test_an_environment_failure_is_pinned_first_and_shipping_an_effort_last(
     wayfarer: Launcher, github: GitHub, tmp_path: Path
 ) -> None:

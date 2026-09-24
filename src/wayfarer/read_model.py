@@ -86,6 +86,7 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
                     reviewDecision
                     statusCheckRollup { state }
                     mergeCommit { oid }
+                    createdAt
                   }
                 }
               }
@@ -364,6 +365,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
         blocked_by=[blocker["number"] for blocker in node["blockedBy"]["nodes"]],
         open_blockers=open_blockers,
         pull_request=pull_request,
+        live=number in building,
         # The merge queue's to say, from an order this read does not ask for.
         place_in_line=None,
     )
@@ -393,6 +395,7 @@ def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | 
         merge_commit=(chosen["mergeCommit"] or {}).get("oid"),
         checks=_CHECKS[rollup["state"]] if rollup else None,
         approved=chosen["reviewDecision"] == "APPROVED",
+        opened=datetime.fromisoformat(chosen["createdAt"]),
     )
 
 

@@ -42,7 +42,8 @@ class Settings:
     """How many sessions may run at once, one number shared by every armed cascade on
     the repo, so the machine stays usable. Per repo, default 3."""
     auto_merge: bool = True
-    """Whether a ready, green PR lands without a person's approval. Per repo, default on."""
+    """Whether a ready, green PR lands without a person's approval. Per repo, default on;
+    `WAYFARER_AUTO_MERGE=0` turns it off."""
     stream_backlog: int = 1000
     """Changes kept for a page that reconnects. One that missed more is sent a snapshot
     instead, which costs it nothing but bytes, so this only bounds memory."""
@@ -83,5 +84,6 @@ class Settings:
             rate_limit_backoff=float(
                 env.get("WAYFARER_RATE_LIMIT_BACKOFF", cls.rate_limit_backoff)
             ),
+            auto_merge=env.get("WAYFARER_AUTO_MERGE", "1") != "0",
             data_dir=Path(env.get("WAYFARER_DATA_DIR") or cls.data_dir),
         )

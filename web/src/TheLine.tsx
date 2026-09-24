@@ -104,6 +104,12 @@ function row(need: Need): Row {
       };
     case "unknown_container":
       return { kind: "unknown", runId: need.run_id };
+    case "closed":
+      return {
+        kind: "closed",
+        effort: need.effort.title,
+        ticket: { name: need.ticket.title, id: need.ticket.number },
+      };
     default: {
       const on = {
         effort: need.effort.title,
@@ -128,6 +134,7 @@ function needKey(need: Need): string {
     case "question":
     case "held":
     case "review":
+    case "closed":
       return `ticket:${need.ticket.number}`;
     default:
       return need.id;
