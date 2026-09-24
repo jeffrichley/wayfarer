@@ -1,10 +1,10 @@
-"""One ticket's session."""
+"""One ticket's session: stop it, or answer what it asked."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Response
 
-from wayfarer.models import Retry
+from wayfarer.models import Answer, Retry
 from wayfarer.routes import Wired
 
 router = APIRouter()
@@ -20,3 +20,9 @@ async def stop(number: int, services: Wired) -> Response:
 async def retry(number: int, retry: Retry, services: Wired) -> Response:
     """Retry a Held ticket, continuing where its session stopped or starting over."""
     return services.accept(services.cascades.retry(number, retry.start))
+
+
+@router.post("/api/tickets/{number}/answer", status_code=202)
+async def answer(number: int, answer: Answer, services: Wired) -> Response:
+    """Answer the ticket's question, which resumes its session."""
+    return services.accept(services.asker.answer(number, answer.answers))

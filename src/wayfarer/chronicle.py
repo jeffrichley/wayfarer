@@ -24,8 +24,9 @@ otherwise. A person's movement is "you" for the token's own login, and names
 any other.
 
 A retry is a Held ticket cleared with a session after it; whether it started
-over is that session's purpose. The asked gist and the held reason are left null:
-their sources are #42 and the comments a hold leaves.
+over is that session's purpose. The asked gist is the question comment's first
+question (#42). The held reason is left null: its source is the comments a hold
+leaves.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Literal
 
+from wayfarer.asking import gist_before
 from wayfarer.merge_queue import LANDED_MARKER
 from wayfarer.models import (
     Answered,
@@ -120,7 +122,10 @@ class _Telling:
                 by = self._who(e.subject)
                 return self._line(number, e, Taken(kind="taken", ticket=ticket, by=by))
             case "LabeledEvent", label if label == ASKED:
-                return self._line(number, e, Asked(kind="asked", ticket=ticket, gist=None))
+                # Quoted from the question comment posted just before the label (#42).
+                at = next(i for i, told in enumerate(timeline) if told is e)
+                asked = Asked(kind="asked", ticket=ticket, gist=gist_before(timeline, at))
+                return self._line(number, e, asked)
             case "LabeledEvent", label if label == HELD:
                 return self._line(number, e, Held(kind="held", ticket=ticket, reason=None))
             case "UnlabeledEvent", label if label == ASKED:

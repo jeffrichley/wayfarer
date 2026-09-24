@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 from collections.abc import Awaitable, Callable, Coroutine
 from datetime import UTC, datetime
@@ -47,6 +48,7 @@ from waystation import (
     StageError,
 )
 
+from wayfarer.asking import ANSWER, QUESTION, RESUMED, answers_for_resume, cold_prompt
 from wayfarer.endings import STOPPED, Endings, fault, what_happened
 from wayfarer.github import GitHub, GitHubError
 from wayfarer.models import (
@@ -68,7 +70,7 @@ from wayfarer.settings import Settings
 from wayfarer.store import Fault, Purpose, SessionRow, Store
 from wayfarer.stream import Store as Stream
 
-__all__ = ["QUESTION", "Asked", "Cascades", "Gate", "SessionsFor"]
+__all__ = ["Asked", "Cascades", "Gate", "SessionsFor"]
 
 _log = logging.getLogger(__name__)
 
@@ -79,9 +81,6 @@ Asked = Callable[[int, str, bytes | None], Awaitable[bool]]
 """Whether a session that ended without reporting did so to ask a question: given its
 ticket, its run id and the question file it carried out, if any. True takes the
 ending over, and the ticket is not Held (#42)."""
-
-QUESTION = ".wayfarer/question.json"
-"""Where a session that ends to ask leaves its question, under its sandbox's home (#42)."""
 
 # Environment failures that happen around a session rather than inside it.
 _ENVIRONMENT = (PreflightError, StageError, OSError, TimeoutError, GitHubError)
@@ -245,13 +244,7 @@ class Cascades:
         """A session going on from where the ticket's last one stopped: from its pull
         request's head, or else its preservation branch, resuming its conversation."""
         last = self._last(ticket.number)
-        pull = ticket.pull_request
-        if pull is not None and not pull.merged:
-            base = await self._endings.branch_head(pull.branch)
-        elif last is not None and (kept := await self._endings.kept(last.run_id)):
-            base = kept
-        else:
-            base = await self._endings.effort_head(effort)
+        base = await self._where_it_stopped(ticket, effort, last.run_id if last else None)
         why = (last.why if last else None) or _HELD_FOR_A_PERSON
         cold = _CONTINUE_COLD.format(why=why)
         if last is None:
@@ -264,6 +257,34 @@ class Cascades:
             cold=cold,
             purpose=Purpose.CONTINUE,
         )
+
+    async def _resuming(
+        self, sessions: Sessions, ticket: Ticket, effort: Effort
+    ) -> RunSpec[Outcome]:
+        """A session carrying on the conversation that asked, from where it stopped, with
+        the answer carried in for the image's hook to hand back (#42)."""
+        asking = ticket.question
+        assert asking is not None, "only an answered question is resumed"
+        answers = answers_for_resume(asking)
+        return sessions.resume(
+            ticket.number,
+            asking.session,
+            base=await self._where_it_stopped(ticket, effort, asking.session),
+            prompt=RESUMED,
+            cold=cold_prompt(asking, answers),
+            purpose=Purpose.RESUME,
+            files_in={ANSWER: json.dumps(answers).encode()},
+        )
+
+    async def _where_it_stopped(self, ticket: Ticket, effort: Effort, run_id: str | None) -> str:
+        """Where a session going on from session `run_id` starts: its pull request's head,
+        or else the branch its work was kept on, or else the effort branch's head."""
+        pull = ticket.pull_request
+        if pull is not None and not pull.merged:
+            return await self._endings.branch_head(pull.branch)
+        if run_id is not None and (kept := await self._endings.kept(run_id)):
+            return kept
+        return await self._endings.effort_head(effort)
 
     def _last(self, ticket: int) -> SessionRow | None:
         """The ticket's last session that built it, not one that resolved a conflict."""
@@ -332,7 +353,10 @@ class Cascades:
                 )
 
     async def _start(self, effort: int, tickets: list[Ticket], store: Store) -> bool:
-        """Claim every ticket it may start while the cap has room; False if it had to pause."""
+        """Resume every answered ticket, then claim every ticket it may start, while the cap
+        has room; False if it had to pause."""
+        if not await self._resume_answered(effort, tickets, store):
+            return False
         for ticket in self._startable(tickets, store):
             if len(self._running) + len(self._claimed) >= self._settings.cap:
                 break
@@ -354,6 +378,50 @@ class Cascades:
             # The write raised the signal, so the read that shows the claim is coming.
             self._claimed.add(ticket.number)
         return True
+
+    async def _resume_answered(self, number: int, tickets: list[Ticket], store: Store) -> bool:
+        """Resume every answered ticket while the cap has room, before any fresh start, since
+        each was taken first; False if it had to pause. A resume is a continuation, never
+        the ticket's automatic start, and runs only while the cascade does (#42)."""
+        effort = self._stream.get(f"effort:{number}")
+        assert isinstance(effort, Effort), "the cascade decides only on a readable effort"
+        for ticket in self._answered(tickets, store):
+            if len(self._running) + len(self._claimed) >= self._settings.cap:
+                break
+            if await self._gate.admit() is not None:
+                await self._gate_refused(number)
+                return False
+            self._begin(ticket.number, self._run(ticket, effort, self._resuming))
+        return True
+
+    def _answered(self, tickets: list[Ticket], store: Store) -> list[Ticket]:
+        """The open tickets whose question a person answered and that nothing has carried
+        on from yet: the label is off, and no session runs on them."""
+        return [
+            ticket
+            for ticket in tickets
+            if ticket.open
+            and ticket.state is not TicketState.ASKED
+            and HELD not in ticket.labels
+            and ticket.number not in self._running
+            and self._still_asking(ticket, store)
+        ]
+
+    def _still_asking(self, ticket: Ticket, store: Store) -> bool:
+        """Whether `ticket`'s question was answered and its last session is still the one
+        that asked it. A session the environment failed never ran, so it carried nothing
+        on: a resume that failed so is resumed again, answer and all."""
+        asking = ticket.question
+        if asking is None or not asking.answered:
+            return False
+        ran = [
+            row
+            for row in store.sessions()
+            if row.ticket == ticket.number
+            and row.purpose is not Purpose.RESOLVE
+            and row.fault is not Fault.ENVIRONMENT
+        ]
+        return bool(ran) and ran[-1].run_id == asking.session and ran[-1].ended is not None
 
     async def _gate_refused(self, effort: int) -> None:
         """The gate refused: pause, and show the one item it raised. Running sessions carry on."""
@@ -420,9 +488,16 @@ class Cascades:
             if whose is Fault.ENVIRONMENT:
                 await self._released(ticket, effort, why)
                 return
-            if isinstance(result.failure, OutcomeMissing) and await self._asked(
-                ticket.number, result.run_id, sessions.carried(result.run_id, QUESTION)
-            ):
+            try:
+                if isinstance(result.failure, OutcomeMissing) and await self._asked(
+                    ticket.number, result.run_id, sessions.carried(result.run_id, QUESTION)
+                ):
+                    return
+            except _ENVIRONMENT as error:
+                # Its question never reached GitHub, which is all the state a question has,
+                # so the session counts as never having run (#42).
+                store.failed(result.run_id, Fault.ENVIRONMENT, _detail(error))
+                await self._released(ticket, effort, _detail(error))
                 return
         row = store.session(result.run_id)
         try:
@@ -445,9 +520,17 @@ class Cascades:
         frontier, pause the cascade and raise one item, as a refused start gate does.
 
         A person's retry is held again instead: its ticket spent its automatic start
-        long ago, so on the frontier nothing would ever start it."""
-        retried = ticket.number in self.record().built()
-        where = "held it again" if retried else "the ticket went back on the frontier"
+        long ago, so on the frontier nothing would ever start it. A resume is left as it
+        was, still claimed and answered, and resumes again when the cascade does (#42)."""
+        store = self.record()
+        resuming = self._still_asking(ticket, store)
+        retried = not resuming and ticket.number in store.built()
+        if resuming:
+            where = "it resumes when the cascade does"
+        elif retried:
+            where = "held it again"
+        else:
+            where = "the ticket went back on the frontier"
         reason = (
             f"A session on #{ticket.number} failed for a reason that was not its own, so {where}."
         )
@@ -461,6 +544,8 @@ class Cascades:
                 failed=[GateCheck(name="A session can run", passed=False, detail=detail)],
             )
         )
+        if resuming:
+            return
         try:
             if retried:
                 await self._endings.hold_saying(ticket.number, f"A retry could not run: {detail}")

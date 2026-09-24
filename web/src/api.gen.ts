@@ -239,6 +239,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tickets/{number}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer
+         * @description Answer the ticket's question, which resumes its session.
+         */
+        post: operations["answer_api_tickets__number__answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tickets/{number}/retry": {
         parameters: {
             query?: never;
@@ -284,6 +304,19 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Answer
+         * @description A person's answer to a ticket's question, sent from Wayfarer.
+         */
+        Answer: {
+            /**
+             * Answers
+             * @description An answer for each question, keyed by the question: an option's label, or words of the person's own.
+             */
+            answers: {
+                [key: string]: string;
+            };
+        };
+        /**
          * Answered
          * @description A person answered a ticket's question, and its session resumed.
          */
@@ -318,7 +351,7 @@ export interface components {
         Asked: {
             /**
              * Gist
-             * @description The question's gist, quoted as the session wrote it: one sentence, since a line is at most two (#22). Null until asking by ending gives it (#42).
+             * @description The question's gist, quoted as the session wrote it: one sentence, since a line is at most two (#22). Null when no question comment came before it.
              */
             gist: string | null;
             /**
@@ -327,6 +360,32 @@ export interface components {
              */
             kind: "asked";
             ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * Asking
+         * @description A ticket's latest question, as its question comment on GitHub holds it. That
+         *     comment and the `wayfarer:asked` label are the whole of the state (ADR-0002).
+         */
+        Asking: {
+            /**
+             * Answered
+             * @description The label came off after the question was posted: a person answered, and the session resumes.
+             */
+            answered: boolean;
+            /**
+             * Answers
+             * @description Each question's answer, keyed by the question; null until answered. Answered on GitHub by hand, every comment after the question answers each question.
+             */
+            answers: {
+                [key: string]: string;
+            } | null;
+            /** Questions */
+            questions: components["schemas"]["Question"][];
+            /**
+             * Session
+             * @description The run id of the session that asked.
+             */
+            session: string;
         };
         /**
          * Beat
@@ -499,6 +558,19 @@ export interface components {
          * @enum {string}
          */
         Checks: "passing" | "pending" | "failing";
+        /**
+         * Choice
+         * @description One answer a session offered.
+         */
+        Choice: {
+            /**
+             * Description
+             * @description What picking it means, as the session put it.
+             */
+            description: string;
+            /** Label */
+            label: string;
+        };
         /**
          * ChronicleLine
          * @description One line of the chronicle: one thing that moved a ticket, with what it directly
@@ -974,7 +1046,7 @@ export interface components {
             effort: components["schemas"]["Mention"];
             /**
              * Gist
-             * @description The question's gist; null until asking gives it.
+             * @description The question's gist, its first question; null when its question comment is missing.
              */
             gist: string | null;
             /**
@@ -1148,6 +1220,29 @@ export interface components {
              * Format: date-time
              */
             opened: string;
+        };
+        /**
+         * Question
+         * @description One thing a session asked: `AskUserQuestion` carries one to four.
+         */
+        Question: {
+            /**
+             * Header
+             * @description A short label for it, as the session gave one.
+             */
+            header: string;
+            /**
+             * Multi Select
+             * @description Whether more than one option may be picked.
+             */
+            multi_select: boolean;
+            /** Options */
+            options: components["schemas"]["Choice"][];
+            /**
+             * Question
+             * @description The question, whole; its answer is keyed by it.
+             */
+            question: string;
         };
         /**
          * ReadyToShip
@@ -1334,6 +1429,8 @@ export interface components {
              */
             place_in_line: number | null;
             pull_request: components["schemas"]["PullRequest"] | null;
+            /** @description Its latest question, from its question comment: what the session asked while it is Asked, and the answer once a person gave one; null if it never asked (#42). */
+            question: components["schemas"]["Asking"] | null;
             state: components["schemas"]["TicketState"];
             /** Title */
             title: string;
@@ -1746,6 +1843,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_api_tickets__number__answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Answer"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

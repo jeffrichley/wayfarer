@@ -64,7 +64,7 @@ class Asked(BaseModel):
     ticket: Mention
     gist: str | None = Field(
         description="The question's gist, quoted as the session wrote it: one sentence, "
-        "since a line is at most two (#22). Null until asking by ending gives it (#42)."
+        "since a line is at most two (#22). Null when no question comment came before it."
     )
 
 

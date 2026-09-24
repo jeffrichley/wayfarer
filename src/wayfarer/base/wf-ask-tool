@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+"""wf-ask-tool: a stub MCP server, there only so a session can ask (#19, #42).
+
+In print mode Claude Code offers `AskUserQuestion` only when a permission prompt
+tool is named, and then routes that tool alone to it. Wayfarer names this one's
+`ask` tool, so the session can ask; `wf-ask` defers every such call before it
+would get here. Should one ever arrive, it is denied, and the session carries on
+without an answer rather than waiting on one that cannot come.
+
+It speaks just enough of MCP over stdio for Claude Code to list and call `ask`:
+one JSON-RPC message per line.
+
+It is the system Python's, named by path, so a repo's own toolchain never
+changes what runs it.
+"""
+
+import json
+import sys
+from typing import Any
+
+_ASK = {
+    "name": "ask",
+    "description": "Wayfarer's permission prompt tool. Asking is by ending, so it denies.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "tool_name": {"type": "string"},
+            "input": {"type": "object"},
+            "tool_use_id": {"type": "string"},
+        },
+    },
+}
+
+_DENIED = {
+    "behavior": "deny",
+    "message": "Nobody can answer while the session runs. Proceed, and record the assumption.",
+}
+
+
+def _result(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
+    """The result for a request, or None for a method this stub does not have."""
+    if method == "initialize":
+        return {
+            "protocolVersion": params.get("protocolVersion", "2025-06-18"),
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "wayfarer", "version": "1"},
+        }
+    if method == "tools/list":
+        return {"tools": [_ASK]}
+    if method == "tools/call":
+        return {"content": [{"type": "text", "text": json.dumps(_DENIED)}]}
+    if method == "ping":
+        return {}
+    return None
+
+
+def main() -> None:
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        message = json.loads(line)
+        if "id" not in message:
+            continue  # A notification, which is never answered.
+        result = _result(message.get("method", ""), message.get("params") or {})
+        reply: dict[str, Any] = {"jsonrpc": "2.0", "id": message["id"]}
+        if result is None:
+            reply["error"] = {"code": -32601, "message": "Method not found"}
+        else:
+            reply["result"] = result
+        print(json.dumps(reply), flush=True)
+
+
+if __name__ == "__main__":
+    main()

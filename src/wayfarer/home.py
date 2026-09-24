@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 
+from wayfarer.asking import gist
 from wayfarer.github import Repo
 from wayfarer.models import (
     Asked,
@@ -281,7 +282,7 @@ def _need(
                 holds_up=holds_up,
                 starts=starts,
                 since=waited("asked"),
-                gist=None,
+                gist=None if ticket.question is None else gist(ticket.question.questions),
             )
         case TicketState.HELD:
             return NeedHeld(

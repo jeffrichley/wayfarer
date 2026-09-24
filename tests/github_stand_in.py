@@ -411,8 +411,11 @@ class GitHub:
 
     def unlabel(self, issue: Issue, name: str, by: str | None = None) -> None:
         with self._lock:
-            issue.labels.remove(name)
-            self._happened(issue, "UnlabeledEvent", by or self.viewer, label=name)
+            self._unlabel(issue, name, by or self.viewer)
+
+    def _unlabel(self, issue: Issue, name: str, by: str) -> None:
+        issue.labels.remove(name)
+        self._happened(issue, "UnlabeledEvent", by, label=name)
 
     def comment(self, issue: Issue, body: str, by: str | None = None) -> None:
         with self._lock:
@@ -481,6 +484,11 @@ class GitHub:
         there, as GitHub refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
+
+    def unforbid(self, path: str) -> None:
+        """Let `path` be read and written again, as a token granted the permission is."""
+        with self._lock:
+            self._forbidden.remove(path)
 
     def meanwhile(self, change: Callable[[], object]) -> None:
         """Make `change` just after Wayfarer's next write, as a person racing it would."""
@@ -627,8 +635,7 @@ class GitHub:
                 issue = self._live.issues[number]
                 if label_name not in issue.labels:
                     return JSONResponse({"message": "Label does not exist"}, status_code=404)
-                issue.labels.remove(label_name)
-                self._happened(issue, "UnlabeledEvent", self.viewer, label=label_name)
+                self._unlabel(issue, label_name, self.viewer)
                 return JSONResponse([{"name": n} for n in issue.labels])
 
         @app.patch("/repos/{owner}/{name}/pulls/{number}")
@@ -734,6 +741,9 @@ def _rest_issue(issue: Issue) -> dict[str, Any]:
         "state": issue.state.lower(),
         "labels": [{"name": n} for n in issue.labels],
         "assignees": [{"login": a} for a in issue.assignees],
+        # As GitHub's does, so the listing changes with every event, even one that puts
+        # a label back as it was when the poll last looked.
+        "updated_at": issue.timeline[-1].at.isoformat() if issue.timeline else None,
     }
 
 

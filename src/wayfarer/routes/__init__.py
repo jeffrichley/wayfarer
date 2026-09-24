@@ -16,6 +16,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request, Response
 
+from wayfarer.asking import Asker
 from wayfarer.cascade import Cascades
 from wayfarer.gate import StartGate
 from wayfarer.home import HomePage
@@ -32,6 +33,7 @@ class Services:
     """What the routers reach: the services one app runs on, one sorted line each,
     so two tickets adding a service insert at different places."""
 
+    asker: Asker
     cascades: Cascades
     efforts: Efforts
     home: HomePage

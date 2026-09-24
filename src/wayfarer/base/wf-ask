@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+"""wf-ask: how a session asks a person something, by ending (#19, #42).
+
+Claude Code runs this before every `AskUserQuestion` call, as a PreToolUse hook
+(the base's user settings name it). It is handed the call on stdin.
+
+With no answer waiting, it writes the call's questions to
+`$HOME/.wayfarer/question.json` and defers the call: the session ends, keeping
+the call pending in its transcript, and its slot frees. Wayfarer carries the file
+out as the agent ends and posts the question on the ticket.
+
+A resume carries the answer in at `$HOME/.wayfarer/answer.json`, one answer per
+question's text, and Claude Code fires this hook again on the same pending call.
+Then it allows the call with the answers filled in, and deletes the file, so a
+later question in the same session is asked and not answered with an old answer.
+It never reads GitHub: Wayfarer hands it the answer.
+
+The question is written here, where the call's input is whole; only the
+transcript's path can lag the conversation, and Wayfarer finds the transcript
+itself as the agent ends.
+
+It is the system Python's, named by path, so a repo's own toolchain never
+changes what runs it.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def main() -> None:
+    call = json.load(sys.stdin)
+    asked = call.get("tool_input") or {}
+    kept = Path(os.environ["HOME"]) / ".wayfarer"
+    answer = kept / "answer.json"
+    if answer.is_file():
+        answers = json.loads(answer.read_text())
+        answer.unlink()
+        decision = {
+            "permissionDecision": "allow",
+            "updatedInput": {**asked, "answers": answers},
+        }
+    else:
+        kept.mkdir(parents=True, exist_ok=True)
+        (kept / "question.json").write_text(json.dumps(asked))
+        decision = {"permissionDecision": "defer"}
+    json.dump({"hookSpecificOutput": {"hookEventName": "PreToolUse", **decision}}, sys.stdout)
+
+
+if __name__ == "__main__":
+    main()

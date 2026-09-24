@@ -68,6 +68,9 @@ class Purpose(StrEnum):
     """A person's retry of a Held ticket, carrying on where its last session stopped."""
     START_OVER = "start_over"
     """A person's retry of a Held ticket, afresh from the effort branch's head."""
+    RESUME = "resume"
+    """An answered question's session, carrying on the conversation that asked it. A
+    continuation, never the ticket's automatic start (#42)."""
 
 
 class Fault(StrEnum):

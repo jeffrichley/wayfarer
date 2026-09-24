@@ -15,8 +15,10 @@ settings a test gives.
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -31,6 +33,7 @@ from waystation.testing import ScriptedAgent
 from conftest import Stream, post, served
 from github_stand_in import TOKEN, GitHub, Issue
 from wayfarer.app import create_app
+from wayfarer.asking import QUESTION
 from wayfarer.github import GitHub as Client
 from wayfarer.github import Repo
 from wayfarer.models import EnvironmentFailure, GateCheck, GateStatus
@@ -223,14 +226,18 @@ def served_with(
     items = Items(chosen.stream_backlog)
 
     def sessions(store: Store) -> Sessions:
+        # A home of its own for each session, as each container starts empty, and never
+        # the person's: a session carries files out of its home and into it.
+        home = Path(tempfile.mkdtemp(prefix="home-", dir=data.parent))
         return Sessions(
             clone,
             store,
             Repo(github.owner, github.name),
             agent=agent,
-            sandbox=NoSandbox(),
+            sandbox=NoSandbox(env={"HOME": str(home), "PATH": os.environ["PATH"]}),
             settings=chosen,
             stream=items,
+            carry_out=[QUESTION],
         )
 
     app = create_app(

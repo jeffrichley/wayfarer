@@ -60,7 +60,7 @@ def test_a_repo_with_a_layer_gets_an_image_built_on_click_with_output_streamed(
     assert _exists(finished["tag"])
 
 
-def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_owner(
+def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_a_non_root_owner_and_asking(
     wayfarer: Launcher, clone: Path, built_tags: list[str]
 ) -> None:
     url = wayfarer.start().url()
@@ -73,6 +73,7 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
         "mattpocock-skills at its pin",
         "wf-test runs and reports",
         "a non-root user owns the workspace",
+        "a session can ask by ending",
     }
 
 
@@ -83,6 +84,11 @@ def test_a_new_tag_is_probed_for_the_cli_the_plugin_the_wrapper_and_a_non_root_o
         ("RUN rm -rf /home/agent/.claude/plugins\n", "mattpocock-skills at its pin"),
         ("USER root\nRUN rm /usr/local/bin/wf-test\nUSER agent\n", "wf-test runs and reports"),
         ("RUN rm /home/agent/.local/bin/claude\n", "Claude Code at its pin"),
+        ("RUN echo '{}' > /home/agent/.claude/settings.json\n", "a session can ask by ending"),
+        (
+            "USER root\nRUN rm /usr/local/bin/wf-ask-tool\nUSER agent\n",
+            "a session can ask by ending",
+        ),
     ],
 )
 def test_an_image_that_fails_its_probe_is_never_tagged_for_a_session(
