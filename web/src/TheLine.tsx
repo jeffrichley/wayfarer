@@ -124,7 +124,14 @@ function row(need: Need): Row {
 }
 
 function needKey(need: Need): string {
-  return "holds_up" in need ? `ticket:${need.ticket.number}` : need.id;
+  switch (need.kind) {
+    case "question":
+    case "held":
+    case "review":
+      return `ticket:${need.ticket.number}`;
+    default:
+      return need.id;
+  }
 }
 
 export function TheLine() {

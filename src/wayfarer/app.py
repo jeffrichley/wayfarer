@@ -36,7 +36,7 @@ from wayfarer.routes import gate as gate_routes
 from wayfarer.routes import health as health_routes
 from wayfarer.routes import home as home_routes
 from wayfarer.routes import image as image_routes
-from wayfarer.routes import sessions as sessions_routes
+from wayfarer.routes import restart as restart_routes
 from wayfarer.routes import tickets as tickets_routes
 from wayfarer.sessions import Sessions
 from wayfarer.settings import Settings
@@ -172,7 +172,7 @@ def create_app(
     app.include_router(health_routes.router)
     app.include_router(home_routes.router)
     app.include_router(image_routes.router)
-    app.include_router(sessions_routes.router)
+    app.include_router(restart_routes.router)
     app.include_router(tickets_routes.router)
     page.include(app)
     return app
