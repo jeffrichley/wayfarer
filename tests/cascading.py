@@ -26,7 +26,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from waystation import NoSandbox
+from waystation import AgentProvider, NoSandbox
 from waystation.agents import AgentCommand, AgentEvent
 from waystation.testing import ScriptedAgent
 
@@ -250,6 +250,15 @@ def served_with(
         containers=containers or Containers(),
     )
     with served(app, items) as url:
+        yield url
+
+
+@contextmanager
+def playing(tmp_path: Path, github: GitHub, agent: AgentProvider) -> Iterator[str]:
+    """Wayfarer serving a fresh clone whose every session `agent` plays; its URL."""
+    with served_with(
+        host_clone(tmp_path, github), tmp_path / "data", github, lambda _: agent, Gate()
+    ) as url:
         yield url
 
 

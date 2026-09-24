@@ -55,6 +55,7 @@ from waystation.results import AgentUsage
 
 from wayfarer.asking import ASKING, QUESTION
 from wayfarer.beats import fold
+from wayfarer.changes import changed
 from wayfarer.events import (
     AgentEnded,
     OutcomeSaid,
@@ -94,9 +95,12 @@ def _now() -> datetime:
 
 
 def replay(row: SessionRow, stream: Stream) -> None:
-    """Put a recorded session's beats on `stream`, folded from its file as they were live."""
-    for beat in fold(row.run_id, read_events(row.event_file)):
+    """Put a recorded session's beats and changes on `stream`, folded from its file as
+    they were live."""
+    events = read_events(row.event_file)
+    for beat in fold(row.run_id, events):
         stream.upsert(beat)
+    stream.upsert(changed(row.run_id, events))
 
 
 class Sessions:
@@ -440,7 +444,8 @@ class _Recorder(HookBundle):
         self._tell()
 
     def _tell(self) -> None:
-        """Put the session's beats as they now stand on the stream (ADR-0004)."""
+        """Put the session's beats and changes as they now stand on the stream (ADR-0004)."""
+        self._stream.upsert(changed(self._run_id, self._events))
         beats = fold(self._run_id, self._events)
         for beat in beats:
             # An unchanged beat is not sent again (stream.Store.upsert).
