@@ -23,8 +23,8 @@ pytestmark = pytest.mark.git
 
 
 @pytest.fixture
-def clone(tmp_path: Path) -> Path:
-    return host_clone(tmp_path)
+def clone(tmp_path: Path, github: GitHub) -> Path:
+    return host_clone(tmp_path, github)
 
 
 @pytest.fixture
@@ -123,11 +123,13 @@ def test_the_graph_says_how_long_a_ticket_has_built_and_that_the_next_waits_on_a
         eventually(lambda: app.started() == [first.number])
         seen.item(_ticket(first), state="building")
         graph = f"graph:{effort.number}"
-        # The slot is taken from the claim, before the session is building.
+        # The slot is taken from the claim, before the session is building; how long
+        # it has built is known once its session has started.
         seen.until(
             lambda items: (
                 graph in items
                 and items[graph]["cards"][0]["state"] == "building"
+                and items[graph]["cards"][0]["since"] is not None
                 and items[graph]["cards"][1]["at_cap"]
             )
         )

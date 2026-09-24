@@ -19,6 +19,7 @@ from waystation import DockerSandbox, SandboxBackend
 
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
+from wayfarer.endings import Endings
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
 from wayfarer.graph import Graphs
@@ -122,7 +123,14 @@ def create_app(
 
     efforts = Efforts(github, store, settings, line=queue.line, telling=tell)
     cascades = Cascades(
-        efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
+        efforts,
+        github,
+        store,
+        settings,
+        gate or start_gate,
+        sessions or in_image,
+        runs,
+        Endings(repo, github, settings),
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
     graphs = Graphs(store, None if github.repo is None else cascades.record)

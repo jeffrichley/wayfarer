@@ -4,10 +4,13 @@ It runs against the GitHub stand-in, with Waystation's token-free `ScriptedAgent
 and its `NoSandbox` in place of Claude Code in Docker, so a session really runs
 and nothing spends anything. That is the one substitution the console script
 cannot make, because Wayfarer has no unsandboxed mode, not even behind a flag
-(ADR-0005). Everything else is HTTP.
+(ADR-0005). Everything else is HTTP. The clone's origin is the stand-in's git
+remote, where each effort's and ticket's branches are pushed.
 
-Every session is held until its test lets its ticket go, so a test decides when
-each one ends, and every start is written down where the test can count it.
+`serving` serves a Wayfarer whose every session is held until its test lets its
+ticket go, so a test decides when each one ends, and every start is written down
+where the test can count it; `served_with` serves one with whatever agent and
+settings a test gives.
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ from wayfarer.app import create_app
 from wayfarer.github import GitHub as Client
 from wayfarer.github import Repo
 from wayfarer.models import EnvironmentFailure, GateCheck, GateStatus
-from wayfarer.sessions import Sessions
+from wayfarer.sessions import AgentFor, Sessions
 from wayfarer.settings import Settings
 from wayfarer.store import Store
 from wayfarer.stream import Store as Items
@@ -45,24 +48,28 @@ def git(cwd: Path, *args: str) -> str:
     ).stdout
 
 
-def host_clone(tmp_path: Path) -> Path:
-    """A clone with one commit and an identity, as a session's host repo."""
+def host_clone(tmp_path: Path, github: GitHub) -> Path:
+    """A clone with one commit and an identity, as a session's host repo, whose origin is
+    the stand-in's git remote."""
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "--quiet", "--bare", "--initial-branch=main", str(remote))
     repo = tmp_path / "clone"
-    repo.mkdir()
-    git(repo, "init", "--quiet", "--initial-branch=main")
-    git(repo, "remote", "add", "origin", "https://github.com/octo/widgets.git")
+    git(tmp_path, "clone", "--quiet", str(remote), str(repo))
     git(repo, "config", "user.name", "Ada")
     git(repo, "config", "user.email", "ada@example.com")
     (repo / "README.md").write_text("widgets\n")
     git(repo, "add", "README.md")
     git(repo, "commit", "--quiet", "-m", "first")
+    git(repo, "push", "--quiet", "origin", "HEAD:main")
+    github.git = remote
     return repo
 
 
 @dataclass(frozen=True)
 class _Held:
-    """The scripted agent, writing its ticket down as it starts, leaving some work
-    uncommitted, and then holding until the test lets that ticket go."""
+    """The scripted agent, saying so and writing its ticket down as it starts, as a real
+    one narrates at once, leaving some work uncommitted, and then holding until the
+    test lets that ticket go."""
 
     released: Path
     started: Path
@@ -75,6 +82,7 @@ class _Held:
         played = ScriptedAgent(outcome=_DONE).command(prompt, outcome_schema)
         let_go = shlex.quote(str(self.released / ticket))
         held = [
+            f"printf 'Reading ticket {ticket}.\\n'",
             f"printf 'work on {ticket}\\n' > work-{ticket}.txt",
             f"printf '%s\\n' {ticket} >> {shlex.quote(str(self.started))}",
             f"while [ ! -e {let_go} ]; do sleep 0.05; done",
@@ -166,40 +174,17 @@ def serving(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
         for context in running:
             context.__exit__(None, None, None)
         running.clear()
-        settings = Settings(
-            github_api=github.api,
-            github_token=TOKEN,
-            data_dir=tmp_path / "data",
-            cap=cap,
-            # Brisk, so a change made on GitHub is seen within a test's patience.
-            poll_active=0.1,
-            poll_idle=0.1,
-        )
         gate = Gate()
         agent = _Held(released, started)
-        items = Items(settings.stream_backlog)
-
-        def sessions(store: Store) -> Sessions:
-            return Sessions(
-                clone,
-                store,
-                Repo(github.owner, github.name),
-                agent=agent,
-                sandbox=NoSandbox(),
-                settings=settings,
-                stream=items,
-            )
-
-        app = create_app(
+        context = served_with(
             clone,
-            settings,
-            Client(Repo(github.owner, github.name), settings),
-            items,
-            sessions=sessions,
-            gate=gate,
-            containers=containers or Containers(),
+            tmp_path / "data",
+            github,
+            lambda _: agent,
+            gate,
+            containers=containers,
+            cap=cap,
         )
-        context = served(app, items)
         url = context.__enter__()
         running.append(context)
         return Wayfarer(url, released, started, gate)
@@ -212,6 +197,53 @@ def serving(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
             (released / str(ticket)).touch()
         for context in running:
             context.__exit__(None, None, None)
+
+
+@contextmanager
+def served_with(
+    clone: Path,
+    data: Path,
+    github: GitHub,
+    agent: AgentFor,
+    gate: Gate,
+    containers: Containers | None = None,
+    **settings: Any,
+) -> Iterator[str]:
+    """Wayfarer serving `clone`, its store in `data`, its sessions run by `agent`; its URL.
+    `settings` are the ones a test changes; the poll is brisk, so a change made on GitHub
+    is seen within a test's patience."""
+    chosen = Settings(
+        github_api=github.api,
+        github_token=TOKEN,
+        data_dir=data,
+        poll_active=0.1,
+        poll_idle=0.1,
+        **settings,
+    )
+    items = Items(chosen.stream_backlog)
+
+    def sessions(store: Store) -> Sessions:
+        return Sessions(
+            clone,
+            store,
+            Repo(github.owner, github.name),
+            agent=agent,
+            sandbox=NoSandbox(),
+            settings=chosen,
+            stream=items,
+        )
+
+    app = create_app(
+        clone,
+        chosen,
+        Client(Repo(github.owner, github.name), chosen),
+        items,
+        sessions=sessions,
+        gate=gate,
+        containers=containers or Containers(),
+    )
+    with served(app, items) as url:
+        yield url
 
 
 def eventually(holds: Callable[[], bool], timeout: float = 20.0) -> None:

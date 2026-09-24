@@ -218,6 +218,25 @@ def test_who_acted_is_read_from_the_kind_of_event_and_never_from_the_token(
     )
 
 
+def test_a_retry_says_whether_it_continued_or_started_over(
+    wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
+) -> None:
+    spec, (kept, fresh) = github.effort("Widgets", tickets=2)
+    kept.title, fresh.title = "Kept", "Fresh"
+    for ticket, purpose in ((kept, Purpose.CONTINUE), (fresh, Purpose.START_OVER)):
+        github.label(ticket, HELD)
+        github.unlabel(ticket, HELD)
+        _session(store, github, ticket, purpose)
+    url = wayfarer.start(env=_env(data_dir)).url()
+
+    lines = _chronicle(url, spec, ["held Kept", "retried Kept", "held Fresh", "retried Fresh"])
+
+    assert [line["moved"]["over"] for line in lines if line["moved"]["kind"] == "retried"] == [
+        False,
+        True,
+    ]
+
+
 def test_the_chronicle_rebuilds_identically_after_a_restart(
     wayfarer: Launcher, github: GitHub, store: Store, data_dir: Path
 ) -> None:

@@ -30,8 +30,8 @@ pytestmark = pytest.mark.git
 
 
 @pytest.fixture
-def clone(tmp_path: Path) -> Path:
-    return host_clone(tmp_path)
+def clone(tmp_path: Path, github: GitHub) -> Path:
+    return host_clone(tmp_path, github)
 
 
 @pytest.fixture

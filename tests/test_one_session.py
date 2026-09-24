@@ -43,7 +43,7 @@ def _sessions(host_repo: Path, store: Store, agent: AgentProvider) -> Sessions:
         host_repo,
         store,
         Repo("octo", "widgets"),
-        agent=agent,
+        agent=lambda _: agent,
         sandbox=NoSandbox(),
         settings=Settings(),
         stream=stream.Store(backlog=1000),
