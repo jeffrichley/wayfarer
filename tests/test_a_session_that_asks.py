@@ -27,7 +27,7 @@ from waystation.agents import AgentCommand, AgentEvent
 from waystation.testing import ScriptedAgent, ScriptedCommit
 
 import cascading
-from cascading import Gate, eventually, origin_clone
+from cascading import Gate, eventually, host_clone
 from conftest import Stream, post
 from github_stand_in import LOGIN, GitHub, Issue
 from wayfarer.asking import ASKED, RESUMED
@@ -177,12 +177,12 @@ class _Wayfarer:
 
 @pytest.fixture
 def serve(tmp_path: Path, github: GitHub) -> Iterator[Any]:
-    clone = origin_clone(tmp_path, github)
+    clone = host_clone(tmp_path, github)
     serving: list[Any] = []
     claude = _Claude(tmp_path)
 
     def start(**settings: Any) -> _Wayfarer:
-        context = cascading.serving(
+        context = cascading.served_with(
             clone, tmp_path / "data", github, claude.agent, Gate(), **settings
         )
         serving.append(context)
