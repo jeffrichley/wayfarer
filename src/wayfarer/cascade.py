@@ -25,11 +25,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from wayfarer.asking import Asker, parse_questions
 from wayfarer.github import GitHub, GitHubError
 from wayfarer.models import (
     Cascade,
@@ -83,7 +82,6 @@ class Cascades:
         self._gate = gate
         self._sessions = sessions
         self._queue = queue
-        self._asker = Asker(github)
         self._running: dict[int, asyncio.Task[Any]] = {}
         # Claimed on GitHub, and waiting for a read to show the claim landed.
         self._claimed: set[int] = set()
@@ -136,25 +134,6 @@ class Cascades:
                 store.session_ended(row.run_id, datetime.now(UTC), None)
         # Still claimed, so still nobody else's to start.
         await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [HELD]})
-
-    async def asked(self, ticket: int, run_id: str, question: bytes | None) -> bool:
-        """Whether session `run_id` on `ticket` ended to ask, as the question file it
-        carried out says; if it did, its question is posted on the ticket and the ticket
-        labelled asked, and the ending is asking's, never a hold (#42)."""
-        if question is None:
-            return False
-        await self._asker.ask(ticket, run_id, parse_questions(question))
-        return True
-
-    async def answer(self, ticket: int, answers: Mapping[str, str]) -> None:
-        """Answer `ticket`'s question as a person would on GitHub, which resumes its
-        session. A ticket that is not waiting on an answer is left as it is."""
-        item = self._stream.get(f"ticket:{ticket}")
-        if not isinstance(item, Ticket) or item.state is not TicketState.ASKED:
-            return
-        if item.question is None or item.question.answered:
-            return
-        await self._asker.answer(ticket, item.question.session, answers)
 
     def close(self) -> None:
         if self._opened is not None:

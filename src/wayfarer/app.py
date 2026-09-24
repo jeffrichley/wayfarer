@@ -17,6 +17,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from waystation import DockerSandbox, SandboxBackend
 
+from wayfarer.asking import Asker
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
@@ -116,6 +117,7 @@ def create_app(
         return chronicle(effort, tickets, history, cascades.record().sessions())
 
     efforts = Efforts(github, store, settings, line=queue.line, telling=tell)
+    asker = Asker(github, store)
     cascades = Cascades(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )
@@ -148,6 +150,7 @@ def create_app(
 
     app = FastAPI(title="Wayfarer", version=running, lifespan=keeping_up)
     app.state.services = Services(
+        asker=asker,
         cascades=cascades,
         efforts=efforts,
         home=home,

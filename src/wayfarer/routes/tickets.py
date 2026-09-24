@@ -19,4 +19,4 @@ async def stop(number: int, services: Wired) -> Response:
 @router.post("/api/tickets/{number}/answer", status_code=202)
 async def answer(number: int, answer: Answer, services: Wired) -> Response:
     """Answer the ticket's question, which resumes its session."""
-    return services.accept(services.cascades.answer(number, answer.answers))
+    return services.accept(services.asker.answer(number, answer.answers))

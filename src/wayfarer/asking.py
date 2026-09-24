@@ -29,7 +29,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError
 
 from wayfarer.github import GitHub
-from wayfarer.models import Asking, Choice, Question
+from wayfarer.models import Asking, Choice, Question, Ticket, TicketState
+from wayfarer.stream import Store as Stream
 
 if TYPE_CHECKING:
     from wayfarer.read_model import Event
@@ -38,6 +39,8 @@ __all__ = [
     "ANSWER",
     "ASKED",
     "QUESTION",
+    "RESUMED",
+    "Asker",
     "answer_comment",
     "gist",
     "latest",
@@ -186,18 +189,32 @@ def _answers(session: str, questions: list[Question], comments: list[str]) -> di
 class Asker:
     """Puts a session's question on its ticket, and a person's answer after it."""
 
-    def __init__(self, github: GitHub) -> None:
+    def __init__(self, github: GitHub, stream: Stream) -> None:
         self._github = github
+        self._stream = stream
 
-    async def ask(self, ticket: int, session: str, questions: Sequence[Question]) -> None:
-        """Post the question comment, then label the ticket asked. The comment comes
-        first, so a read between the two never finds a label with no question."""
-        body = question_comment(session, questions)
+    async def asked(self, ticket: int, run_id: str, question: bytes | None) -> bool:
+        """Whether session `run_id` on `ticket` ended to ask, as the question file it
+        carried out says. If it did, its question is posted on the ticket and the ticket
+        labelled asked, and the ending is this, never a hold.
+
+        The comment comes first, so a read between the two never finds a label with no
+        question."""
+        if question is None:
+            return False
+        body = question_comment(run_id, parse_questions(question))
         await self._github.write("POST", f"/issues/{ticket}/comments", {"body": body})
         await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [ASKED]})
+        return True
 
-    async def answer(self, ticket: int, session: str, answers: Mapping[str, str]) -> None:
-        """Post the answer comment, then take the label off, which is the signal."""
-        body = answer_comment(session, answers)
+    async def answer(self, ticket: int, answers: Mapping[str, str]) -> None:
+        """Answer `ticket`'s question as a person would on GitHub: the answer comment, then
+        the label off, which is the signal. A ticket not waiting on one is left alone."""
+        read = self._stream.get(f"ticket:{ticket}")
+        if not isinstance(read, Ticket) or read.state is not TicketState.ASKED:
+            return
+        if read.question is None or read.question.answered:
+            return
+        body = answer_comment(read.question.session, answers)
         await self._github.write("POST", f"/issues/{ticket}/comments", {"body": body})
         await self._github.write("DELETE", f"/issues/{ticket}/labels/{ASKED}", {})
