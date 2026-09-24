@@ -1,10 +1,7 @@
 """The cascade: arming an effort is the only way a session ever starts.
 
-Each test serves Wayfarer in this process, against the GitHub stand-in, with
-Waystation's token-free `ScriptedAgent` and its `NoSandbox` in place of Claude
-Code in Docker, so a session really runs and nothing spends anything. That is
-the one substitution the console script cannot make, because Wayfarer has no
-unsandboxed mode, not even behind a flag (ADR-0005). Everything else is HTTP.
+Each test serves Wayfarer in this process, against the GitHub stand-in, with its
+sessions really running a scripted agent (`cascading.py`). Everything else is HTTP.
 
 Every session is held until its test lets its ticket go, so a test decides when
 each one ends, and every start is written down where the test can count it.
@@ -13,53 +10,28 @@ each one ends, and every start is written down where the test can count it.
 from __future__ import annotations
 
 import shlex
-import subprocess
-import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import pytest
-from waystation import NoSandbox
 from waystation.agents import AgentCommand, AgentEvent
 from waystation.testing import ScriptedAgent
 
-from conftest import Stream, post, served
-from github_stand_in import LOGIN, TOKEN, GitHub, Issue
-from wayfarer.app import create_app
-from wayfarer.github import GitHub as Client
-from wayfarer.github import Repo
-from wayfarer.models import EnvironmentFailure, GateCheck, GateStatus
-from wayfarer.sessions import Sessions
-from wayfarer.settings import Settings
-from wayfarer.store import Store
-from wayfarer.stream import Store as Items
+import cascading
+from cascading import Gate, eventually, git, origin_clone
+from conftest import Stream, post
+from github_stand_in import LOGIN, GitHub, Issue
 
 pytestmark = pytest.mark.git
 
 _DONE = {"status": "done", "summary": "Built it.", "open_findings": [], "assumptions": []}
 
 
-def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
-    ).stdout
-
-
 @pytest.fixture
-def clone(tmp_path: Path) -> Path:
-    """A clone with one commit and an identity, as a session's host repo."""
-    repo = tmp_path / "clone"
-    repo.mkdir()
-    _git(repo, "init", "--quiet", "--initial-branch=main")
-    _git(repo, "remote", "add", "origin", "https://github.com/octo/widgets.git")
-    _git(repo, "config", "user.name", "Ada")
-    _git(repo, "config", "user.email", "ada@example.com")
-    (repo / "README.md").write_text("widgets\n")
-    _git(repo, "add", "README.md")
-    _git(repo, "commit", "--quiet", "-m", "first")
-    return repo
+def clone(tmp_path: Path, github: GitHub) -> Path:
+    return origin_clone(tmp_path, github)
 
 
 @dataclass(frozen=True)
@@ -89,31 +61,6 @@ class _Held:
         return ScriptedAgent().parse(line)
 
 
-class _Gate:
-    """The start gate, admitting every start unless a test says otherwise. The real
-    one checks Docker and the image, which a session outside Docker never needs."""
-
-    def __init__(self) -> None:
-        self.refusing = False
-        self._check = GateCheck(name="Docker is running", passed=True, detail="It answered.")
-
-    async def admit(self) -> EnvironmentFailure | None:
-        if not self.refusing:
-            return None
-        return EnvironmentFailure(
-            kind="environment",
-            id="environment",
-            reason="No session will start until Docker is running.",
-            failed=[self._check.model_copy(update={"passed": False})],
-        )
-
-    async def status(self) -> GateStatus:
-        raised = await self.admit()
-        return GateStatus(
-            kind="gate", id="gate", checks=[self._check], passed=raised is None, raised=raised
-        )
-
-
 @dataclass
 class Wayfarer:
     """One Wayfarer serving in this process, and the sessions it has started."""
@@ -121,7 +68,7 @@ class Wayfarer:
     url: str
     released: Path
     started_log: Path
-    gate: _Gate
+    gate: Gate
 
     def started(self) -> list[int]:
         """Every ticket a session was started on, in the order they started."""
@@ -152,39 +99,11 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
         for running in serving:
             running.__exit__(None, None, None)
         serving.clear()
-        settings = Settings(
-            github_api=github.api,
-            github_token=TOKEN,
-            data_dir=tmp_path / "data",
-            cap=cap,
-            # Brisk, so a change made on GitHub is seen within a test's patience.
-            poll_active=0.1,
-            poll_idle=0.1,
-        )
-        gate = _Gate()
+        gate = Gate()
         agent = _Held(released, started)
-        items = Items(settings.stream_backlog)
-
-        def sessions(store: Store) -> Sessions:
-            return Sessions(
-                clone,
-                store,
-                Repo(github.owner, github.name),
-                agent=lambda _: agent,
-                sandbox=NoSandbox(),
-                settings=settings,
-                stream=items,
-            )
-
-        app = create_app(
-            clone,
-            settings,
-            Client(Repo(github.owner, github.name), settings),
-            items,
-            sessions=sessions,
-            gate=gate,
+        context = cascading.serving(
+            clone, tmp_path / "data", github, lambda _: agent, gate, cap=cap
         )
-        context = served(app, items)
         url = context.__enter__()
         serving.append(context)
         return Wayfarer(url, released, started, gate)
@@ -195,13 +114,6 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
         (released / str(ticket)).touch()
     for running in serving:
         running.__exit__(None, None, None)
-
-
-def eventually(holds: Callable[[], bool], timeout: float = 20.0) -> None:
-    deadline = time.monotonic() + timeout
-    while not holds():
-        assert time.monotonic() < deadline, "it never happened"
-        time.sleep(0.05)
 
 
 def _page(url: str) -> Stream:
@@ -468,8 +380,8 @@ def test_stopping_a_ticket_keeps_its_work_and_holds_it(
         seen.item(_cascade(effort), running=0)
 
     assert held["assignees"] == [LOGIN]
-    [kept] = _git(clone, "branch", "--list", "waystation/*", "--format=%(refname:short)").split()
-    assert _git(clone, "show", f"{kept}:work-{ticket.number}.txt") == f"work on {ticket.number}\n"
+    [kept] = git(clone, "branch", "--list", "waystation/*", "--format=%(refname:short)").split()
+    assert git(clone, "show", f"{kept}:work-{ticket.number}.txt") == f"work on {ticket.number}\n"
     assert app.started() == [ticket.number]
 
 

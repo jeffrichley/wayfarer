@@ -68,6 +68,9 @@ class Settings:
     landing_check_wall: float = 30 * 60.0
     """Seconds the merge queue's re-test of a candidate may run in all, with no cap on its
     silence. Reaching it counts as a failed re-test."""
+    held_output_lines: int = 40
+    """Lines of a failed session's output its Held pull request or comment ends with: the
+    end of it, since the whole is in its event file."""
     stage_timeout: float = 10 * 60.0
     """Seconds each of a session's workspace, sandbox, collect and integrate stages may
     take, which only a hang would reach. Every Waystation bound is unbounded unless set."""

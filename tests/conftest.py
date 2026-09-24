@@ -296,8 +296,8 @@ def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
 
 
-def post(url: str) -> httpx.Response:
-    return httpx.post(url, timeout=5.0)
+def post(url: str, json: Any = None) -> httpx.Response:
+    return httpx.post(url, json=json, timeout=5.0)
 
 
 Items = dict[str, dict[str, Any]]

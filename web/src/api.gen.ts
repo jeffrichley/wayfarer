@@ -219,6 +219,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tickets/{number}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry
+         * @description Retry a Held ticket, continuing where its session stopped or starting over.
+         */
+        post: operations["retry_api_tickets__number__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tickets/{number}/stop": {
         parameters: {
             query?: never;
@@ -1037,6 +1057,20 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * Retry
+         * @description A person's retry of a Held ticket: the person's start, not the cascade's.
+         */
+        Retry: {
+            /** @description `continue` is the default when its session left commits; `start_over` when it left none, or its re-test was red on the latest effort branch. */
+            start: components["schemas"]["RetryFrom"];
+        };
+        /**
+         * RetryFrom
+         * @description Where a person's retry of a Held ticket starts (#20).
+         * @enum {string}
+         */
+        RetryFrom: "continue" | "start_over";
+        /**
          * ShipEffort
          * @description The Needs you item an effort raises when every ticket in it is closed.
          */
@@ -1484,6 +1518,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    retry_api_tickets__number__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Retry"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

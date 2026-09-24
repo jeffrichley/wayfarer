@@ -94,7 +94,7 @@ class Retried(BaseModel):
     ticket: Mention
     over: bool | None = Field(
         description="Started over on the effort branch's head, rather than continuing "
-        "where its session stopped. Null until the chronicle reads which (#41)."
+        "where its session stopped. Null for a session recorded before retries said which."
     )
 
 
