@@ -8,6 +8,7 @@ other rule is tested through a read of the GitHub stand-in
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -43,6 +44,7 @@ def _ready(**fields: Any) -> PullRequest:
         "merge_commit": None,
         "checks": None,
         "approved": False,
+        "opened": datetime(2026, 1, 1, tzinfo=UTC),
     }
     return PullRequest(**(unremarkable | fields))
 

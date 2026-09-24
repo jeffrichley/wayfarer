@@ -532,6 +532,36 @@ def test_when_every_ticket_is_closed_the_cascade_disarms_and_raises_shipping(
     }
 
 
+def test_a_ticket_closed_on_github_while_its_session_runs_is_flagged_last_until_it_ends(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Widgets", tickets=1)
+    app = wayfarer()
+
+    with Stream(app.url, patience=20.0, home=True) as seen:
+        app.arm(effort)
+        eventually(lambda: app.started() == [ticket.number])
+
+        # GitHub owns the state, so the card says closed; the session is not stopped.
+        github.close(ticket, reason="NOT_PLANNED")
+        seen.item(_ticket(ticket), state="closed", live=True)
+        seen.until(lambda items: _kinds(items) == ["ship", "closed"])
+        closed = seen.items["needs_you"]["items"][-1]
+
+        app.let_go(ticket)
+        seen.until(lambda items: _kinds(items) == ["ship"])
+
+    assert closed == {
+        "kind": "closed",
+        "ticket": {"number": ticket.number, "title": ticket.title},
+        "effort": {"number": effort.number, "title": "Widgets"},
+    }
+
+
+def _kinds(items: dict[str, dict[str, Any]]) -> list[str]:
+    return [need["kind"] for need in items.get("needs_you", {"items": []})["items"]]
+
+
 def test_a_refused_start_gate_pauses_the_cascade_and_raises_one_item(
     wayfarer: Serve, github: GitHub
 ) -> None:

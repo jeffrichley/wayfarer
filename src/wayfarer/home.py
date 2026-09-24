@@ -13,7 +13,8 @@ the same visit, so a refresh keeps the headline they were reading.
 Needs you is ranked as #24 decided: an environment failure pinned first and
 unscored; then each ticket's item by what it holds up, its own ticket plus every
 open ticket downstream, ties going to whatever has waited longest; then what holds
-up no ticket, shipping an effort last.
+up no ticket, shipping an effort and then a ticket GitHub closed while its session
+runs, which is flagged and never stopped (ADR-0002).
 """
 
 from __future__ import annotations
@@ -35,10 +36,12 @@ from wayfarer.models import (
     LineStations,
     Mention,
     Need,
+    NeedClosed,
     NeedHeld,
     NeedQuestion,
     NeedReview,
     NeedsYou,
+    PullRequest,
     ShipEffort,
     Station,
     Ticket,
@@ -78,6 +81,7 @@ _LEADS = {
     "held": "A ticket is held, waiting on you",
     "review": "A pull request is waiting on your approval",
     "ship": "An effort is ready to ship",
+    "closed": "A ticket was closed while its session runs",
 }
 
 _NUMBERS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
@@ -167,6 +171,7 @@ def derive(
             *_environment(held),
             *sorted(waiting, key=_rank),
             *sorted((i for i in held if isinstance(i, ShipEffort)), key=lambda s: s.effort),
+            *_closed(efforts, graph),
         ],
     )
 
@@ -230,6 +235,16 @@ def _environment(items: list[Item]) -> list[EnvironmentFailure]:
     return raised + [i for i in items if isinstance(i, EnvironmentFailure)]
 
 
+def _closed(efforts: list[Effort], graph: dict[int, list[Ticket]]) -> list[NeedClosed]:
+    """Every ticket GitHub closed while a session of Wayfarer's still runs on it."""
+    return [
+        NeedClosed(kind="closed", ticket=_mention(ticket), effort=_mention(effort))
+        for effort in efforts
+        for ticket in sorted(graph[effort.number], key=lambda t: t.number)
+        if ticket.live and ticket.state in _OVER
+    ]
+
+
 def _need(
     effort: Effort,
     ticket: Ticket,
@@ -271,28 +286,31 @@ def _need(
                 since=waited("held"),
                 reason=None,
             )
-        case TicketState.IN_REVIEW if _awaits_approval(ticket, auto_merge):
+        case TicketState.IN_REVIEW if (pull := _for_approval(ticket, auto_merge)) is not None:
             return NeedReview(
                 kind="review",
                 ticket=mention,
                 effort=of,
                 holds_up=holds_up,
                 starts=starts,
-                since=None,
+                # A review is not a chronicle line, so it waits from its pull request.
+                since=pull.opened,
             )
     return None
 
 
-def _awaits_approval(ticket: Ticket, auto_merge: bool) -> bool:
-    """Clean and green and waiting only on the person, because auto-merge is off."""
+def _for_approval(ticket: Ticket, auto_merge: bool) -> PullRequest | None:
+    """Its pull request, when that is clean and green and waiting only on the person,
+    because auto-merge is off."""
     pull = ticket.pull_request
-    return (
+    waiting = (
         not auto_merge
         and pull is not None
         and not pull.draft
         and pull.checks in (None, Checks.PASSING)
         and not pull.approved
     )
+    return pull if waiting else None
 
 
 def _holds_up(ticket: Ticket, tickets: list[Ticket]) -> int:

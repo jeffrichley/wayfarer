@@ -821,6 +821,20 @@ export interface components {
             title: string;
         };
         /**
+         * NeedClosed
+         * @description A ticket GitHub closed while its session still runs. It holds up no work, and the
+         *     session is not stopped for it, so a person decides (ADR-0002).
+         */
+        NeedClosed: {
+            effort: components["schemas"]["Mention"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "closed";
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
          * NeedHeld
          * @description A ticket kept back until the person decides.
          */
@@ -918,7 +932,8 @@ export interface components {
          * NeedsYou
          * @description Everything waiting on a person, across every effort, in live order (#24): an
          *     environment failure pinned first, then what holds up the most, then what holds up
-         *     nothing. Home shows it as it stands; the desk freezes its own copy.
+         *     nothing: shipping an effort, then a ticket closed while its session runs. Home shows
+         *     it as it stands; the desk freezes its own copy.
          */
         NeedsYou: {
             /**
@@ -927,7 +942,7 @@ export interface components {
              */
             id: "needs_you";
             /** Items */
-            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"])[];
+            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"] | components["schemas"]["NeedClosed"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -994,6 +1009,11 @@ export interface components {
             merged: boolean;
             /** Number */
             number: number;
+            /**
+             * Opened
+             * Format: date-time
+             */
+            opened: string;
         };
         /**
          * ReadyToShip
@@ -1146,6 +1166,11 @@ export interface components {
             kind: "ticket";
             /** Labels */
             labels: string[];
+            /**
+             * Live
+             * @description A session Wayfarer started is running on it. GitHub owns its state, so a ticket closed there keeps its session, and it is flagged in Needs you (ADR-0002).
+             */
+            live: boolean;
             /** Number */
             number: number;
             /** Open */
