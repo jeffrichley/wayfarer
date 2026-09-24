@@ -271,6 +271,8 @@ class PullRequest:
     created_at: str = "2026-01-01T00:00:00Z"
     # When it was last marked ready for review; None if it opened ready.
     ready_at: str | None = None
+    # Who opened it; None is the viewer, as for every pull request Wayfarer opens.
+    author: str | None = None
     # Each file it changes, in GitHub's order, and its patch: the unified diff's hunks
     # without their file header. None is a file GitHub gives no patch, as it does
     # for a binary file or one too large for it to show.
@@ -315,7 +317,6 @@ class GitHub:
         self._live = _Repo()
         self._frozen: _Repo | None = None
         self._next_number = 1
-        self._clock = 0
         self.git: Path | None = None
         """The repo's git remote, a bare repo; None when a test needs no git."""
         self._lock = threading.Lock()
@@ -452,10 +453,10 @@ class GitHub:
 
     def _now(self) -> str:
         """A moment later than the last one asked for: each event gets its own second."""
-        self._clock += 1
-        return (datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=self._clock)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        # The clock every event keeps, so a pull request's moments and an issue's compare.
+        at = self.now
+        self.now += timedelta(seconds=1)
+        return at.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _follow_git(self) -> None:
         """Each open pull request's head as its branch stands on the remote, merged once
@@ -497,7 +498,7 @@ class GitHub:
 
     def forbid(self, path: str) -> None:
         """Refuse every read of paths ending in `path`, and every claim or label written
-        there, as GitHub refuses a token without the permission that path needs."""
+        or taken off there, as GitHub refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
 
@@ -669,8 +670,12 @@ class GitHub:
                 return JSONResponse({"number": pull.number, "draft": pull.draft}, status_code=201)
 
         @app.delete("/repos/{owner}/{name}/issues/{number}/labels/{label_name:path}")
-        async def unlabel(owner: str, name: str, number: int, label_name: str) -> Response:
+        async def unlabel(
+            owner: str, name: str, number: int, label_name: str, request: Request
+        ) -> Response:
             with self._lock:
+                if refused := self._refused_write(request):
+                    return refused
                 issue = self._live.issues[number]
                 if label_name not in issue.labels:
                     return JSONResponse({"message": "Label does not exist"}, status_code=404)
@@ -687,6 +692,20 @@ class GitHub:
                 if body.get("state") == "closed" and pull.state == "OPEN":
                     pull.state = "CLOSED"
                 return JSONResponse({"number": pull.number, "state": pull.state.lower()})
+
+        @app.post("/repos/{owner}/{name}/pulls/{number}/reviews")
+        async def review(owner: str, name: str, number: int, request: Request) -> Response:
+            body = await request.json()
+            with self._lock:
+                pull = self._live.pulls[number]
+                if body.get("event") == "APPROVE" and (pull.author or self.viewer) == self.viewer:
+                    return JSONResponse(
+                        {"message": "Unprocessable Entity: Can not approve your own pull request"},
+                        status_code=422,
+                    )
+                if body.get("event") == "APPROVE":
+                    pull.review = "APPROVED"
+                return JSONResponse({"state": body.get("event")})
 
         @app.post("/repos/{owner}/{name}/issues/{number}/assignees")
         async def assign(owner: str, name: str, number: int, request: Request) -> Response:

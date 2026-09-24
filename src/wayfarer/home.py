@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 
 from wayfarer.asking import gist
 from wayfarer.github import Repo
+from wayfarer.joining import for_approval
 from wayfarer.models import (
     Asked,
     ChronicleLine,
@@ -44,7 +45,6 @@ from wayfarer.models import (
     NeedReview,
     NeedsYou,
     Orphan,
-    PullRequest,
     ShipEffort,
     Station,
     Ticket,
@@ -52,7 +52,6 @@ from wayfarer.models import (
     UnknownContainer,
     Working,
 )
-from wayfarer.models.read_model import Checks
 from wayfarer.store import Store
 from wayfarer.stream import Store as Stream
 
@@ -294,7 +293,7 @@ def _need(
                 since=waited("held"),
                 reason=None,
             )
-        case TicketState.IN_REVIEW if (pull := _for_approval(ticket, auto_merge)) is not None:
+        case TicketState.IN_REVIEW if (pull := for_approval(ticket, auto_merge)) is not None:
             return NeedReview(
                 kind="review",
                 ticket=mention,
@@ -306,20 +305,6 @@ def _need(
                 starting=[_mention(t) for t in _starting(ticket, tickets)],
             )
     return None
-
-
-def _for_approval(ticket: Ticket, auto_merge: bool) -> PullRequest | None:
-    """Its pull request, when that is clean and green and waiting only on the person,
-    because auto-merge is off."""
-    pull = ticket.pull_request
-    waiting = (
-        not auto_merge
-        and pull is not None
-        and not pull.draft
-        and pull.checks in (None, Checks.PASSING)
-        and not pull.approved
-    )
-    return pull if waiting else None
 
 
 def _holds_up(ticket: Ticket, tickets: list[Ticket]) -> int:

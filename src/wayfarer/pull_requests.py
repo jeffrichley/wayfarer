@@ -18,23 +18,10 @@ the retry's Outcome says so.
 from __future__ import annotations
 
 from wayfarer.github import GitHub
+from wayfarer.joining import HELD, mark_ready
 from wayfarer.outcome import Axis, Finding, Outcome
-from wayfarer.read_model import HELD
 
 __all__ = ["PullRequestGate", "body", "opens_ready"]
-
-_PULL_ID = """
-query PullId($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
-}
-"""
-
-# Only GraphQL can mark a draft ready.
-_TO_READY = """
-mutation ToReady($id: ID!) {
-  markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } }
-}
-"""
 
 
 def opens_ready(outcome: Outcome) -> bool:
@@ -133,8 +120,7 @@ class PullRequestGate:
             number = pull
             await self._github.write("PATCH", f"/pulls/{number}", {"body": text})
             if ready:
-                found = (await self._github.query(_PULL_ID, number=number))["repository"]
-                await self._github.mutate(_TO_READY, id=found["pullRequest"]["id"])
+                await mark_ready(self._github, number)
         if not ready:
             await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [HELD]})
         return number
