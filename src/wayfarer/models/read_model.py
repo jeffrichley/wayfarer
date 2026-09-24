@@ -102,6 +102,10 @@ class Ticket(BaseModel):
         "asked while it is Asked, and the answer once a person gave one; null if it never "
         "asked (#42)."
     )
+    criteria: list[str] = Field(
+        description="Its acceptance criteria as its body words them, ticked or not: nothing "
+        "ticks one in this slice."
+    )
     place_in_line: int | None = Field(
         description="Its place in its effort branch's merge queue while it is Landing, 1 at "
         "the front; null when it is not in the queue. Read from GitHub, so a restart finds "

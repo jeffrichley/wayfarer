@@ -9,10 +9,10 @@ import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
 import { NeedRow, NeedsList, type Need as Row } from "./NeedsYou";
+import { RepoBar } from "./RepoBar";
 import { SectionHead } from "./SectionHead";
 import { SessionImage } from "./SessionImage";
 import { command, useItems } from "./store";
-import { TopBar } from "./TopBar";
 import { Kicker, Named } from "./Type";
 import styles from "./TheLine.module.css";
 
@@ -155,24 +155,8 @@ export function TheLine() {
   const moving = home?.moving ?? 0;
   const working = home?.working ?? [];
 
-  const bar = (
-    <TopBar
-      repo={repo}
-      repos={[
-        {
-          name: repo,
-          meta: `${moving} ${moving === 1 ? "effort" : "efforts"} on the line`,
-          href: "/",
-          current: true,
-        },
-      ]}
-      working={{ count: working.length, href: atWorkHref() }}
-      needsYou={{ count: needs.length, href: deskHref() }}
-    />
-  );
-
   return (
-    <Frame bar={bar}>
+    <Frame bar={<RepoBar />}>
       <Pane>
         <div className={styles.page}>
           <section className={styles.masthead} data-piece="masthead">

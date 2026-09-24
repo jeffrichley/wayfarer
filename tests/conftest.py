@@ -312,9 +312,9 @@ def post(url: str, json: Any = None) -> httpx.Response:
 
 Items = dict[str, dict[str, Any]]
 
-# The kinds of item derived from the rest: home (`wayfarer.home`) and each
-# effort's ticket graph (`wayfarer.graph`).
-_DERIVED = {"home", "line_row", "needs_you", "ticket_graph"}
+# The kinds of item derived from the rest: home (`wayfarer.home`), each effort's
+# ticket graph (`wayfarer.graph`) and At work's lanes (`wayfarer.at_work`).
+_DERIVED = {"home", "lane", "line_row", "needs_you", "ticket_graph"}
 
 
 class Stream:
@@ -324,9 +324,10 @@ class Stream:
     because a build pauses while Docker downloads. `patience`, when given, bounds
     each wait in all, for a stream busy enough that no single read ever times out.
 
-    Home's items and the ticket graphs are derived from every other item and change
-    along with them, so only a test about them, passing `derived`, sees them: every
-    other test reads the stream as if they were not on it, their ids included.
+    Home's items, the ticket graphs and the lanes are derived from every other item
+    and change along with them, so only a test about them, passing `derived`, sees
+    them: every other test reads the stream as if they were not on it, their ids
+    included.
     """
 
     def __init__(

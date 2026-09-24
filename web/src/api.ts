@@ -23,6 +23,7 @@ export type Mention = Schemas["Mention"];
 export type Someone = Schemas["Someone"];
 export type GraphCard = Schemas["GraphCard"];
 export type Home = Schemas["Home"];
+export type Lane = Schemas["Lane"];
 export type LineRow = Schemas["LineRow"];
 export type NeedsYou = Schemas["NeedsYou"];
 export type TicketGraph = Schemas["TicketGraph"];

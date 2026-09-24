@@ -130,6 +130,7 @@ type PageInfo { hasNextPage: Boolean! endCursor: String }
 type Issue {
   number: Int!
   title: String!
+  body: String!
   state: IssueState!
   stateReason: IssueStateReason
   labels(first: Int, after: String): LabelConnection
@@ -238,6 +239,7 @@ class Issue:
     assignees: list[str] = field(default_factory=list)
     parent: int | None = None
     blocked_by: list[int] = field(default_factory=list)
+    body: str = ""
     # Every comment's body, oldest first.
     comments: list[str] = field(default_factory=list)
     # What happened to it, oldest first, as its timeline shows.
@@ -886,6 +888,7 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
         {
             "number": issue.number,
             "title": issue.title,
+            "body": issue.body,
             "state": issue.state,
             "stateReason": issue.state_reason,
             "labels": paged(lambda: [_Node("Label", {"name": n}) for n in issue.labels]),
