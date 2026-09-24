@@ -3,7 +3,9 @@
 It holds one repo's issues and pull requests in memory and speaks what Wayfarer
 reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; the
 REST issue listing and commit checks the conditional poll uses (ADR-0003); and the
-REST writes Wayfarer makes: claiming and releasing, labelling and unlabelling,
+REST reads of a pull request and its changed files, each with its patch, a page at
+a time as GitHub pages them; the REST writes Wayfarer makes: claiming and
+releasing, labelling and unlabelling,
 commenting on and closing an issue, and opening, editing and closing a pull request;
 and the two GraphQL writes, returning a pull request to draft and marking one ready.
 A test changes it as a person on GitHub would, and it can be made to misbehave on
@@ -16,7 +18,8 @@ purpose:
 - **rate-limited**: refuse the next REST reads with `403` or `429`, or ask for a
   slower poll with `X-Poll-Interval`;
 - **disagreeing**: nothing stops a test closing a ticket a session is still on;
-- **pushed to**: given the repo's git remote, a bare repo, it reads each pull
+- **pushed to**: `push` gives a pull request new files and moves its head, as a
+  push to its branch does. Given the repo's git remote, a bare repo, it reads each pull
   request's head from its branch there, and marks one merged once its head is on
   its base, as GitHub does for a push that lands a pull request's commits.
 - **raced**: a person's change lands just after Wayfarer's write, before its
@@ -268,6 +271,10 @@ class PullRequest:
     created_at: str = "2026-01-01T00:00:00Z"
     # When it was last marked ready for review; None if it opened ready.
     ready_at: str | None = None
+    # Each file it changes, in GitHub's order, and its patch: the unified diff's hunks
+    # without their file header. None is a file GitHub gives no patch, as it does
+    # for a binary file or one too large for it to show.
+    files: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -351,6 +358,12 @@ class GitHub:
         with self._lock:
             pull.state = "MERGED"
             pull.merge_commit = hashlib.sha1(f"merge {pull.number}".encode()).hexdigest()
+
+    def push(self, pull: PullRequest, files: dict[str, str | None]) -> None:
+        """A push to its branch: it now changes `files`, and its head has moved."""
+        with self._lock:
+            pull.files = files
+            pull.head_commit = hashlib.sha1(json.dumps(files).encode()).hexdigest()
 
     def ready(self, pull: PullRequest) -> None:
         """Marked ready for review, as a person does to a draft."""
@@ -582,6 +595,28 @@ class GitHub:
         async def status(owner: str, name: str, ref: str, request: Request) -> Response:
             return self._conditional(request, {"state": "pending", "total_count": 0})
 
+        @app.get("/repos/{owner}/{name}/pulls/{number}")
+        async def read_pull(owner: str, name: str, number: int, request: Request) -> Response:
+            with self._lock:
+                self._follow_git()
+                pull = self._visible().pulls.get(number)
+            if pull is None:
+                return JSONResponse({"message": "Not Found"}, status_code=404)
+            return self._conditional(request, _rest_pull(pull))
+
+        # Paged as GitHub pages it, `per_page` at a time, up to 100, from `page` 1.
+        @app.get("/repos/{owner}/{name}/pulls/{number}/files")
+        async def pull_files(owner: str, name: str, number: int, request: Request) -> Response:
+            with self._lock:
+                pull = self._visible().pulls.get(number)
+            if pull is None:
+                return JSONResponse({"message": "Not Found"}, status_code=404)
+            per_page = min(int(request.query_params.get("per_page", 30)), 100)
+            start = (int(request.query_params.get("page", 1)) - 1) * per_page
+            # GitHub lists a pull request's first 3000 files, and no more.
+            files = [_rest_file(path, patch) for path, patch in pull.files.items()][:3000]
+            return self._conditional(request, files[start : start + per_page])
+
         @app.get("/user")
         async def user() -> Response:
             return JSONResponse({"login": LOGIN})
@@ -747,6 +782,27 @@ def _rest_issue(issue: Issue) -> dict[str, Any]:
         # a label back as it was when the poll last looked.
         "updated_at": issue.timeline[-1].at.isoformat() if issue.timeline else None,
     }
+
+
+def _rest_pull(pull: PullRequest) -> dict[str, Any]:
+    return {
+        "number": pull.number,
+        "state": "open" if pull.state == "OPEN" else "closed",
+        "draft": pull.draft,
+        "merged": pull.state == "MERGED",
+        "head": {"ref": pull.head, "sha": pull.head_commit},
+        "base": {"ref": pull.base},
+        "changed_files": len(pull.files),
+    }
+
+
+def _rest_file(path: str, patch: str | None) -> dict[str, Any]:
+    lines = (patch or "").split("\n")
+    added = sum(line.startswith("+") for line in lines)
+    removed = sum(line.startswith("-") for line in lines)
+    shown = {"filename": path, "status": "modified", "additions": added, "deletions": removed}
+    # GitHub leaves `patch` out altogether for a file it gives none.
+    return shown if patch is None else shown | {"patch": patch}
 
 
 def _tip(git: Path, branch: str) -> str | None:
