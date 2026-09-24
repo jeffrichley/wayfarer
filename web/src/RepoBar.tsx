@@ -3,8 +3,8 @@ import { atWorkHref, deskHref } from "./links";
 import { useItems } from "./store";
 import { TopBar } from "./TopBar";
 
-// The top bar on a screen that spans the repo rather than one effort: home, and
-// At work. Home's item says the repo, how many efforts move and what is running,
+// The top bar on a screen that spans the repo rather than one effort: home, At
+// work and the desk. Home's item says the repo, how many efforts move and what is running,
 // and Needs you says what waits on the person.
 export function RepoBar() {
   const home = useItems((items) => items["home"] as Home | undefined);

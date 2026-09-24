@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import { AtWork } from "./AtWork";
+import { Desk } from "./Desk";
 import { EffortGraph } from "./EffortGraph";
 import { Gallery } from "./gallery/Gallery";
 import { connect } from "./store";
@@ -17,17 +18,16 @@ export function App() {
     return <EffortGraph effort={Number(effort[1])} />;
   }
   if (window.location.pathname === "/at-work") {
-    return <AtWorkPage />;
+    return <Screen screen={<AtWork />} />;
   }
-  return <Home />;
+  if (window.location.pathname === "/desk") {
+    return <Screen screen={<Desk />} />;
+  }
+  return <Screen screen={<TheLine />} />;
 }
 
-function AtWorkPage() {
+// A screen fed by the page's one stream.
+function Screen({ screen }: { screen: ReactNode }) {
   useEffect(connect, []);
-  return <AtWork />;
-}
-
-function Home() {
-  useEffect(connect, []);
-  return <TheLine />;
+  return screen;
 }

@@ -303,6 +303,7 @@ def _need(
                 starts=starts,
                 # A review is not a chronicle line, so it waits from its pull request.
                 since=pull.opened,
+                starting=[_mention(t) for t in _starting(ticket, tickets)],
             )
     return None
 
@@ -335,15 +336,20 @@ def _holds_up(ticket: Ticket, tickets: list[Ticket]) -> int:
 
 
 def _starts(ticket: Ticket, tickets: list[Ticket]) -> int:
+    return len(_starting(ticket, tickets))
+
+
+def _starting(ticket: Ticket, tickets: list[Ticket]) -> list[Ticket]:
     """The tickets it alone keeps off the frontier: takeable the moment it lands."""
-    return sum(
-        ticket.number in t.blocked_by
+    return [
+        t
+        for t in sorted(tickets, key=lambda t: t.number)
+        if ticket.number in t.blocked_by
         and t.state is TicketState.BLOCKED
         and t.open_blockers == 1
         and not t.assignees
         and t.pull_request is None
-        for t in tickets
-    )
+    ]
 
 
 def _rank(need: _OnATicket) -> tuple[int, bool, datetime, int]:

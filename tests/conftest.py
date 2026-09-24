@@ -312,9 +312,10 @@ def post(url: str, json: Any = None) -> httpx.Response:
 
 Items = dict[str, dict[str, Any]]
 
-# The kinds of item derived from the rest: home (`wayfarer.home`), each effort's
-# ticket graph (`wayfarer.graph`) and At work's lanes (`wayfarer.at_work`).
-_DERIVED = {"home", "lane", "line_row", "needs_you", "ticket_graph"}
+# The kinds of item derived from the rest: home (`wayfarer.home`), the desk
+# (`wayfarer.desk`), each effort's ticket graph (`wayfarer.graph`) and At work's
+# lanes (`wayfarer.at_work`).
+_DERIVED = {"desk", "home", "lane", "line_row", "needs_you", "ticket_graph"}
 
 
 class Stream:

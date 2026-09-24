@@ -5,13 +5,19 @@ import type { components } from "./api.gen";
 
 type Schemas = components["schemas"];
 
+export type Answer = Schemas["Answer"];
+export type Asking = Schemas["Asking"];
 export type Beat = Schemas["Beat"];
 export type BeatKind = Schemas["BeatKind"];
 export type Checks = Schemas["Checks"];
+export type Desk = Schemas["Desk"];
+export type DeskEntry = Schemas["DeskEntry"];
 export type Effort = Schemas["Effort"];
 export type EffortUnreadable = Schemas["EffortUnreadable"];
+export type EnvironmentFailure = Schemas["EnvironmentFailure"];
 export type Health = Schemas["Health"];
 export type PullRequest = Schemas["PullRequest"];
+export type Retry = Schemas["Retry"];
 export type Ticket = Schemas["Ticket"];
 export type TicketState = Schemas["TicketState"];
 export type ImageStatus = Schemas["ImageStatus"];

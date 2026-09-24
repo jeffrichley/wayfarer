@@ -21,6 +21,7 @@ from wayfarer.asking import Asker
 from wayfarer.at_work import AtWork
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
+from wayfarer.desk import DeskPage
 from wayfarer.endings import Endings
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
@@ -34,6 +35,8 @@ from wayfarer.queue import Queue
 from wayfarer.read_model import Efforts, History
 from wayfarer.restart import Containers, DockerContainers, Restart
 from wayfarer.routes import Services, page
+from wayfarer.routes import cascades as cascades_routes
+from wayfarer.routes import desk as desk_routes
 from wayfarer.routes import efforts as efforts_routes
 from wayfarer.routes import events as events_routes
 from wayfarer.routes import gate as gate_routes
@@ -137,6 +140,7 @@ def create_app(
         asked=asker.asked,
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
+    desk = DeskPage(store)
     graphs = Graphs(store, None if github.repo is None else cascades.record)
     at_work = AtWork(store, None if github.repo is None else cascades.record)
     restart = Restart(store, github, cascades, efforts, containers or DockerContainers(settings))
@@ -153,6 +157,7 @@ def create_app(
             asyncio.create_task(poll(github, settings)),
             asyncio.create_task(efforts.follow()),
             asyncio.create_task(home.follow()),
+            asyncio.create_task(desk.follow()),
             asyncio.create_task(graphs.follow()),
             asyncio.create_task(at_work.follow()),
             asyncio.create_task(restart.recover()),
@@ -174,6 +179,7 @@ def create_app(
     app.state.services = Services(
         asker=asker,
         cascades=cascades,
+        desk=desk,
         efforts=efforts,
         home=home,
         images=images,
@@ -184,6 +190,8 @@ def create_app(
     )
     # One line per feature, sorted, so two tickets adding routers insert at
     # different places rather than both appending at the end.
+    app.include_router(cascades_routes.router)
+    app.include_router(desk_routes.router)
     app.include_router(efforts_routes.router)
     app.include_router(events_routes.router)
     app.include_router(gate_routes.router)

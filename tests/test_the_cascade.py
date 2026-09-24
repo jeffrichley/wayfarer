@@ -376,6 +376,9 @@ def test_when_every_ticket_is_closed_the_cascade_disarms_and_raises_shipping(
         "id": f"ship:{effort.number}",
         "effort": effort.number,
         "title": "Widgets",
+        # Where the effort's own pull request goes from, and into.
+        "branch": f"effort/{effort.number}-widgets",
+        "trunk": "main",
     }
 
 
@@ -425,3 +428,44 @@ def test_a_refused_start_gate_pauses_the_cascade_and_raises_one_item(
     assert cascade["reason"] == "The start gate refused a start."
     assert cascade["running"] == 0
     assert app.started() == []
+
+
+def test_resuming_once_the_environment_is_fixed_clears_its_item_and_starts_again(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Widgets", tickets=1)
+    by_hand, (theirs,) = github.effort("Gadgets", tickets=1)
+    app = wayfarer()
+
+    with _page(app.url, derived=True) as seen:
+        # One cascade the person paused, which resuming the rest leaves paused.
+        app.arm(by_hand)
+        eventually(lambda: app.started() == [theirs.number])
+        post(f"{app.url}api/efforts/{by_hand.number}/pause")
+        seen.item(_cascade(by_hand), paused=True)
+        app.gate.refusing = True
+        app.arm(effort)
+        seen.until(lambda items: _kinds(items) == ["environment"])
+        post(f"{app.url}api/desk/arrived")
+
+        # Still refusing: resuming raises it again and starts nothing.
+        assert post(f"{app.url}api/cascades/resume").status_code == 202
+        seen.item("gate", passed=False)
+        assert app.started() == [theirs.number]
+
+        app.gate.refusing = False
+        post(f"{app.url}api/cascades/resume")
+        eventually(lambda: app.started() == [theirs.number, ticket.number])
+        seen.until(lambda items: _kinds(items) == [])
+        cascade = seen.item(_cascade(effort), paused=False)
+        assert seen.items[_cascade(by_hand)]["paused"] is True
+        # The desk keeps it in place, saying so.
+        seen.until(
+            lambda items: (
+                items["desk"]["entries"][0]["resolved"] == "Cleared · the cascades can start again"
+            )
+        )
+        app.let_go(theirs)
+        app.let_go(ticket)
+
+    assert cascade["reason"] is None
