@@ -14,13 +14,16 @@ type Props = {
   // Who asked, from where and when: "Claude Code · wt/credits · 09:18".
   by: string;
   questions: Question[];
+  // Posts the answer: one for each question, keyed by it. A choice and a note
+  // together are both said, the choice first.
+  onSend?: (answers: Record<string, string>) => void;
 };
 
 // What a session paused to ask, and where a person answers it (docs/design/shell.md,
 // "Question card"). Sending needs a choice for every question, or a note; once
 // sent, the controls lock and the card says the answer was posted to the ticket.
-// Posting the answer is the screen's, once one carries the card.
-export function QuestionCard({ ticket, by, questions }: Props) {
+// Posting the answer is the screen's, through `onSend`.
+export function QuestionCard({ ticket, by, questions, onSend }: Props) {
   const [choices, setChoices] = useState<(string | null)[]>(() => questions.map(() => null));
   const [note, setNote] = useState("");
   const [refused, setRefused] = useState(false);
@@ -36,6 +39,17 @@ export function QuestionCard({ ticket, by, questions }: Props) {
     const answered = note.trim() !== "" || !choices.includes(null);
     setRefused(!answered);
     setSent(answered);
+    if (answered && onSend) {
+      const said = note.trim();
+      onSend(
+        Object.fromEntries(
+          questions.map((question, q) => [
+            question.text,
+            [choices[q], said].filter((part) => part !== null && part !== "").join("\n\n"),
+          ]),
+        ),
+      );
+    }
   }
 
   const each = questions.length > 1 ? " for each question" : "";

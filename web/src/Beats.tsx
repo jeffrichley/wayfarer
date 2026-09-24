@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import type { Beat, BeatKind } from "./api";
@@ -30,8 +30,9 @@ const MARKS: Record<BeatKind, [string | undefined, string]> = {
 // A session's story: its beats in the order they happened, grouped into the
 // Orient before its first red and the numbered cycles after it (CONTEXT.md).
 // The pane scrolls on its own, and follows new beats only while the reader is
-// already at the bottom, so reading back is never pulled away.
-export function Beats({ beats }: { beats: Beat[] }) {
+// already at the bottom, so reading back is never pulled away. What follows the
+// story, such as the question it stopped on, scrolls with it.
+export function Beats({ beats, children }: { beats: Beat[]; children?: ReactNode }) {
   const pane = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const drawn = useRef(false);
@@ -106,6 +107,7 @@ export function Beats({ beats }: { beats: Beat[] }) {
           return rows;
         })}
       </ol>
+      {children}
     </div>
   );
 }

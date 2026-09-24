@@ -1,0 +1,47 @@
+/* At work, ported from the prototype (prototype/live-build.html): the lanes, the
+   story's head and its question, and the evidence rail. The beats, the question
+   card and the criteria style themselves. */
+
+/* lanes */
+.lanes { padding: 18px 0 24px; }
+.lanes > :global(.kicker) { display: block; padding: 0 20px 8px; }
+.lane {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 4px 11px; width: 100%;
+  padding: 12px 20px 13px; text-align: left; background: none; border: 0; border-top: 1px solid var(--border);
+  cursor: pointer; transition: background-color .15s ease; color: inherit; font: inherit;
+}
+.lane:hover { background: var(--hover); }
+.lane[aria-pressed="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); }
+.lane:focus-visible { outline-offset: -2px; }
+.st { margin-top: 3px; }
+.name { font-size: 14px; line-height: 1.35; font-weight: 500; }
+.meta { grid-column: 2; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.beat { grid-column: 2; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.beat.ask { color: var(--fg); font-weight: 500; }
+
+/* story: the head stays put while the beats scroll beneath it */
+.story { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
+.head { padding: 20px 32px 16px; border-bottom: 1px solid var(--border); }
+.head h1 { font-size: 28px; line-height: 1.15; margin: 6px 0 8px; }
+.head h1 a { text-decoration: none; }
+.head h1 a:hover { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+.state { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2); }
+.question { margin: 18px 0 0 64px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); max-width: 640px; }
+.question > :global(.kicker) { display: block; margin-bottom: 12px; }
+.empty { padding: 32px; color: var(--muted); }
+
+/* evidence */
+.block { padding: 18px 22px; border-top: 1px solid var(--border); }
+.block:first-child { border-top: 0; }
+.block > :global(.kicker) { display: block; margin-bottom: 10px; }
+.rhythm { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.rhythm :global(.tr) { width: 14px; height: 14px; }
+.files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 6px 0; font-size: 12.5px; }
+.path { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.num { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.bar { grid-column: 1 / 3; display: flex; height: 3px; gap: 1px; }
+.add { background: var(--fg); }
+.del { background: repeating-linear-gradient(90deg, var(--fg) 0 2px, transparent 2px 4px); }
+
+@media (max-width: 1320px) { .head { padding-inline: 24px; } }
+@media (max-width: 920px) { .story { height: auto; } .question { margin-left: 0; } }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { AtWork } from "./AtWork";
 import { EffortGraph } from "./EffortGraph";
 import { Gallery } from "./gallery/Gallery";
 import { connect } from "./store";
@@ -15,7 +16,15 @@ export function App() {
   if (effort !== null) {
     return <EffortGraph effort={Number(effort[1])} />;
   }
+  if (window.location.pathname === "/at-work") {
+    return <Watching />;
+  }
   return <Home />;
+}
+
+function Watching() {
+  useEffect(connect, []);
+  return <AtWork />;
 }
 
 function Home() {
