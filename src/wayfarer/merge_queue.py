@@ -378,9 +378,11 @@ class MergeQueue:
             await self._github.write(
                 "POST", f"/issues/{ticket.number}/comments", {"body": f"{why}\n\n{HELD_MARKER}"}
             )
-            await self._github.write("POST", f"/issues/{ticket.number}/labels", {"labels": [HELD]})
+            # Draft before the label: a hold on a ready pull request reads as one a
+            # person let land by hand, and is cleared (`joining.py`).
             found = (await self._github.query(_PULL_ID, number=pull.number))["repository"]
             await self._github.mutate(_TO_DRAFT, id=found["pullRequest"]["id"])
+            await self._github.write("POST", f"/issues/{ticket.number}/labels", {"labels": [HELD]})
         except GitHubError:
             # Set aside until its pull request reads differently, as any that did not land.
             _log.warning("Ticket #%s could not be held.", ticket.number, exc_info=True)

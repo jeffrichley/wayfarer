@@ -28,6 +28,7 @@ from wayfarer.github import GitHub
 from wayfarer.graph import Graphs
 from wayfarer.home import HomePage
 from wayfarer.image import Images
+from wayfarer.joining import Joining
 from wayfarer.merge_queue import MergeQueue
 from wayfarer.models import ChronicleLine, Effort, Ticket
 from wayfarer.poll import poll
@@ -126,7 +127,14 @@ def create_app(
         # An effort was read, so there is a repo and its record opens.
         return chronicle(effort, tickets, history, cascades.record().sessions())
 
-    efforts = Efforts(github, store, settings, line=queue.line, telling=tell)
+    joining = Joining(github, store, settings)
+
+    async def line(effort: Effort, tickets: list[Ticket]) -> list[Ticket]:
+        # A draft readied by hand is let land before the queue lines up (#21).
+        await joining.clear_stale(tickets)
+        return await queue.line(effort, tickets)
+
+    efforts = Efforts(github, store, settings, line=line, telling=tell)
     asker = Asker(github, store)
     cascades = Cascades(
         efforts,
@@ -183,6 +191,7 @@ def create_app(
         efforts=efforts,
         home=home,
         images=images,
+        joining=joining,
         restart=restart,
         running=running,
         start_gate=start_gate,

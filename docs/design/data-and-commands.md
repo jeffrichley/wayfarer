@@ -103,7 +103,7 @@ Notes and queued agents are gone. Notes had nowhere to go once mid-run steering 
   1. PR merged or issue closed as completed → **landed**
   2. labelled `wayfarer:asked` → **asked**
   3. labelled `wayfarer:held` → **held** (a draft PR when the session left commits, a comment when it left none)
-  4. PR ready (not draft), checks green or absent, and approved when auto-merge is off → **landing**. Wayfarer enqueues every such ticket it is not already landing, so a restart rebuilds the merge queue from GitHub in PR-ready order
+  4. PR ready (not draft), checks green or absent, and approved when auto-merge is off → **landing**. Approved is an approving GitHub review, or a **Land it comment** on the ticket naming the PR in a hidden marker, written by the person whose token Wayfarer holds. Wayfarer enqueues every such ticket it is not already landing, so a restart rebuilds the merge queue from GitHub in PR-ready order
   5. PR open → **in review**
   6. a session running → **building**
   7. every blocker landed and nobody on it → **takeable**
@@ -199,8 +199,8 @@ Each command lives in the prototype at the `data-piece` shown. "Must do" is the 
 | Send finding to the agent | `send-finding` | Reopen the ticket's session with the finding as its task | Transport open |
 | Comment on a diff line | `pr-diff` rows | Post a PR review comment *and* deliver it to the worktree session | Transport open |
 | Request changes | `request-changes` | Post a changes-requested review and reopen the session with the request | Transport open |
-| Let it land | none yet | For a Held ticket with a PR: mark the PR ready and remove `wayfarer:held`, so it joins the merge queue. Marking it ready by hand on GitHub does the same, and Wayfarer clears the label | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
-| Land it | `approve-merge` | With auto-merge off, approve a clean PR so it joins the merge queue. An approving review on GitHub does the same. Merging by hand on GitHub skips the queue and is accepted as landed, untested | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21) |
+| Let it land | `POST /api/tickets/<n>/let-it-land` | For a Held ticket with a PR: mark the PR ready and remove `wayfarer:held`, so it joins the merge queue. Marking it ready by hand on GitHub does the same, and Wayfarer clears the label, so Wayfarer never leaves a hold on a ready PR (it drafts a PR before labelling it) | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21), [#108](https://github.com/jeffrichley/wayfarer/issues/108) |
+| Land it | `POST /api/tickets/<n>/land-it` | With auto-merge off, approve a clean, green PR in review so it joins the merge queue. Not a GitHub review: Wayfarer writes with the person's token, so the person authored the PR and GitHub refuses their approval (422). It posts a Land it comment on the ticket whose hidden marker names the PR, which counts as approval when the person whose token Wayfarer holds wrote it, and is not withdrawn by a later push, as a GitHub approval is not by default. An approving review on GitHub does the same. Merging by hand on GitHub skips the queue and is accepted as landed, untested | [The merge queue's unhappy path](https://github.com/jeffrichley/wayfarer/issues/21), [#108](https://github.com/jeffrichley/wayfarer/issues/108) |
 
 ## Global open questions
 

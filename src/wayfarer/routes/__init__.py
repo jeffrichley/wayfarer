@@ -22,6 +22,7 @@ from wayfarer.desk import DeskPage
 from wayfarer.gate import StartGate
 from wayfarer.home import HomePage
 from wayfarer.image import Images
+from wayfarer.joining import Joining
 from wayfarer.read_model import Efforts
 from wayfarer.restart import Restart
 from wayfarer.stream import Store
@@ -40,6 +41,7 @@ class Services:
     efforts: Efforts
     home: HomePage
     images: Images
+    joining: Joining
     restart: Restart
     running: str
     start_gate: StartGate

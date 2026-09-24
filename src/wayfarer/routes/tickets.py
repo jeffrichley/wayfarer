@@ -1,4 +1,4 @@
-"""One ticket's session: stop it, or answer what it asked."""
+"""One ticket: stop its session, answer what it asked, or send it into the merge queue."""
 
 from __future__ import annotations
 
@@ -26,3 +26,15 @@ async def retry(number: int, retry: Retry, services: Wired) -> Response:
 async def answer(number: int, answer: Answer, services: Wired) -> Response:
     """Answer the ticket's question, which resumes its session."""
     return services.accept(services.asker.answer(number, answer.answers))
+
+
+@router.post("/api/tickets/{number}/let-it-land", status_code=202)
+async def let_it_land(number: int, services: Wired) -> Response:
+    """Let a Held ticket's pull request land: ready, and unheld, so it joins the queue."""
+    return services.accept(services.joining.let_it_land(number))
+
+
+@router.post("/api/tickets/{number}/land-it", status_code=202)
+async def land_it(number: int, services: Wired) -> Response:
+    """With auto-merge off, approve a clean, green pull request so it joins the queue."""
+    return services.accept(services.joining.land_it(number))

@@ -21,7 +21,7 @@ from conftest import Launcher, Stream, post
 from github_stand_in import TOKEN, GitHub, Issue
 from wayfarer.github import GitHub as Client
 from wayfarer.github import Repo
-from wayfarer.merge_queue import LANDED_MARKER
+from wayfarer.joining import land_it_comment
 from wayfarer.outcome import Outcome
 from wayfarer.pull_requests import PullRequestGate
 from wayfarer.read_model import HELD
@@ -166,45 +166,134 @@ def test_a_draft_stays_held_across_a_restart_and_joins_once_a_person_lets_it(
             assert (held["state"], held["place_in_line"]) == ("held", None)
         assert running.interrupt() == 0
 
-    # Let it land: ready, and the label cleared. GitHub is all the gate reads.
     url = wayfarer.start(env=_QUICK).url()
     with Stream(url) as page:
         _read(url, page, spec)
+        assert post(f"{url}api/tickets/{ticket.number}/let-it-land").status_code == 202
+        _ticket(page, ticket, state="landing", place_in_line=1)
+
+    [pull] = github.pulls()
+    assert pull.draft is False
+    assert HELD not in github.labels(ticket.number)
+
+
+def test_a_draft_marked_ready_by_hand_on_github_has_its_stale_hold_cleared(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Widgets", tickets=1)
+    _open_held(github, ticket)
+    url = wayfarer.start(env=_QUICK).url()
+
+    with Stream(url) as page:
+        _read(url, page, spec)
+        _ticket(page, ticket, state="held")
         [pull] = github.pulls()
+        # Ready, and nothing else: the label is Wayfarer's to clear (#21).
         github.ready(pull)
-        ticket.labels.remove(HELD)
+        _ticket(page, ticket, state="landing", place_in_line=1)
+
+    assert HELD not in github.labels(ticket.number)
+
+
+def test_a_stale_hold_github_will_not_clear_is_not_asked_about_again_until_it_changes(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Widgets", tickets=1)
+    _open_held(github, ticket)
+    [pull] = github.pulls()
+    github.ready(pull)
+    github.forbid(f"/labels/{HELD}")
+    url = wayfarer.start(env=_QUICK).url()
+
+    with Stream(url) as page:
+        for _ in range(3):
+            _read(url, page, spec)
+        assert page.items[f"ticket:{ticket.number}"]["state"] == "held"
+        refused = [r.status for r in github.requests if r.method == "DELETE"]
+
+        github.unforbid(f"/labels/{HELD}")
+        github.label(ticket, "needs-thought")
+        _ticket(page, ticket, state="landing")
+
+    assert refused == [403]
+
+
+_MANUAL = _QUICK | {"WAYFARER_AUTO_MERGE": "0"}
+
+
+def test_with_auto_merge_off_land_it_puts_a_clean_green_pull_request_the_person_opened_in_line(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Widgets", tickets=1)
+    # Opened by the person whose token Wayfarer holds, so GitHub refuses them an approval.
+    pull = github.pull_request(ticket, base=_EFFORT_BRANCH, checks="SUCCESS")
+    url = wayfarer.start(env=_MANUAL).url()
+
+    with Stream(url) as page:
+        _read(url, page, spec)
+        _ticket(page, ticket, state="in_review", place_in_line=None)
+        assert post(f"{url}api/tickets/{ticket.number}/land-it").status_code == 202
+        _ticket(page, ticket, state="landing", place_in_line=1)
+
+    assert pull.review is None
+    assert not [r for r in github.requests if r.status >= 400]
+
+
+def test_with_auto_merge_off_an_approving_review_on_github_puts_it_in_line(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket,) = github.effort("Widgets", tickets=1)
+    pull = github.pull_request(ticket, base=_EFFORT_BRANCH, author="grace")
+    url = wayfarer.start(env=_MANUAL).url()
+
+    with Stream(url) as page:
+        _read(url, page, spec)
+        _ticket(page, ticket, state="in_review")
+        pull.review = "APPROVED"
         _ticket(page, ticket, state="landing", place_in_line=1)
 
 
-def test_a_pull_request_merged_by_hand_has_its_ticket_closed_on_the_next_read(
+def test_land_it_counts_only_when_the_person_whose_token_wayfarer_holds_said_it(
     wayfarer: Launcher, github: GitHub
 ) -> None:
     spec, (ticket,) = github.effort("Widgets", tickets=1)
-    pull = github.pull_request(ticket, base=_EFFORT_BRANCH, draft=True)
-    github.merged(pull)
-    url = wayfarer.start().url()
+    pull = github.pull_request(ticket, base=_EFFORT_BRANCH)
+    # Wayfarer's words, copied onto the ticket by someone else.
+    github.comment(ticket, land_it_comment(pull.number), by="mallory")
+    # And the person's own, naming another pull request, or mangled.
+    github.comment(ticket, land_it_comment(pull.number + 1))
+    github.comment(ticket, "<!-- wayfarer:land-it {mangled} -->")
+    github.comment(ticket, "<!-- wayfarer:land-it [3] -->")
+    url = wayfarer.start(env=_MANUAL).url()
 
     with Stream(url) as page:
-        post(f"{url}api/efforts/{spec.number}/read")
-        _ticket(page, ticket, state="landed", open=False)
-
-    assert ticket.comments == [
-        f"Landed on `{_EFFORT_BRANCH}` at {pull.merge_commit}.\n\n{LANDED_MARKER}"
-    ]
+        _read(url, page, spec)
+        assert page.items[f"ticket:{ticket.number}"]["state"] == "in_review"
 
 
-def test_a_ticket_pull_request_into_the_trunk_never_joins_the_queue(
+def test_neither_command_acts_on_a_ticket_in_any_other_state(
     wayfarer: Launcher, github: GitHub
 ) -> None:
-    spec, (ticket,) = github.effort("Widgets", tickets=1)
-    # The trunk meets an effort once, through a person's review, never a ticket's.
-    pull = github.pull_request(ticket, base="main")
-    url = wayfarer.start().url()
+    spec, tickets = github.effort("Widgets", tickets=5)
+    takeable, draft, failing, held, landing = tickets
+    github.pull_request(draft, base=_EFFORT_BRANCH, draft=True)
+    github.pull_request(failing, base=_EFFORT_BRANCH, checks="FAILURE")
+    github.pull_request(landing, base=_EFFORT_BRANCH, review="APPROVED")
+    _open_held(github, held)
+    url = wayfarer.start(env=_MANUAL).url()
 
     with Stream(url) as page:
-        effort = _read(url, page, spec)
-        read = page.items[f"ticket:{ticket.number}"]
+        _read(url, page, spec)
+        _ticket(page, landing, state="landing")
+        _ticket(page, held, state="held")
+        before = [(p.number, p.draft, p.review) for p in github.pulls()]
+        for ticket in (takeable, draft, failing, landing, Issue(999, "Unread")):
+            assert post(f"{url}api/tickets/{ticket.number}/let-it-land").status_code == 202
+        for ticket in (takeable, draft, failing, held, landing, Issue(999, "Unread")):
+            assert post(f"{url}api/tickets/{ticket.number}/land-it").status_code == 202
+        # A read after them all, so each has had its turn by the time it shows.
+        _read(url, page, spec)
 
-    assert effort["trunk"] == "main"
-    assert read["place_in_line"] is None
-    assert pull.state == "OPEN"
+    assert [(p.number, p.draft, p.review) for p in github.pulls()] == before
+    assert [t.comments for t in tickets] == [[]] * 5
+    assert HELD in github.labels(held.number)

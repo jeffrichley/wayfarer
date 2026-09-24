@@ -34,6 +34,7 @@ from typing import Any
 from wayfarer.asking import ASKED, latest
 from wayfarer.freshness import Watch
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
+from wayfarer.joining import HELD, landed_by
 from wayfarer.models import (
     Checks,
     ChronicleLine,
@@ -48,8 +49,6 @@ from wayfarer.settings import Settings
 from wayfarer.stream import Store
 
 __all__ = ["ASKED", "HELD", "Efforts", "Event", "History", "derive_state", "read_effort"]
-
-HELD = "wayfarer:held"
 
 # Leaf connections cost the same whatever their size, so each asks for GitHub's
 # maximum of 100; only `subIssues` multiplies, and its page size is a setting.
@@ -312,7 +311,10 @@ async def read_effort(
         if not page["pageInfo"]["hasNextPage"]:
             break
         after = page["pageInfo"]["endCursor"]
-    tickets = [_ticket(node, auto_merge=auto_merge, building=building) for node in nodes]
+    viewer: str = data["viewer"]["login"]
+    tickets = [
+        _ticket(node, auto_merge=auto_merge, building=building, viewer=viewer) for node in nodes
+    ]
     effort = Effort(
         kind="effort",
         id=f"effort:{number}",
@@ -323,7 +325,7 @@ async def read_effort(
         tickets=[ticket.id for ticket in tickets],
     )
     history = History(
-        viewer=data["viewer"]["login"],
+        viewer=viewer,
         timelines={node["number"]: [_event(e) for e in node["events"]["nodes"]] for node in nodes},
     )
     return effort, tickets, history
@@ -342,13 +344,18 @@ def _event(node: dict[str, Any]) -> Event:
     )
 
 
-def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int]) -> Ticket:
+def _ticket(
+    node: dict[str, Any], *, auto_merge: bool, building: Container[int], viewer: str
+) -> Ticket:
     number: int = node["number"]
     labels = [label["name"] for label in node["labels"]["nodes"]]
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
     events = [_event(e) for e in node["events"]["nodes"]]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
+    if pull_request is not None and landed_by(events, pull_request.number, viewer):
+        # The person's Land it, which GitHub will not take as their review (#108).
+        pull_request = pull_request.model_copy(update={"approved": True})
     is_open = node["state"] == "OPEN"
     return Ticket(
         kind="ticket",
