@@ -1,5 +1,5 @@
-"""At work: a lane for every session running or stopped to ask, and what each has
-changed (docs/screens/live-build.md).
+"""At work: a lane for every session running or stopped to ask, and what each session
+has changed (docs/screens/live-build.md).
 
 A lane is derived from the other items on the stream whenever they change, and
 never stored; a session's changes are folded from its events as its beats are.
@@ -61,9 +61,10 @@ class Lane(BaseModel):
     effort: Mention
     state: TicketState = Field(description="Building, or Asked.")
     branch: str = Field(description="Where its work goes: its pull request's, or its own.")
-    session: str | None = Field(
-        description="The run id of its latest session, whose beats are its story and whose "
-        "changes are `changes:<session>`; null until one is recorded."
+    sessions: list[str] = Field(
+        description="The run ids whose beats tell its story, oldest first: its latest "
+        "session's and each it carried on from, as a resume carries on the session that "
+        "asked. Empty until one is recorded."
     )
     started: datetime | None = Field(description="When its latest session started.")
     latest: str | None = Field(
@@ -71,5 +72,9 @@ class Lane(BaseModel):
         "what it asked. Null before its first beat."
     )
     criteria: list[str] = Field(description="Its acceptance criteria, as its ticket words them.")
-    rhythm: list[TestMark] = Field(description="Its latest session's test runs, in order.")
+    rhythm: list[TestMark] = Field(description="Its story's test runs, in order.")
+    last_green: datetime | None = Field(description="When its story last ran green.")
+    changes: list[FileChange] = Field(
+        description="What its story's sessions have changed, added up file by file."
+    )
     question: Asking | None = Field(description="What it asked, while it waits on an answer.")

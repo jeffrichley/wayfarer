@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import type { Beat, Changes, Lane } from "./api";
+import type { Beat, Lane } from "./api";
 import { Beats } from "./Beats";
-import { useNow } from "./clock";
+import { clock, useNow } from "./clock";
 import { Criteria } from "./Criteria";
 import { Frame, Split } from "./Frame";
 import { atWorkHref, ticketHref } from "./links";
@@ -119,12 +119,13 @@ const NO_BEATS: Beat[] = [];
 // The selected lane's story: its head, its beats, and the question it stopped on.
 function Story({ lane }: { lane: Lane }) {
   const now = useNow();
+  // Every session the story is told from, as a resume carries on the one that asked.
   const beats = useItems(
     useShallow((items) =>
-      lane.session === null
+      lane.sessions.length === 0
         ? NO_BEATS
         : Object.values(items).filter(
-            (item): item is Beat => item.kind === "beat" && item.session === lane.session,
+            (item): item is Beat => item.kind === "beat" && lane.sessions.includes(item.session),
           ),
     ),
   );
@@ -165,7 +166,7 @@ function Story({ lane }: { lane: Lane }) {
               }))}
               // Taking the label off resumes the session (#42); what follows arrives
               // over the stream like any other change.
-              onSend={(answers) => void command(`/api/tickets/${ticket.number}/answer`, { answers })}
+              onSend={async (answers) => (await command(`/api/tickets/${ticket.number}/answer`, { answers })).ok}
             />
           </div>
         )}
@@ -177,12 +178,8 @@ function Story({ lane }: { lane: Lane }) {
 // The rail beside the story: the ticket's criteria as written, one mark per test
 // run in the order they ran, and what the session has changed.
 function Rail({ lane }: { lane: Lane }) {
-  const changes = useItems((items) =>
-    lane.session === null ? undefined : (items[`changes:${lane.session}`] as Changes | undefined),
-  );
-  const files = changes?.files ?? [];
-  const greens = lane.rhythm.filter((mark) => mark.passed);
-  const lastGreen = greens[greens.length - 1];
+  const files = lane.changes;
+  // The longest change sets the scale every file's bar is drawn to.
   const widest = Math.max(1, ...files.map((f) => f.added + f.removed));
   return (
     <div data-piece="session-evidence">
@@ -205,13 +202,13 @@ function Rail({ lane }: { lane: Lane }) {
                   key={i}
                   role="listitem"
                   className={`tr ${mark.passed ? "tr-green" : "tr-red"}`}
-                  aria-label={mark.passed ? "Passing" : "Failing"}
+                  aria-label={mark.passed ? "Green" : "Red"}
                 />
               ))}
             </div>
             <p className="meta">
               {`${lane.rhythm.length} ${lane.rhythm.length === 1 ? "run" : "runs"}`}
-              {lastGreen && ` · last green ${clock(lastGreen.at)}`}
+              {lane.last_green !== null && ` · last green ${clock(lane.last_green)}`}
             </p>
           </>
         ) : (
@@ -242,10 +239,3 @@ function Rail({ lane }: { lane: Lane }) {
     </div>
   );
 }
-
-// A time on the reader's own clock: 09:05.
-function clock(at: string): string {
-  const time = new Date(at);
-  return [time.getHours(), time.getMinutes()].map((n) => String(n).padStart(2, "0")).join(":");
-}
-

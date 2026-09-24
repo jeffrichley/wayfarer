@@ -17,12 +17,12 @@ export function App() {
     return <EffortGraph effort={Number(effort[1])} />;
   }
   if (window.location.pathname === "/at-work") {
-    return <Watching />;
+    return <AtWorkPage />;
   }
   return <Home />;
 }
 
-function Watching() {
+function AtWorkPage() {
   useEffect(connect, []);
   return <AtWork />;
 }

@@ -6,8 +6,6 @@ import type { components } from "./api.gen";
 type Schemas = components["schemas"];
 
 export type Beat = Schemas["Beat"];
-export type Changes = Schemas["Changes"];
-export type Lane = Schemas["Lane"];
 export type BeatKind = Schemas["BeatKind"];
 export type Checks = Schemas["Checks"];
 export type Effort = Schemas["Effort"];
@@ -25,6 +23,7 @@ export type Mention = Schemas["Mention"];
 export type Someone = Schemas["Someone"];
 export type GraphCard = Schemas["GraphCard"];
 export type Home = Schemas["Home"];
+export type Lane = Schemas["Lane"];
 export type LineRow = Schemas["LineRow"];
 export type NeedsYou = Schemas["NeedsYou"];
 export type TicketGraph = Schemas["TicketGraph"];

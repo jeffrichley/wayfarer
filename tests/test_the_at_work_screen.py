@@ -123,11 +123,7 @@ def test_the_rail_shows_the_criteria_as_written_a_mark_per_test_run_and_what_cha
 
     marks = rail.locator("[data-piece=rhythm] .tr")
     expect(marks).to_have_count(3)
-    assert [m.get_attribute("aria-label") for m in marks.all()] == [
-        "Failing",
-        "Passing",
-        "Failing",
-    ]
+    assert [m.get_attribute("aria-label") for m in marks.all()] == ["Red", "Green", "Red"]
     expect(rail.locator("[data-piece=criteria] li")).to_have_text(
         ["Credits are checked", "A missing one fails"]
     )
@@ -152,9 +148,18 @@ def test_an_asked_ticket_shows_its_question_under_the_story_and_answering_resume
     expect(card).to_contain_text(WHICH)
 
     card.get_by_role("radio", name="Warn").click()
-    card.locator(f"[data-piece=send-answer-{ticket.number}]").click()
+    send = card.locator(f"[data-piece=send-answer-{ticket.number}]")
+    # An answer the server does not take is not said to be posted, and can be sent again.
+    page.route("**/answer", lambda route: route.fulfill(status=503))
+    send.click()
+    expect(card.get_by_role("status")).to_have_text("It was not posted. Send it again.")
+    assert ASKED in github.labels(ticket.number)
+    page.unroute("**/answer")
+    send.click()
 
     expect(story).to_contain_text("Warning on no credits, as you said.")
+    # It carries on the story it stopped in, rather than starting a new one.
+    expect(story).to_contain_text("Checking the credits.")
     expect(lane).to_contain_text("Warning on no credits, as you said.")
     expect(card).to_have_count(0)
     assert ASKED not in github.labels(ticket.number)

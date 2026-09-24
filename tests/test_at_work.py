@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from claude_stream import Playing, runs_tests, says
+from claude_stream import Playing, edits, runs_tests, says
 
 from cascading import playing
 from conftest import Stream, post
@@ -62,6 +62,7 @@ def test_every_running_session_has_a_lane_telling_its_own_story_as_it_goes(
     agent.first[fold.number] = [
         says("Reading the fold."),
         *runs_tests("t1", exit=1, failed=1, failing=["test_fold"]),
+        *edits("e1", "/workspace/src/fold.py"),
     ]
     agent.then[fold.number] = [*runs_tests("t2", exit=0, passed=4), says("Folding works.")]
     agent.first[measure.number] = [*runs_tests("t1", exit=0, passed=2), says("Measuring next.")]
@@ -82,8 +83,12 @@ def test_every_running_session_has_a_lane_telling_its_own_story_as_it_goes(
     assert [mark["passed"] for mark in first["rhythm"]] == [False, True]
     assert [mark["passed"] for mark in second["rhythm"]] == [True]
     assert second["criteria"] == []
-    # Each lane names its own session, whose beats are its story.
-    assert first["session"] != second["session"]
+    assert first["last_green"] == first["rhythm"][1]["at"]
+    assert first["changes"] == [{"path": "src/fold.py", "added": 1, "removed": 1}]
+    assert second["changes"] == []
+    # Each lane is its own session's story.
+    assert len(first["sessions"]) == len(second["sessions"]) == 1
+    assert first["sessions"] != second["sessions"]
     assert first["question"] is None
 
 
@@ -91,9 +96,16 @@ def test_a_ticket_that_asked_keeps_its_lane_with_its_question_and_answering_resu
     url: str, agent: Playing, github: GitHub
 ) -> None:
     effort, (ticket,) = github.effort("Exports", tickets=1)
-    agent.first[ticket.number] = [says("Checking the credits.")]
+    agent.first[ticket.number] = [
+        *runs_tests("t1", exit=1, failed=1, failing=["test_credits"]),
+        *edits("e1", "/workspace/src/credits.py"),
+    ]
     agent.asking[ticket.number] = ASKING
-    agent.then[ticket.number] = [says("Warning on no credits, as you said.")]
+    agent.then[ticket.number] = [
+        *edits("e2", "/workspace/src/credits.py"),
+        *runs_tests("t2", exit=0, passed=5),
+        says("Warning on no credits, as you said."),
+    ]
 
     with _page(url) as page:
         assert post(f"{url}api/efforts/{effort.number}/arm").status_code == 202
@@ -112,6 +124,10 @@ def test_a_ticket_that_asked_keeps_its_lane_with_its_question_and_answering_resu
         )
 
     assert ASKED not in github.labels(ticket.number)
-    # The story is the session that carried on, and it waits on nothing.
-    assert resumed["session"] != asked["session"]
+    # The session that carried on continues the story the asking one told.
+    [asking] = asked["sessions"]
+    assert resumed["sessions"][0] == asking
+    assert len(resumed["sessions"]) == 2
+    assert [mark["passed"] for mark in resumed["rhythm"]] == [False, True]
+    assert resumed["changes"] == [{"path": "src/credits.py", "added": 2, "removed": 2}]
     assert resumed["question"] is None

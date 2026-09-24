@@ -978,6 +978,11 @@ export interface components {
              */
             branch: string;
             /**
+             * Changes
+             * @description What its story's sessions have changed, added up file by file.
+             */
+            changes: components["schemas"]["FileChange"][];
+            /**
              * Criteria
              * @description Its acceptance criteria, as its ticket words them.
              */
@@ -994,6 +999,11 @@ export interface components {
              */
             kind: "lane";
             /**
+             * Last Green
+             * @description When its story last ran green.
+             */
+            last_green: string | null;
+            /**
              * Latest
              * @description What its latest session last did, in one sentence; for an Asked ticket, what it asked. Null before its first beat.
              */
@@ -1002,14 +1012,14 @@ export interface components {
             question: components["schemas"]["Asking"] | null;
             /**
              * Rhythm
-             * @description Its latest session's test runs, in order.
+             * @description Its story's test runs, in order.
              */
             rhythm: components["schemas"]["TestMark"][];
             /**
-             * Session
-             * @description The run id of its latest session, whose beats are its story and whose changes are `changes:<session>`; null until one is recorded.
+             * Sessions
+             * @description The run ids whose beats tell its story, oldest first: its latest session's and each it carried on from, as a resume carries on the session that asked. Empty until one is recorded.
              */
-            session: string | null;
+            sessions: string[];
             /**
              * Started
              * @description When its latest session started.

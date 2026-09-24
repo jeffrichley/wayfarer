@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 
 import type { Beat, BeatKind } from "./api";
 import styles from "./Beats.module.css";
+import { clock } from "./clock";
 import { Kicker } from "./Type";
 
 // A reader this close to the bottom is following the story, and the pane keeps
@@ -83,7 +84,10 @@ export function Beats({ beats, children }: { beats: Beat[]; children?: ReactNode
     drawn.current ||= beats.length > 0;
   }, [beats]);
 
-  const story = [...beats].sort((a, b) => a.seq - b.seq);
+  // In the order they happened. A story told across sessions, as a resume carries on
+  // the one that asked, is ordered by time; one session's beats never go back in time,
+  // and those at the same moment keep their order in it.
+  const story = [...beats].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.seq - b.seq);
   return (
     <div ref={pane} className={`pane ${styles.pane}`} onScroll={scrolled}>
       <ol className={styles.beats} aria-live="polite">
@@ -207,11 +211,6 @@ function useNow(): number {
   return now;
 }
 
-// The beat's time on the reader's own clock, as the prototype stamps it: 09:05.
-function clock(at: string): string {
-  const time = new Date(at);
-  return [time.getHours(), time.getMinutes()].map((n) => String(n).padStart(2, "0")).join(":");
-}
 
 // 12s, 1m 17s, 1h 4m.
 function elapsed(ms: number): string {
