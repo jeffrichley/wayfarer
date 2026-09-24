@@ -202,6 +202,11 @@ class Store:
             ) in rows
         ]
 
+    def session(self, run_id: str) -> SessionRow:
+        """Session `run_id`, which must have been recorded."""
+        (row,) = (row for row in self.sessions() if row.run_id == run_id)
+        return row
+
     def built(self) -> set[int]:
         """Every ticket a build session has started on, which is its one automatic start,
         but for a session the environment failed, which spent nothing (#41)."""

@@ -86,8 +86,8 @@ QUESTION = ".wayfarer/question.json"
 # Environment failures that happen around a session rather than inside it.
 _ENVIRONMENT = (PreflightError, StageError, OSError, TimeoutError, GitHubError)
 
-# The one item a session the environment failed raises, whichever ticket it was on.
-_FAILED = "environment:session"
+# The id of the one item a session the environment failed raises, whichever ticket it was on.
+_RAISED = "environment:session"
 
 # What a retry that continues tells the session it resumes, or one it starts cold.
 _CONTINUE = """Your last session on this ticket stopped before it was done: {why} \
@@ -95,6 +95,10 @@ Carry on from where it stopped, then report as before."""
 _CONTINUE_COLD = """An earlier session on this ticket stopped before it was done: {why} \
 Its commits are on this branch. Carry on from them."""
 _HELD_FOR_A_PERSON = "It was held for a person to decide."
+
+
+_SpecFor = Callable[[Sessions, Ticket, Effort], Awaitable[RunSpec[Outcome]]]
+"""How a session on a ticket is described, once it is known where it starts."""
 
 
 async def _never_asked(ticket: int, run_id: str, question: bytes | None) -> bool:
@@ -153,7 +157,7 @@ class Cascades:
                 return  # Unreadable: the read has already said why, in its place.
             self.record().arm(effort)
             self._why.pop(effort, None)
-            self._stream.remove(_FAILED)
+            self._stream.remove(_RAISED)
             # The gate is asked as a cascade is armed, as well as before each start.
             if await self._gate.admit() is not None:
                 await self._gate_refused(effort)
@@ -169,7 +173,7 @@ class Cascades:
         """Start what `effort`'s cascade can again, as of a fresh read."""
         self.record().resume(effort)
         self._why.pop(effort, None)
-        self._stream.remove(_FAILED)
+        self._stream.remove(_RAISED)
         await self._efforts.read(effort)
 
     async def stop(self, ticket: int) -> None:
@@ -187,21 +191,25 @@ class Cascades:
         for row in stopped:
             store.session_ended(row.run_id, datetime.now(UTC), None)
             store.failed(row.run_id, Fault.ATTEMPT, STOPPED)
-        found = self._find(ticket)
-        if found is None:
-            return
         # Still claimed, so still nobody else's to start.
+        found = self._find(ticket)
         run_id = stopped[-1].run_id if stopped else None
         try:
+            if found is None:
+                raise GitHubError("the ticket was not read, so its work cannot be published")
             await self._endings.ended(
                 *found,
                 preserved=await self._endings.kept(run_id) if run_id else None,
                 outcome=None,
                 why=STOPPED,
                 events=read_events(stopped[-1].event_file) if stopped else [],
+                over=False,
             )
         except _ENVIRONMENT:
-            _log.warning("Ticket #%s was stopped but could not be held.", ticket, exc_info=True)
+            # Its work stays on its preservation branch; the ticket is held regardless.
+            _log.warning("Ticket #%s's stopped work was not published.", ticket, exc_info=True)
+            with contextlib.suppress(GitHubError):
+                await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [HELD]})
 
     async def retry(self, ticket: int, how: RetryFrom) -> None:
         """Start a person's session on a Held ticket, clearing its hold: continuing where its
@@ -228,14 +236,8 @@ class Cascades:
                 return
             if over:
                 held = held.model_copy(update={"pull_request": None})
-            spec = self._starting_over if over else self._continuing
+            spec = self._from_head(Purpose.START_OVER) if over else self._continuing
             self._begin(ticket, self._run(held, effort, spec))
-
-    async def _starting_over(
-        self, sessions: Sessions, ticket: Ticket, effort: Effort
-    ) -> RunSpec[Outcome]:
-        head = await self._endings.effort_head(effort)
-        return sessions.spec(ticket.number, base=head, purpose=Purpose.START_OVER)
 
     async def _continuing(
         self, sessions: Sessions, ticket: Ticket, effort: Effort
@@ -371,13 +373,16 @@ class Cascades:
         return [t for t in tickets if t.state is TicketState.TAKEABLE and t.number not in started]
 
     def _submit(self, ticket: Ticket, effort: Effort) -> None:
-        self._begin(ticket.number, self._run(ticket, effort, self._building))
+        self._begin(ticket.number, self._run(ticket, effort, self._from_head(Purpose.BUILD)))
 
-    async def _building(
-        self, sessions: Sessions, ticket: Ticket, effort: Effort
-    ) -> RunSpec[Outcome]:
-        head = await self._endings.effort_head(effort)
-        return sessions.spec(ticket.number, base=head)
+    def _from_head(self, purpose: Purpose) -> _SpecFor:
+        """A session from the effort branch's head: the cascade's build, or a start over."""
+
+        async def spec(sessions: Sessions, ticket: Ticket, effort: Effort) -> RunSpec[Outcome]:
+            head = await self._endings.effort_head(effort)
+            return sessions.spec(ticket.number, base=head, purpose=purpose)
+
+        return spec
 
     def _begin(self, ticket: int, work: Coroutine[Any, Any, None]) -> None:
         run = asyncio.create_task(work)
@@ -390,7 +395,7 @@ class Cascades:
         self,
         ticket: Ticket,
         effort: Effort,
-        spec: Callable[[Sessions, Ticket, Effort], Awaitable[RunSpec[Outcome]]],
+        spec: _SpecFor,
     ) -> None:
         """Run one session on `ticket` under the shared cap, and answer how it ended."""
         sessions = self._sessions(self.record())
@@ -398,7 +403,7 @@ class Cascades:
             result = await self._queue.submit(await spec(sessions, ticket, effort))
         except _ENVIRONMENT as error:
             # Before any session ran: nothing of the ticket's was spent.
-            await self._released(ticket, effort, _said(error))
+            await self._released(ticket, effort, _detail(error))
             return
         await self._answer(sessions, ticket, effort, result)
 
@@ -419,7 +424,7 @@ class Cascades:
                 ticket.number, result.run_id, sessions.carried(result.run_id, QUESTION)
             ):
                 return
-        (row,) = (row for row in store.sessions() if row.run_id == result.run_id)
+        row = store.session(result.run_id)
         try:
             await self._endings.ended(
                 ticket,
@@ -428,11 +433,12 @@ class Cascades:
                 outcome=None if isinstance(result, RunFailed) else result.outcome,
                 why=why,
                 events=read_events(row.event_file),
+                over=row.purpose is Purpose.START_OVER,
             )
         except _ENVIRONMENT as error:
             # Its work is kept on its preservation branch, but GitHub never heard of it.
-            store.failed(result.run_id, Fault.ENVIRONMENT, _said(error))
-            await self._released(ticket, effort, _said(error))
+            store.failed(result.run_id, Fault.ENVIRONMENT, _detail(error))
+            await self._released(ticket, effort, _detail(error))
 
     async def _released(self, ticket: Ticket, effort: Effort, detail: str) -> None:
         """A failure of the environment, not the ticket's: let the ticket go back on the
@@ -450,14 +456,14 @@ class Cascades:
         self._stream.upsert(
             EnvironmentFailure(
                 kind="environment",
-                id=_FAILED,
+                id=_RAISED,
                 reason=reason,
                 failed=[GateCheck(name="A session can run", passed=False, detail=detail)],
             )
         )
         try:
             if retried:
-                await self._endings.say(ticket.number, f"A retry could not run: {detail}")
+                await self._endings.hold_saying(ticket.number, f"A retry could not run: {detail}")
                 return
             login = await self._github.login()
             await self._github.write(
@@ -506,7 +512,7 @@ class Cascades:
         return self._opened
 
 
-def _said(error: Exception) -> str:
+def _detail(error: Exception) -> str:
     """What an environment failure said, in words a person can act on."""
     if isinstance(error, StageError):
         return repr(error.failure)

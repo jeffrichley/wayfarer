@@ -163,19 +163,22 @@ class Endings:
         outcome: Outcome | None,
         why: str | None,
         events: Sequence[SessionEvent],
+        over: bool,
     ) -> None:
         """Push what a session left and open or update its pull request, or say on its
         ticket why there is none. `outcome` is what a finished session reported; `why`
-        says what happened to one that failed, for a draft's body or a comment."""
+        says what happened to one that failed, for a draft's body or a comment. `over`
+        is a start over, whose commits replace any its ticket branch still holds."""
         pull = (
             ticket.pull_request if ticket.pull_request and not ticket.pull_request.merged else None
         )
         if preserved is None and pull is None:
-            await self.say(ticket.number, why or _nothing_committed(outcome))
+            said = why or _nothing_committed(outcome)
+            await self._comment_held(ticket.number, self._held(said, events))
             return
         branch = pull.branch if pull is not None else ticket_branch(ticket)
         if preserved is not None:
-            await self._push(preserved, branch, over=pull is None)
+            await self._push(preserved, branch, over=over)
         if outcome is not None and why is None:
             await self._gate.open(
                 ticket=ticket.number,
@@ -186,18 +189,20 @@ class Endings:
                 pull=pull.number if pull else None,
             )
             return
+        said = why or _nothing_committed(outcome)
         await self._gate.hold(
             ticket=ticket.number,
             title=ticket.title,
             branch=branch,
             effort_branch=effort_branch(effort),
-            body=self._held_body(ticket.number, why or _nothing_committed(outcome), events),
+            body=f"For #{ticket.number}.\n\n{self._held(said, events)}",
             pull=pull.number if pull else None,
         )
 
     async def _push(self, preserved: str, branch: str, *, over: bool) -> None:
-        """Push `preserved` as the ticket branch. `over` replaces one no open pull
-        request holds, which a start over left behind; otherwise it only moves on."""
+        """Push `preserved` as the ticket branch. `over` replaces what a start over left
+        behind; otherwise it only moves on, and a branch holding other commits refuses
+        it, so nothing pushed before is lost."""
         force = ("--force",) if over else ()
         async with self._bounded():
             await (await self._git()).git(
@@ -206,17 +211,20 @@ class Endings:
         # The push is not GitHub's API, so nothing else says to read again.
         self._github.freshness.poke()
 
-    async def say(self, ticket: int, why: str) -> None:
-        """Hold a ticket with no commits to open a pull request with, saying why on it."""
+    async def hold_saying(self, ticket: int, why: str) -> None:
+        """Hold a ticket with nothing to publish, saying `why` on it."""
+        await self._comment_held(ticket, f"**Held: {why}**\n")
+
+    async def _comment_held(self, ticket: int, said: str) -> None:
         # The comment first, so the ticket is never held without saying why.
         await self._github.write(
-            "POST", f"/issues/{ticket}/comments", {"body": f"**Held: {why}**\n\n{HELD_MARKER}"}
+            "POST", f"/issues/{ticket}/comments", {"body": f"{said}\n{HELD_MARKER}"}
         )
         await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [HELD]})
 
-    def _held_body(self, ticket: int, why: str, events: Sequence[SessionEvent]) -> str:
+    def _held(self, why: str, events: Sequence[SessionEvent]) -> str:
         """What happened in plain words, then the last summary, then the end of the output."""
-        parts = [f"For #{ticket}.", f"**Held: {why}**"]
+        parts = [f"**Held: {why}**"]
         if (summary := _last_summary(events)) is not None:
             parts += ["## The last summary", summary.strip()]
         if tail := _tail(events, self._settings.held_output_lines):

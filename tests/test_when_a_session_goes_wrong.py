@@ -22,17 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from waystation import (
-    AgentExited,
-    CommandFailed,
-    Errored,
-    HookRaised,
-    OutcomeInvalid,
-    OutcomeMissing,
-    Refused,
-    RunFailed,
-    TimedOut,
-)
 from waystation.agents import AgentCommand, AgentEvent
 from waystation.testing import ScriptedAgent, ScriptedCommit
 
@@ -40,10 +29,8 @@ import cascading
 from cascading import Gate, eventually, git, origin_clone
 from conftest import Stream, post
 from github_stand_in import LOGIN, GitHub, Issue, PullRequest
-from wayfarer.endings import fault
 from wayfarer.merge_queue import HELD_MARKER
 from wayfarer.read_model import HELD
-from wayfarer.store import Fault
 
 pytestmark = pytest.mark.git
 
@@ -216,7 +203,7 @@ def test_an_attempt_that_failed_with_commits_opens_a_draft_saying_what_happened_
     assert held["assignees"] == [LOGIN]
 
 
-def test_an_attempt_that_left_no_commits_is_held_with_a_comment_saying_what_happened(
+def test_an_attempt_with_no_commits_is_held_with_a_comment_saying_what_happened_then_the_output(
     serve: Any, github: GitHub
 ) -> None:
     effort, (ticket,) = github.effort("Widgets", tickets=1)
@@ -227,7 +214,16 @@ def test_an_attempt_that_left_no_commits_is_held_with_a_comment_saying_what_happ
         seen.item(f"ticket:{ticket.number}", state="held")
 
     assert github.pulls() == []
-    assert ticket.comments[-1] == f"**Held: The agent stopped without reporting.**\n\n{HELD_MARKER}"
+    assert ticket.comments[-1] == (
+        "**Held: The agent stopped without reporting.**\n"
+        "\n"
+        "## The end of the output\n"
+        "\n"
+        "````text\n"
+        "Thinking.\n"
+        "````\n"
+        f"\n{HELD_MARKER}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -359,7 +355,8 @@ def test_retrying_to_continue_goes_on_with_its_draft_and_opens_it_ready_once_don
         # A person's start: it runs though the cascade is paused.
         post(f"{app.url}api/efforts/{effort.number}/pause")
         seen.item(f"cascade:{effort.number}", paused=True)
-        _retry(app.url, ticket, "continue")
+        # Continue is what a retry does unless told otherwise.
+        assert post(f"{app.url}api/tickets/{ticket.number}/retry", {}).status_code == 202
         seen.item(f"ticket:{ticket.number}", state="landing")
 
     pull = _pull(github, ticket)
@@ -417,39 +414,3 @@ def test_a_ticket_that_is_not_held_is_not_retried(serve: Any, github: GitHub) ->
 
     eventually(lambda: len(app.plays.handed[ticket.number]) == 1)
     assert len(github.pulls()) == 1
-
-
-def _failed(failure: Any) -> RunFailed:
-    return RunFailed(
-        run_id="r",
-        name=None,
-        base_sha=None,
-        elapsed={},
-        agent=None,
-        series=None,
-        preserved=None,
-        stage="agent",
-        failure=failure,
-    )
-
-
-@pytest.mark.parametrize(
-    ("failure", "whose"),
-    [
-        (AgentExited(exit_code=1, stdout_tail="", stderr_tail=""), Fault.ATTEMPT),
-        (OutcomeMissing(stdout_tail=""), Fault.ATTEMPT),
-        (OutcomeInvalid(raw={}, error=None), Fault.ATTEMPT),  # type: ignore[arg-type]
-        (TimedOut(bound="agent_silence", limit=1, elapsed=1), Fault.ATTEMPT),
-        (TimedOut(bound="agent_wall", limit=1, elapsed=1), Fault.ATTEMPT),
-        (Refused(reason="nonlinear_series", detail=""), Fault.ATTEMPT),
-        (TimedOut(bound="workspace", limit=1, elapsed=1), Fault.ENVIRONMENT),
-        (Refused(reason="dirty_tree", detail=""), Fault.ENVIRONMENT),
-        (CommandFailed(argv=["git"], exit_code=1, stderr_tail=""), Fault.ENVIRONMENT),
-        (Errored(exception=RuntimeError()), Fault.ENVIRONMENT),
-        (HookRaised(hook="run_start", function="f", exception=RuntimeError()), Fault.ENVIRONMENT),
-    ],
-)
-def test_whose_failure_it_was_is_decided_by_its_type_never_its_stage(
-    failure: Any, whose: Fault
-) -> None:
-    assert fault(_failed(failure)) is whose

@@ -112,7 +112,7 @@ class PullRequestGate:
         title: str,
         branch: str,
         effort_branch: str,
-        said: str,
+        text: str,
         ready: bool,
         pull: int | None,
     ) -> int:
@@ -124,14 +124,14 @@ class PullRequestGate:
                     "title": title,
                     "head": branch,
                     "base": effort_branch,
-                    "body": said,
+                    "body": text,
                     "draft": not ready,
                 },
             )
             number: int = opened["number"]
         else:
             number = pull
-            await self._github.write("PATCH", f"/pulls/{number}", {"body": said})
+            await self._github.write("PATCH", f"/pulls/{number}", {"body": text})
             if ready:
                 found = (await self._github.query(_PULL_ID, number=number))["repository"]
                 await self._github.mutate(_TO_READY, id=found["pullRequest"]["id"])

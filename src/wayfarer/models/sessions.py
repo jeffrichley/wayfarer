@@ -82,6 +82,7 @@ class Retry(BaseModel):
     """A person's retry of a Held ticket: the person's start, not the cascade's."""
 
     start: RetryFrom = Field(
-        description="`continue` is the default when its session left commits; `start_over` "
-        "when it left none, or its re-test was red on the latest effort branch."
+        default=RetryFrom.CONTINUE,
+        description="`continue` unless said otherwise. Offer `start_over` first for a ticket "
+        "held by a red re-test, since continuing would build on the version that broke.",
     )

@@ -185,7 +185,7 @@ class Sessions:
         Its transcript goes in as the sandbox starts, with each of `files_in` at its path
         under the sandbox's home. With the transcript lost, it starts cold instead: a
         fresh conversation, told `cold` after the slash command."""
-        (row,) = (row for row in self._store.sessions() if row.run_id == run_id)
+        row = self._store.session(run_id)
         transcript = self.carried(run_id, TRANSCRIPT)
         if row.conversation is None or transcript is None:
             return self.spec(ticket, base=base, purpose=purpose, prompt=cold)

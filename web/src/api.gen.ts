@@ -1051,7 +1051,7 @@ export interface components {
             kind: "retried";
             /**
              * Over
-             * @description Started over on the effort branch's head, rather than continuing where its session stopped. Null until the chronicle reads which (#41).
+             * @description Started over on the effort branch's head, rather than continuing where its session stopped. Null for a session recorded before retries said which.
              */
             over: boolean | null;
             ticket: components["schemas"]["Mention"];
@@ -1061,7 +1061,10 @@ export interface components {
          * @description A person's retry of a Held ticket: the person's start, not the cascade's.
          */
         Retry: {
-            /** @description `continue` is the default when its session left commits; `start_over` when it left none, or its re-test was red on the latest effort branch. */
+            /**
+             * @description `continue` unless said otherwise. Offer `start_over` first for a ticket held by a red re-test, since continuing would build on the version that broke.
+             * @default continue
+             */
             start: components["schemas"]["RetryFrom"];
         };
         /**
