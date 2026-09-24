@@ -36,7 +36,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Literal
 
-from wayfarer.asking import gist
+from wayfarer.asking import gist_before
 from wayfarer.merge_queue import LANDED_MARKER
 from wayfarer.models import (
     Answered,
@@ -124,7 +124,7 @@ class _Telling:
             case "LabeledEvent", label if label == ASKED:
                 # Quoted from the question comment posted just before the label (#42).
                 at = next(i for i, told in enumerate(timeline) if told is e)
-                asked = Asked(kind="asked", ticket=ticket, gist=gist(timeline, at))
+                asked = Asked(kind="asked", ticket=ticket, gist=gist_before(timeline, at))
                 return self._line(number, e, asked)
             case "LabeledEvent", label if label == HELD:
                 return self._line(number, e, Held(kind="held", ticket=ticket, reason=None))

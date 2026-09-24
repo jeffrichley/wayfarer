@@ -48,7 +48,7 @@ from waystation import (
     StageError,
 )
 
-from wayfarer.asking import ANSWER, QUESTION, RESUMED, cold, resumed
+from wayfarer.asking import ANSWER, QUESTION, RESUMED, answers_for_resume, cold_prompt
 from wayfarer.endings import STOPPED, Endings, fault, what_happened
 from wayfarer.github import GitHub, GitHubError
 from wayfarer.models import (
@@ -265,13 +265,13 @@ class Cascades:
         the answer carried in for the image's hook to hand back (#42)."""
         asking = ticket.question
         assert asking is not None, "only an answered question is resumed"
-        answers = resumed(asking)
+        answers = answers_for_resume(asking)
         return sessions.resume(
             ticket.number,
             asking.session,
             base=await self._where_it_stopped(ticket, effort, asking.session),
             prompt=RESUMED,
-            cold=cold(asking, answers),
+            cold=cold_prompt(asking, answers),
             purpose=Purpose.RESUME,
             files_in={ANSWER: json.dumps(answers).encode()},
         )

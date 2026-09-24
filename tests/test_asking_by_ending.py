@@ -80,17 +80,6 @@ def test_an_asked_ticket_shows_its_question_with_every_option_as_the_session_ask
     }
 
 
-def test_the_question_comment_reads_on_github_without_wayfarer(github: GitHub) -> None:
-    body = question_comment("run-1", [_WHICH])
-
-    # A person on their phone sees the question and its options, not the marker's JSON.
-    shown = body.split("<!--")[0]
-    assert "Should a book with no credits fail the export or warn?" in shown
-    assert "**Fail**: The export stops, naming the book." in shown
-    assert "**Warn**: The export carries on, and says so." in shown
-    assert f"remove the `{ASKED}` label" in shown
-
-
 def test_answering_from_wayfarer_posts_the_answer_and_takes_the_label_off(
     wayfarer: Launcher, github: GitHub, tmp_path: Path
 ) -> None:

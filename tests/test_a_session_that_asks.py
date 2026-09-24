@@ -217,8 +217,12 @@ def test_a_session_that_asks_ends_frees_its_slot_and_leaves_its_question_on_the_
     eventually(lambda: bool(app.claude.of(next_)))
 
     [question] = [c for c in asking.comments if "wayfarer:question" in c]
-    assert _WHICH in question
-    assert "**Warn**: The export carries on." in question
+    # A person on their phone reads the question and its options, not the marker's JSON.
+    shown = question.split("<!--")[0]
+    assert _WHICH in shown
+    assert "**Fail**: The export stops." in shown
+    assert "**Warn**: The export carries on." in shown
+    assert f"remove the `{ASKED}` label" in shown
     # Still claimed, and never held: asking is not a failure.
     assert asking.assignees == [LOGIN]
     assert "wayfarer:held" not in github.labels(asking.number)

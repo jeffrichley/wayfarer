@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 
+from wayfarer.asking import gist
 from wayfarer.github import Repo
 from wayfarer.models import (
     Asked,
@@ -281,7 +282,7 @@ def _need(
                 holds_up=holds_up,
                 starts=starts,
                 since=waited("asked"),
-                gist=_gist(ticket),
+                gist=None if ticket.question is None else gist(ticket.question.questions),
             )
         case TicketState.HELD:
             return NeedHeld(
@@ -377,10 +378,3 @@ def _standfirst(effort: Effort, tickets: list[Ticket], waiting: list[_OnATicket]
     if on_you:
         counts.insert(0, f"{_tickets(on_you)} waiting on you")
     return f"{lead}, with {' and '.join(counts)}."
-
-
-def _gist(ticket: Ticket) -> str | None:
-    """What an Asked ticket's session asked, as its question comment has it (#42)."""
-    if ticket.question is None or not ticket.question.questions:
-        return None
-    return ticket.question.questions[0].question

@@ -43,12 +43,13 @@ __all__ = [
     "RESUMED",
     "Asker",
     "answer_comment",
-    "cold",
+    "answers_for_resume",
+    "cold_prompt",
     "gist",
+    "gist_before",
     "latest",
     "parse_questions",
     "question_comment",
-    "resumed",
 ]
 
 ASKED = "wayfarer:asked"
@@ -143,24 +144,28 @@ def latest(timeline: Sequence[Event]) -> Asking | None:
     return None
 
 
-def gist(timeline: Sequence[Event], upto: int) -> str | None:
-    """The question asked before event `upto`, as a chronicle line quotes it."""
+def gist(questions: Sequence[Question]) -> str | None:
+    """What a session asked, in one line: its first question."""
+    return questions[0].question if questions else None
+
+
+def gist_before(timeline: Sequence[Event], upto: int) -> str | None:
+    """The gist of the question asked before event `upto`, as a chronicle line quotes it."""
     for e in reversed(timeline[:upto]):
         asked = _question(e)
         if asked is not None:
-            _, questions = asked
-            return questions[0].question if questions else None
+            return gist(asked[1])
     return None
 
 
-def resumed(asking: Asking) -> dict[str, str]:
+def answers_for_resume(asking: Asking) -> dict[str, str]:
     """What the hook hands back: an answer for each question, whether or not a person
     wrote one."""
     given = asking.answers or {}
     return {q.question: given.get(q.question) or _UNANSWERED for q in asking.questions}
 
 
-def cold(asking: Asking, answers: Mapping[str, str]) -> str:
+def cold_prompt(asking: Asking, answers: Mapping[str, str]) -> str:
     """What a resume that starts cold is told: each question, and its answer."""
     asked = "\n\n".join(
         f"You asked: {q.question}\nThe answer: {answers[q.question]}" for q in asking.questions
