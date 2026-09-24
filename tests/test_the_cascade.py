@@ -567,7 +567,7 @@ def test_a_ticket_closed_on_github_while_its_session_runs_is_flagged_last_until_
     effort, (ticket,) = github.effort("Widgets", tickets=1)
     app = wayfarer()
 
-    with Stream(app.url, patience=20.0, home=True) as seen:
+    with Stream(app.url, patience=20.0, derived=True) as seen:
         app.arm(effort)
         eventually(lambda: app.started() == [ticket.number])
 
