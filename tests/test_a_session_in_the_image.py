@@ -6,6 +6,7 @@ run, so it can be read without starting one, and without spending anything.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -71,3 +72,17 @@ def test_a_session_runs_under_the_time_caps_in_the_settings(store: Store) -> Non
         integrate=30.0,
         teardown=30.0,
     )
+
+
+def test_a_session_can_ask_because_it_is_named_the_images_permission_prompt_tool(
+    store: Store,
+) -> None:
+    spec = _in_image(store, Settings()).spec(7)
+
+    assert isinstance(spec.provider, ClaudeCode)
+    args = list(spec.provider.args)
+    tool = args[args.index("--permission-prompt-tool") + 1]
+    config = json.loads(args[args.index("--mcp-config") + 1])
+    # The tool the image carries, under the name the flag gives it (`base/wf-ask-tool`).
+    assert tool == "mcp__wayfarer__ask"
+    assert config == {"mcpServers": {"wayfarer": {"command": "/usr/local/bin/wf-ask-tool"}}}

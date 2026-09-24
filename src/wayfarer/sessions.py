@@ -53,6 +53,7 @@ from waystation.agents import (
 )
 from waystation.results import AgentUsage
 
+from wayfarer.asking import ASKING, QUESTION
 from wayfarer.beats import fold
 from wayfarer.events import (
     AgentEnded,
@@ -148,10 +149,11 @@ class Sessions:
             clone,
             store,
             repo,
-            agent=lambda args: ClaudeCode(args=tuple(args)),
+            agent=lambda args: ClaudeCode(args=(*ASKING, *args)),
             sandbox=DockerSandbox(image),
             settings=settings,
             stream=stream,
+            carry_out=[QUESTION],
         )
 
     def spec(

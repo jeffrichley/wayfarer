@@ -133,6 +133,7 @@ def create_app(
         sessions or in_image,
         runs,
         Endings(repo, github, settings),
+        asked=asker.asked,
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
     graphs = Graphs(store, None if github.repo is None else cascades.record)

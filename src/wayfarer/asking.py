@@ -38,10 +38,12 @@ if TYPE_CHECKING:
 __all__ = [
     "ANSWER",
     "ASKED",
+    "ASKING",
     "QUESTION",
     "RESUMED",
     "Asker",
     "answer_comment",
+    "cold",
     "gist",
     "latest",
     "parse_questions",
@@ -65,8 +67,26 @@ _ANSWER_MARK = re.compile(r"<!-- wayfarer:answer (\{.*?\}) -->", re.DOTALL)
 # Given to each question a person took the label off without answering.
 _UNANSWERED = "No answer was given. Decide for yourself, and record it as an assumption."
 
-# The prompt a resume is told beside the answer the hook hands back.
 RESUMED = "Your question was answered. Carry on from where you asked."
+"""What a resume is told, beside the answer the hook hands back."""
+
+ASKING = (
+    "--mcp-config",
+    json.dumps({"mcpServers": {"wayfarer": {"command": "/usr/local/bin/wf-ask-tool"}}}),
+    "--permission-prompt-tool",
+    "mcp__wayfarer__ask",
+)
+"""What a session is run with so it can ask: in print mode `AskUserQuestion` exists
+only once a permission prompt tool is named, and the image's stub is that tool
+(`base/wf-ask-tool`). A resume is run with the same, so its hook fires again."""
+
+# What a resume whose transcript was lost is told after the slash command: the
+# question and its answer, since nothing remembers them.
+_COLD = """An earlier session on this ticket stopped to ask a person something, and was \
+answered. Its commits, if it made any, are on this branch. Carry on from them.
+
+{asked}
+"""
 
 
 def parse_questions(raw: bytes) -> list[Question]:
@@ -138,6 +158,14 @@ def resumed(asking: Asking) -> dict[str, str]:
     wrote one."""
     given = asking.answers or {}
     return {q.question: given.get(q.question) or _UNANSWERED for q in asking.questions}
+
+
+def cold(asking: Asking, answers: Mapping[str, str]) -> str:
+    """What a resume that starts cold is told: each question, and its answer."""
+    asked = "\n\n".join(
+        f"You asked: {q.question}\nThe answer: {answers[q.question]}" for q in asking.questions
+    )
+    return _COLD.format(asked=asked)
 
 
 def _question(e: Event) -> tuple[str, list[Question]] | None:
