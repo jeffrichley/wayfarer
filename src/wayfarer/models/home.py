@@ -22,6 +22,7 @@ __all__ = [
     "LineRow",
     "LineStations",
     "Need",
+    "NeedClosed",
     "NeedHeld",
     "NeedQuestion",
     "NeedReview",
@@ -133,8 +134,17 @@ class NeedReview(BaseModel):
     )
 
 
+class NeedClosed(BaseModel):
+    """A ticket GitHub closed while its session still runs. It holds up no work, and the
+    session is not stopped for it, so a person decides (ADR-0002)."""
+
+    kind: Literal["closed"]
+    ticket: Mention
+    effort: Mention
+
+
 Need = Annotated[
-    EnvironmentFailure | NeedQuestion | NeedHeld | NeedReview | ShipEffort,
+    EnvironmentFailure | NeedQuestion | NeedHeld | NeedReview | ShipEffort | NeedClosed,
     Field(discriminator="kind"),
 ]
 """Anything waiting on a person."""
@@ -143,7 +153,8 @@ Need = Annotated[
 class NeedsYou(BaseModel):
     """Everything waiting on a person, across every effort, in live order (#24): an
     environment failure pinned first, then what holds up the most, then what holds up
-    nothing. Home shows it as it stands; the desk freezes its own copy."""
+    nothing: shipping an effort, then a ticket closed while its session runs. Home shows
+    it as it stands; the desk freezes its own copy."""
 
     kind: Literal["needs_you"]
     id: Literal["needs_you"]

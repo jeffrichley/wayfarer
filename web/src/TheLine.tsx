@@ -95,6 +95,12 @@ function row(need: Need): Row {
       return { kind: "environment", reason: need.reason };
     case "ship":
       return { kind: "ship", effort: need.title, name: need.title };
+    case "closed":
+      return {
+        kind: "closed",
+        effort: need.effort.title,
+        ticket: { name: need.ticket.title, id: need.ticket.number },
+      };
     default: {
       const on = {
         effort: need.effort.title,

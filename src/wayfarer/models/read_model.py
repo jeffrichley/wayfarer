@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -68,6 +69,9 @@ class PullRequest(BaseModel):
     checks: Checks | None
     """None when the PR has no checks at all, which counts as green."""
     approved: bool
+    opened: datetime
+    """When it was opened. When it was last marked ready would say more of a draft, but
+    that connection costs a point per ticket nested in the effort's read (ADR-0003)."""
 
 
 class Ticket(BaseModel):
@@ -86,6 +90,11 @@ class Ticket(BaseModel):
     """Every ticket blocking this one, open or closed, from GitHub's issue dependencies."""
     open_blockers: int
     pull_request: PullRequest | None
+    live: bool = Field(
+        description="A session Wayfarer started is running on it. GitHub owns its state, so "
+        "a ticket closed there keeps its session, and it is flagged in Needs you "
+        "(ADR-0002)."
+    )
     place_in_line: int | None = Field(
         description="Its place in its effort branch's merge queue while it is Landing, 1 at "
         "the front; null when it is not in the queue. Read from GitHub, so a restart finds "

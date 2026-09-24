@@ -22,3 +22,8 @@ def test_sessions_are_written_down_where_wayfarer_data_dir_says(tmp_path: Path) 
 
 def test_unset_sessions_are_written_down_outside_any_checkout() -> None:
     assert Settings.from_env({}).data_dir == Path(user_data_dir("wayfarer"))
+
+
+def test_a_ready_green_pr_lands_unapproved_unless_wayfarer_auto_merge_is_off() -> None:
+    assert Settings.from_env({}).auto_merge
+    assert not Settings.from_env({"WAYFARER_AUTO_MERGE": "0"}).auto_merge
