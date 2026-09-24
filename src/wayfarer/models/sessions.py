@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 __all__ = [
     "Beat",
     "BeatKind",
+    "Retry",
+    "RetryFrom",
     "TestRun",
 ]
 
@@ -63,3 +65,24 @@ class Beat(BaseModel):
     text: str = Field(description="One sentence.")
     run: TestRun | None = Field(description="The test run a red, green or refactor rests on.")
     output: str | None = Field(description="What a red run printed; null for every other beat.")
+
+
+class RetryFrom(StrEnum):
+    """Where a person's retry of a Held ticket starts (#20)."""
+
+    CONTINUE = "continue"
+    """Where its last session stopped: its pull request's head, or its kept commits, with
+    the conversation resumed when its transcript survives."""
+    START_OVER = "start_over"
+    """Afresh from the effort branch's head. Its pull request closes; its commits are kept
+    on their preservation branch."""
+
+
+class Retry(BaseModel):
+    """A person's retry of a Held ticket: the person's start, not the cascade's."""
+
+    start: RetryFrom = Field(
+        default=RetryFrom.CONTINUE,
+        description="`continue` unless said otherwise. Offer `start_over` first for a ticket "
+        "held by a red re-test, since continuing would build on the version that broke.",
+    )

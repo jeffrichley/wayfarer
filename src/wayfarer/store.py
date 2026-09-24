@@ -6,7 +6,8 @@ files. It never holds a ticket's state, which is GitHub's (ADR-0002).
 A session is recorded the moment it starts, because Waystation mints the run's
 id and writes it down nowhere else: a session that never ended is then still
 known by the row with no end. Those rows are also how a ticket is started
-automatically at most once. An armed cascade is its effort and whether it is
+automatically at most once, except one the environment failed, which never
+spent it (#41). An armed cascade is its effort and whether it is
 paused. The last visit is when the person last left home, and the one before it
 that the headline in front of them counts from (#58).
 """
@@ -22,7 +23,7 @@ from pathlib import Path
 from wayfarer.github import Repo
 from wayfarer.outcome import Outcome
 
-__all__ = ["Purpose", "SessionRow", "Store"]
+__all__ = ["Fault", "Purpose", "SessionRow", "Store"]
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -32,7 +33,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     started TEXT NOT NULL,
     ended TEXT,
     event_file TEXT NOT NULL,
-    outcome TEXT
+    outcome TEXT,
+    conversation TEXT,
+    fault TEXT,
+    why TEXT
 );
 CREATE TABLE IF NOT EXISTS cascades (
     effort INTEGER PRIMARY KEY,
@@ -46,6 +50,10 @@ CREATE TABLE IF NOT EXISTS visits (
 INSERT OR IGNORE INTO visits (only) VALUES (0);
 """
 
+# Columns a store made before them lacks, added as it opens: `CREATE TABLE IF NOT
+# EXISTS` leaves an existing table as it was.
+_ADDED = {"conversation": "TEXT", "fault": "TEXT", "why": "TEXT"}
+
 
 class Purpose(StrEnum):
     """Why a session ran. A ticket may have several over its life."""
@@ -56,6 +64,21 @@ class Purpose(StrEnum):
     """A resolver session: the ticket's commits replayed onto its effort branch, which
     they conflicted with in the merge queue. It is landing, so it never earns a
     chronicle line."""
+    CONTINUE = "continue"
+    """A person's retry of a Held ticket, carrying on where its last session stopped."""
+    START_OVER = "start_over"
+    """A person's retry of a Held ticket, afresh from the effort branch's head."""
+
+
+class Fault(StrEnum):
+    """Whose failure a session that did not finish was, decided by the failure's type,
+    never its stage (#20)."""
+
+    ATTEMPT = "attempt"
+    """The agent ran and failed: it crashed, reported nothing, ran out of time, or was
+    stopped. Its ticket is Held."""
+    ENVIRONMENT = "environment"
+    """Anything else. Its ticket goes back on the frontier, its automatic start unspent."""
 
 
 @dataclass(frozen=True)
@@ -71,6 +94,13 @@ class SessionRow:
     event_file: Path
     outcome: Outcome | None
     """None until it ends, and after it when it reported none that validated."""
+    conversation: str | None = None
+    """The agent's own id for its conversation, which a Continue resumes; None when the
+    agent has none."""
+    fault: Fault | None = None
+    """Whose failure it was, when it did not finish; None while it runs, or once it has."""
+    why: str | None = None
+    """What happened, in plain words, when it did not finish."""
 
 
 class Store:
@@ -87,6 +117,10 @@ class Store:
         connection = sqlite3.connect(directory / "wayfarer.sqlite3", isolation_level=None)
         connection.execute("PRAGMA journal_mode=WAL")
         connection.executescript(_SCHEMA)
+        have = {row[1] for row in connection.execute("PRAGMA table_info(sessions)")}
+        for column, kind in _ADDED.items():
+            if column not in have:
+                connection.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
         return cls(connection, directory)
 
     @classmethod
@@ -100,16 +134,27 @@ class Store:
         sessions.mkdir(exist_ok=True)
         return sessions / f"{run_id}.jsonl"
 
+    def carried(self, run_id: str) -> Path:
+        """Where the files session `run_id` carried out of its sandbox are kept, beside its
+        event file, each at its path under the sandbox's home."""
+        return self.directory / "sessions" / f"{run_id}.files"
+
     def close(self) -> None:
         self._db.close()
 
     def session_started(
-        self, run_id: str, ticket: int, purpose: Purpose, started: datetime, event_file: Path
+        self,
+        run_id: str,
+        ticket: int,
+        purpose: Purpose,
+        started: datetime,
+        event_file: Path,
+        conversation: str | None = None,
     ) -> None:
         self._db.execute(
-            "INSERT INTO sessions (run_id, ticket, purpose, started, event_file) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (run_id, ticket, purpose.value, started.isoformat(), str(event_file)),
+            "INSERT INTO sessions (run_id, ticket, purpose, started, event_file, conversation) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (run_id, ticket, purpose.value, started.isoformat(), str(event_file), conversation),
         )
 
     def session_ended(self, run_id: str, ended: datetime, outcome: Outcome | None) -> None:
@@ -118,11 +163,17 @@ class Store:
             (ended.isoformat(), outcome.model_dump_json() if outcome else None, run_id),
         )
 
+    def failed(self, run_id: str, fault: Fault, why: str) -> None:
+        """Session `run_id` did not finish, by `fault`, and `why` says what happened."""
+        self._db.execute(
+            "UPDATE sessions SET fault = ?, why = ? WHERE run_id = ?", (fault.value, why, run_id)
+        )
+
     def sessions(self) -> list[SessionRow]:
         """Every session recorded, in the order they started."""
         rows = self._db.execute(
-            "SELECT run_id, ticket, purpose, started, ended, event_file, outcome "
-            "FROM sessions ORDER BY started, rowid"
+            "SELECT run_id, ticket, purpose, started, ended, event_file, outcome, "
+            "conversation, fault, why FROM sessions ORDER BY started, rowid"
         )
         return [
             SessionRow(
@@ -133,14 +184,35 @@ class Store:
                 ended=datetime.fromisoformat(ended) if ended else None,
                 event_file=Path(event_file),
                 outcome=Outcome.model_validate_json(outcome) if outcome else None,
+                conversation=conversation,
+                fault=Fault(fault) if fault else None,
+                why=why,
             )
-            for run_id, ticket, purpose, started, ended, event_file, outcome in rows
+            for (
+                run_id,
+                ticket,
+                purpose,
+                started,
+                ended,
+                event_file,
+                outcome,
+                conversation,
+                fault,
+                why,
+            ) in rows
         ]
 
+    def session(self, run_id: str) -> SessionRow:
+        """Session `run_id`, which must have been recorded."""
+        (row,) = (row for row in self.sessions() if row.run_id == run_id)
+        return row
+
     def built(self) -> set[int]:
-        """Every ticket a build session has started on, which is its one automatic start."""
+        """Every ticket a build session has started on, which is its one automatic start,
+        but for a session the environment failed, which spent nothing (#41)."""
         rows = self._db.execute(
-            "SELECT DISTINCT ticket FROM sessions WHERE purpose = ?", (Purpose.BUILD.value,)
+            "SELECT DISTINCT ticket FROM sessions WHERE purpose = ? AND fault IS NOT ?",
+            (Purpose.BUILD.value, Fault.ENVIRONMENT.value),
         )
         return {ticket for (ticket,) in rows}
 

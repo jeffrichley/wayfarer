@@ -198,7 +198,7 @@ class Driven:
                 repos.clone,
                 record,
                 Repo(repos.github.owner, repos.github.name),
-                agent=resolver,
+                agent=lambda _: resolver,
                 sandbox=resolver_sandbox or NoSandbox(),
                 settings=Settings(),
                 stream=self.stream,

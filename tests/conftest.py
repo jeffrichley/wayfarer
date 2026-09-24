@@ -89,10 +89,12 @@ class Instance:
 class Launcher:
     """Starts `wayfarer` processes in one directory, and cleans up after them."""
 
-    def __init__(self, cwd: Path, scratch: Path, github: GitHub) -> None:
+    def __init__(self, cwd: Path, scratch: Path, github: GitHub, *, docker: bool) -> None:
+        """`docker` lets it reach the host's Docker, which only the docker tier does."""
         self.cwd = cwd
         self._scratch = scratch
         self._github = github
+        self._docker = docker
         self._recorder = scratch / "recorder.py"
         self._recorder.write_text(_RECORDER)
         self._instances: list[Instance] = []
@@ -114,6 +116,11 @@ class Launcher:
             # Its store and sessions' files, kept out of the person's own.
             "WAYFARER_DATA_DIR": str(self._scratch / "data"),
         }
+        if not self._docker:
+            # The host's Docker is shared by every test and any Wayfarer the person
+            # runs, and a restarted Wayfarer shows every sandbox container it finds
+            # there, so outside the docker tier it finds no Docker at all.
+            environment["DOCKER_HOST"] = f"unix://{self._scratch / 'no-docker.sock'}"
         for name, value in (env or {}).items():
             if value is None:
                 environment.pop(name, None)
@@ -233,10 +240,13 @@ def github() -> Iterator[GitHub]:
 
 
 @pytest.fixture
-def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Launcher]:
+def wayfarer(
+    clone: Path, tmp_path: Path, github: GitHub, request: pytest.FixtureRequest
+) -> Iterator[Launcher]:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    launcher = Launcher(clone, scratch, github)
+    docker = request.node.get_closest_marker("docker") is not None
+    launcher = Launcher(clone, scratch, github, docker=docker)
     yield launcher
     launcher.close()
 
@@ -296,8 +306,8 @@ def get(url: str) -> httpx.Response:
     return httpx.get(url, timeout=5.0)
 
 
-def post(url: str) -> httpx.Response:
-    return httpx.post(url, timeout=5.0)
+def post(url: str, json: Any = None) -> httpx.Response:
+    return httpx.post(url, json=json, timeout=5.0)
 
 
 Items = dict[str, dict[str, Any]]

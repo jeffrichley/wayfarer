@@ -93,7 +93,7 @@ show_missing = true
 skip_empty = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["wayfarer", "conftest", "github_stand_in", "specimens"]
+known-first-party = ["wayfarer", "cascading", "conftest", "github_stand_in", "specimens"]
 
 # Waystation is a git dependency, which hatchling refuses unless told.
 [tool.hatch.metadata]

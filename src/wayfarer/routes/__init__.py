@@ -22,6 +22,7 @@ from wayfarer.gate import StartGate
 from wayfarer.home import HomePage
 from wayfarer.image import Images
 from wayfarer.read_model import Efforts
+from wayfarer.restart import Restart
 from wayfarer.stream import Store
 
 __all__ = ["Services", "Wired"]
@@ -37,6 +38,7 @@ class Services:
     efforts: Efforts
     home: HomePage
     images: Images
+    restart: Restart
     running: str
     start_gate: StartGate
     store: Store

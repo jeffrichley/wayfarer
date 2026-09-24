@@ -3,10 +3,11 @@
 It holds one repo's issues and pull requests in memory and speaks what Wayfarer
 reads and writes: GitHub's GraphQL API, over a subset of GitHub's real schema; the
 REST issue listing and commit checks the conditional poll uses (ADR-0003); and the
-REST writes Wayfarer makes: claiming, labelling, commenting on and closing an issue,
-and opening a pull request; and the one GraphQL write, returning a pull request to
-draft. A test changes it as a person on GitHub
-would, and it can be made to misbehave on purpose:
+REST writes Wayfarer makes: claiming and releasing, labelling and unlabelling,
+commenting on and closing an issue, and opening, editing and closing a pull request;
+and the two GraphQL writes, returning a pull request to draft and marking one ready.
+A test changes it as a person on GitHub would, and it can be made to misbehave on
+purpose:
 
 - **poked**: change an issue or a pull request, and the next read sees it;
 - **stale**: freeze what reads return while changes pile up behind it;
@@ -89,9 +90,14 @@ type Mutation {
   convertPullRequestToDraft(
     input: ConvertPullRequestToDraftInput!
   ): ConvertPullRequestToDraftPayload
+  markPullRequestReadyForReview(
+    input: MarkPullRequestReadyForReviewInput!
+  ): MarkPullRequestReadyForReviewPayload
 }
 input ConvertPullRequestToDraftInput { pullRequestId: ID! }
 type ConvertPullRequestToDraftPayload { pullRequest: PullRequest }
+input MarkPullRequestReadyForReviewInput { pullRequestId: ID! }
+type MarkPullRequestReadyForReviewPayload { pullRequest: PullRequest }
 
 type Repository {
   issue(number: Int!): Issue
@@ -131,6 +137,7 @@ type Issue {
   issueDependenciesSummary: IssueDependenciesSummary!
   blockedBy(first: Int, after: String): IssueConnection!
   subIssues(first: Int, after: String): IssueConnection!
+  parent: Issue
   timelineItems(
     itemTypes: [IssueTimelineItemsItemType!], first: Int, last: Int
   ): IssueTimelineItemsConnection!
@@ -473,8 +480,8 @@ class GitHub:
             self._refusals += refusals
 
     def forbid(self, path: str) -> None:
-        """Refuse every read of paths ending in `path`, and every claim, as GitHub
-        refuses a token without the permission that path needs."""
+        """Refuse every read of paths ending in `path`, and every claim or label written
+        there, as GitHub refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
 
@@ -576,18 +583,11 @@ class GitHub:
         async def label(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
             with self._lock:
+                if refused := self._refused_write(request):
+                    return refused
                 issue = self._live.issues[number]
                 for label_name in body["labels"]:
                     self._label(issue, label_name, self.viewer)
-                return JSONResponse([{"name": n} for n in issue.labels])
-
-        @app.delete("/repos/{owner}/{name}/issues/{number}/labels/{label_name}")
-        async def unlabel(owner: str, name: str, number: int, label_name: str) -> Response:
-            with self._lock:
-                issue = self._live.issues[number]
-                if label_name not in issue.labels:
-                    return JSONResponse({"message": "Label does not exist"}, status_code=404)
-                self._unlabel(issue, label_name, self.viewer)
                 return JSONResponse([{"name": n} for n in issue.labels])
 
         @app.post("/repos/{owner}/{name}/issues/{number}/comments")
@@ -623,6 +623,26 @@ class GitHub:
                 )
                 self._live.pulls[pull.number] = pull
                 return JSONResponse({"number": pull.number, "draft": pull.draft}, status_code=201)
+
+        @app.delete("/repos/{owner}/{name}/issues/{number}/labels/{label_name:path}")
+        async def unlabel(owner: str, name: str, number: int, label_name: str) -> Response:
+            with self._lock:
+                issue = self._live.issues[number]
+                if label_name not in issue.labels:
+                    return JSONResponse({"message": "Label does not exist"}, status_code=404)
+                self._unlabel(issue, label_name, self.viewer)
+                return JSONResponse([{"name": n} for n in issue.labels])
+
+        @app.patch("/repos/{owner}/{name}/pulls/{number}")
+        async def edit_pull(owner: str, name: str, number: int, request: Request) -> Response:
+            body = await request.json()
+            with self._lock:
+                pull = self._live.pulls[number]
+                if "body" in body:
+                    pull.body = body["body"]
+                if body.get("state") == "closed" and pull.state == "OPEN":
+                    pull.state = "CLOSED"
+                return JSONResponse({"number": pull.number, "state": pull.state.lower()})
 
         @app.post("/repos/{owner}/{name}/issues/{number}/assignees")
         async def assign(owner: str, name: str, number: int, request: Request) -> Response:
@@ -766,14 +786,19 @@ def _resolve(source: Any, info: GraphQLResolveInfo, **args: Any) -> Any:
             return _repository(source.repo) if ours else None
         if name == "viewer":
             return _Node("User", {"login": source.github.viewer})
-        if name == "convertPullRequestToDraft":
+        if name in ("convertPullRequestToDraft", "markPullRequestReadyForReview"):
             # A write lands on the live repo, whatever a stale read would show.
             number = _pull_number(args["input"]["pullRequestId"])
             pull = source.github._live.pulls.get(number)
             if pull is None:
                 raise _NotFound(f"Could not resolve to a node with the global id of {number}.")
-            pull.draft = True
-            return _Node("ConvertPullRequestToDraftPayload", {"pullRequest": _pull_request(pull)})
+            if name == "convertPullRequestToDraft":
+                pull.draft = True
+            else:
+                pull.draft = False
+                pull.ready_at = source.github._now()
+            payload = name[0].upper() + name[1:] + "Payload"
+            return _Node(payload, {"pullRequest": _pull_request(pull)})
         return None
     value = source.fields[name]
     return value(**args) if callable(value) else value
@@ -874,6 +899,7 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
                     if c.parent == issue.number
                 ]
             ),
+            "parent": None if issue.parent is None else _issue(repo, repo.issues[issue.parent]),
             "timelineItems": timeline_items,
         },
     )

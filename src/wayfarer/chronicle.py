@@ -23,8 +23,10 @@ landing when a comment carrying `LANDED_MARKER` came before it, and a person's
 otherwise. A person's movement is "you" for the token's own login, and names
 any other.
 
-The asked gist is the question comment's first question (#42). The held reason
-and whether a retry started over are left null: their source is #41.
+A retry is a Held ticket cleared with a session after it; whether it started
+over is that session's purpose. The asked gist is the question comment's first
+question (#42). The held reason is left null: its source is the comments a hold
+leaves.
 """
 
 from __future__ import annotations
@@ -86,9 +88,12 @@ class _Telling:
         self._timelines = {t.number: history.timelines.get(t.number, []) for t in tickets}
         # A resolver session is landing, and never a resume or a retry.
         self._builds: defaultdict[int, list[datetime]] = defaultdict(list)
+        self._sessions: defaultdict[int, list[tuple[datetime, Purpose]]] = defaultdict(list)
         for row in sessions:
             if row.purpose is Purpose.BUILD:
                 self._builds[row.ticket].append(row.started)
+            if row.purpose is not Purpose.RESOLVE:
+                self._sessions[row.ticket].append((row.started, row.purpose))
         # Takings told inside the line of the close that freed them.
         self._folded: set[tuple[int, datetime]] = set()
 
@@ -127,10 +132,11 @@ class _Telling:
                 by = self._who(e.actor)
                 return self._line(number, e, Answered(kind="answered", ticket=ticket, by=by))
             # Cleared with no session after it, it was let land, which ends in the landing.
-            case "UnlabeledEvent", label if label == HELD and self._session_after(
-                number, e.at, timeline, HELD
+            case "UnlabeledEvent", label if label == HELD and (
+                after := self._session_after(number, e.at, timeline, HELD)
             ):
-                return self._line(number, e, Retried(kind="retried", ticket=ticket, over=None))
+                over = {Purpose.START_OVER: True, Purpose.CONTINUE: False}.get(after)
+                return self._line(number, e, Retried(kind="retried", ticket=ticket, over=over))
         return None
 
     def _close(self, number: int, e: Event, timeline: list[Event]) -> ChronicleLine:
@@ -234,8 +240,11 @@ class _Telling:
         self._folded.add((number, taking.at))
         return True
 
-    def _session_after(self, number: int, at: datetime, timeline: list[Event], label: str) -> bool:
-        """Whether a build started on `number` after `at`, before `label` went back on."""
+    def _session_after(
+        self, number: int, at: datetime, timeline: list[Event], label: str
+    ) -> Purpose | None:
+        """Why the first session that started on `number` after `at` ran, if one did
+        before `label` went back on."""
         again = next(
             (
                 e.at
@@ -244,8 +253,13 @@ class _Telling:
             ),
             None,
         )
-        return any(
-            at < started and (again is None or started < again) for started in self._builds[number]
+        return next(
+            (
+                purpose
+                for started, purpose in sorted(self._sessions[number])
+                if at < started and (again is None or started < again)
+            ),
+            None,
         )
 
     def _who(self, login: str | None) -> _Person:

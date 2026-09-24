@@ -219,6 +219,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{run_id}/reap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reap
+         * @description Remove whatever the orphan `run_id` left running, and hold its ticket.
+         */
+        post: operations["reap_api_sessions__run_id__reap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tickets/{number}/answer": {
         parameters: {
             query?: never;
@@ -233,6 +253,26 @@ export interface paths {
          * @description Answer the ticket's question, which resumes its session.
          */
         post: operations["answer_api_tickets__number__answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tickets/{number}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry
+         * @description Retry a Held ticket, continuing where its session stopped or starting over.
+         */
+        post: operations["retry_api_tickets__number__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1063,8 +1103,9 @@ export interface components {
          * NeedsYou
          * @description Everything waiting on a person, across every effort, in live order (#24): an
          *     environment failure pinned first, then what holds up the most, then what holds up
-         *     nothing: shipping an effort, then a ticket closed while its session runs. Home shows
-         *     it as it stands; the desk freezes its own copy.
+         *     nothing: shipping an effort, then what a Wayfarer before this one left, then a
+         *     ticket closed while its session runs. Home shows it as it stands; the desk freezes
+         *     its own copy.
          */
         NeedsYou: {
             /**
@@ -1073,12 +1114,46 @@ export interface components {
              */
             id: "needs_you";
             /** Items */
-            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"] | components["schemas"]["NeedClosed"])[];
+            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["NeedClosed"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "needs_you";
+        };
+        /**
+         * Orphan
+         * @description A session the store has as started and never finished: the Wayfarer running it
+         *     stopped before it did. Offered a reap, which removes whatever container it left and
+         *     holds its ticket; its work is not recovered (ADR-0002).
+         */
+        Orphan: {
+            /** @description The effort its ticket is in; null when GitHub has it in none, or could not be read. */
+            effort: components["schemas"]["Mention"] | null;
+            /**
+             * Id
+             * @description `orphan:<run id>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "orphan";
+            /** Run Id */
+            run_id: string;
+            /**
+             * Started
+             * Format: date-time
+             */
+            started: string;
+            /** Ticket */
+            ticket: number;
+            /**
+             * Title
+             * @description Its ticket's title; null when GitHub could not be read as Wayfarer started.
+             */
+            title: string | null;
         };
         /**
          * ProbeCheck
@@ -1205,11 +1280,28 @@ export interface components {
             kind: "retried";
             /**
              * Over
-             * @description Started over on the effort branch's head, rather than continuing where its session stopped. Null until the chronicle reads which (#41).
+             * @description Started over on the effort branch's head, rather than continuing where its session stopped. Null for a session recorded before retries said which.
              */
             over: boolean | null;
             ticket: components["schemas"]["Mention"];
         };
+        /**
+         * Retry
+         * @description A person's retry of a Held ticket: the person's start, not the cascade's.
+         */
+        Retry: {
+            /**
+             * @description `continue` unless said otherwise. Offer `start_over` first for a ticket held by a red re-test, since continuing would build on the version that broke.
+             * @default continue
+             */
+            start: components["schemas"]["RetryFrom"];
+        };
+        /**
+         * RetryFrom
+         * @description Where a person's retry of a Held ticket starts (#20).
+         * @enum {string}
+         */
+        RetryFrom: "continue" | "start_over";
         /**
          * ShipEffort
          * @description The Needs you item an effort raises when every ticket in it is closed.
@@ -1244,7 +1336,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1385,12 +1477,32 @@ export interface components {
          */
         TicketState: "landed" | "closed" | "asked" | "held" | "landing" | "in_review" | "building" | "takeable" | "blocked";
         /**
+         * UnknownContainer
+         * @description A container Waystation labelled with a run id the store has never heard of. The
+         *     label carries no repo, so it may be another repo's Wayfarer's: it is shown, and
+         *     never reaped automatically.
+         */
+        UnknownContainer: {
+            /**
+             * Id
+             * @description `container:<run id>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unknown_container";
+            /** Run Id */
+            run_id: string;
+        };
+        /**
          * Upsert
          * @description One item, new or replacing the one with its id.
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1721,6 +1833,37 @@ export interface operations {
             };
         };
     };
+    reap_api_sessions__run_id__reap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     answer_api_tickets__number__answer_post: {
         parameters: {
             query?: never;
@@ -1733,6 +1876,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["Answer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_api_tickets__number__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Retry"];
             };
         };
         responses: {

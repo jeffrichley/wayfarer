@@ -8,6 +8,11 @@ looks at the Outcome again, so a restarted Wayfarer reaches the same answer
 
 A ticket whose pull request is ready, green and unheld reads as Landing, which
 is how it joins the merge queue (`merge_queue.py`).
+
+A session whose attempt failed opens a draft too, with a body saying why
+(`endings.py`). A retry that continues goes on with the ticket's pull request
+rather than opening another: its body is rewritten, and it is marked ready when
+the retry's Outcome says so.
 """
 
 from __future__ import annotations
@@ -17,6 +22,19 @@ from wayfarer.outcome import Axis, Finding, Outcome
 from wayfarer.read_model import HELD
 
 __all__ = ["PullRequestGate", "body", "opens_ready"]
+
+_PULL_ID = """
+query PullId($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
+}
+"""
+
+# Only GraphQL can mark a draft ready.
+_TO_READY = """
+mutation ToReady($id: ID!) {
+  markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } }
+}
+"""
 
 
 def opens_ready(outcome: Outcome) -> bool:
@@ -58,23 +76,65 @@ class PullRequestGate:
         self._github = github
 
     async def open(
-        self, *, ticket: int, title: str, branch: str, effort_branch: str, outcome: Outcome
+        self,
+        *,
+        ticket: int,
+        title: str,
+        branch: str,
+        effort_branch: str,
+        outcome: Outcome,
+        pull: int | None = None,
     ) -> int:
         """Open the pull request from `branch` into `effort_branch`, ready or as a draft,
-        holding the ticket when it is a draft. Returns its number."""
-        ready = opens_ready(outcome)
-        opened = await self._github.write(
-            "POST",
-            "/pulls",
-            {
-                "title": title,
-                "head": branch,
-                "base": effort_branch,
-                "body": body(ticket, outcome),
-                "draft": not ready,
-            },
+        holding the ticket when it is a draft; or, given `pull`, go on with that one.
+        Returns its number."""
+        return await self._put(
+            ticket, title, branch, effort_branch, body(ticket, outcome), opens_ready(outcome), pull
         )
+
+    async def hold(
+        self,
+        *,
+        ticket: int,
+        title: str,
+        branch: str,
+        effort_branch: str,
+        body: str,
+        pull: int | None = None,
+    ) -> int:
+        """Open a draft saying in `body` why the ticket is held, and hold it; or, given
+        `pull`, go on with that one. Returns its number."""
+        return await self._put(ticket, title, branch, effort_branch, body, False, pull)
+
+    async def _put(
+        self,
+        ticket: int,
+        title: str,
+        branch: str,
+        effort_branch: str,
+        text: str,
+        ready: bool,
+        pull: int | None,
+    ) -> int:
+        if pull is None:
+            opened = await self._github.write(
+                "POST",
+                "/pulls",
+                {
+                    "title": title,
+                    "head": branch,
+                    "base": effort_branch,
+                    "body": text,
+                    "draft": not ready,
+                },
+            )
+            number: int = opened["number"]
+        else:
+            number = pull
+            await self._github.write("PATCH", f"/pulls/{number}", {"body": text})
+            if ready:
+                found = (await self._github.query(_PULL_ID, number=number))["repository"]
+                await self._github.mutate(_TO_READY, id=found["pullRequest"]["id"])
         if not ready:
             await self._github.write("POST", f"/issues/{ticket}/labels", {"labels": [HELD]})
-        number: int = opened["number"]
         return number
