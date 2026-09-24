@@ -159,12 +159,14 @@ def test_an_implied_edge_is_not_drawn_and_its_ticket_says_which_it_was(
         ("Noise", "Room", "open"),
         ("Room", "Export", "open"),
     }
-    implied = _cards(drawn)["Export"]["implied"]
-    assert implied == [
+    # The panel still lists it under Blocked by, saying which blocker implies it.
+    assert _cards(drawn)["Export"]["blocked_by"] == [
         {
-            "blocker": {"number": noise.number, "title": "Noise"},
+            "ticket": {"number": noise.number, "title": "Noise"},
+            "state": "takeable",
             "via": {"number": room.number, "title": "Room"},
-        }
+        },
+        {"ticket": {"number": room.number, "title": "Room"}, "state": "blocked", "via": None},
     ]
     # Still a blocker, so the foot counts it.
     assert [t["title"] for t in _cards(drawn)["Export"]["waiting_on"]] == ["Noise", "Room"]
@@ -184,7 +186,10 @@ def test_an_edge_implied_through_landed_work_folds_away_with_it(
     drawn = graph(wayfarer, tmp_path, spec)
 
     assert _wires(drawn, tickets) == {("start line", "Export", "met")}
-    assert [edge["via"]["title"] for edge in _cards(drawn)["Export"]["implied"]] == ["Room"]
+    assert [
+        (edge["ticket"]["title"], edge["state"], edge["via"] and edge["via"]["title"])
+        for edge in _cards(drawn)["Export"]["blocked_by"]
+    ] == [("Noise", "landed", "Room"), ("Room", "landed", None)]
 
 
 def test_cards_near_the_frontier_are_full_and_further_out_name_only(
@@ -263,3 +268,50 @@ def test_a_blocked_ticket_says_what_it_is_waiting_on(
     assert [t["title"] for t in cards["Scale"]["waiting_on"]] == ["Flag"]
     assert cards["Scale"]["since"] is None
     assert cards["Scale"]["at_cap"] is False
+
+
+def test_a_ticket_names_what_it_waits_on_and_what_it_frees_one_step_away_with_their_states(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, tickets = github.effort("Widgets", tickets=5)
+    meter, flag, scale, gate, dropped = _named(
+        "Meter", "Flag", "Scale", "Gate", "Dropped", tickets=tickets
+    )
+    github.block(flag, by=meter)
+    github.block(flag, by=dropped)
+    github.block(scale, by=flag)
+    github.block(gate, by=scale)
+    land(github, meter)
+    github.close(dropped, reason="NOT_PLANNED")
+
+    flag_card = _cards(graph(wayfarer, tmp_path, spec))["Flag"]
+
+    # A ticket closed without landing is off the graph, and blocks nothing.
+    assert [(b["ticket"]["title"], b["state"]) for b in flag_card["blocked_by"]] == [
+        ("Meter", "landed")
+    ]
+    assert [(u["ticket"]["title"], u["state"]) for u in flag_card["unblocks"]] == [
+        ("Scale", "blocked")
+    ]
+
+
+def test_the_tally_says_how_many_tickets_stand_in_each_state(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, tickets = github.effort("Widgets", tickets=6)
+    meter, flag, scale, gate, room, dropped = tickets
+    github.block(scale, by=flag)
+    github.block(gate, by=flag)
+    github.label(room, ASKED)
+    land(github, meter)
+    github.close(dropped, reason="NOT_PLANNED")
+
+    drawn = graph(wayfarer, tmp_path, spec)
+
+    # In the order the states are ranked, and a ticket closed without landing is off it.
+    assert drawn["tally"] == [
+        {"state": "landed", "count": 1},
+        {"state": "asked", "count": 1},
+        {"state": "takeable", "count": 1},
+        {"state": "blocked", "count": 2},
+    ]

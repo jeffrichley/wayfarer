@@ -23,6 +23,7 @@ comments, and whose token Wayfarer holds, which is all the chronicle is told fro
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Collection, Container, Iterator
 from contextlib import contextmanager
@@ -38,6 +39,7 @@ from wayfarer.models import (
     ChronicleLine,
     Effort,
     EffortUnreadable,
+    Mention,
     PullRequest,
     Ticket,
     TicketState,
@@ -61,11 +63,13 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
     issue(number: $effort) {
       number
       title
+      parent { number title }
       subIssues(first: $perPage, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           number
           title
+          body
           state
           stateReason
           labels(first: 100) { nodes { name } }
@@ -314,6 +318,7 @@ async def read_effort(
         id=f"effort:{number}",
         number=issue["number"],
         title=issue["title"],
+        map=_mention(issue["parent"]),
         trunk=repository["defaultBranchRef"]["name"],
         tickets=[ticket.id for ticket in tickets],
     )
@@ -370,7 +375,34 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
         question=latest(events),
         # The merge queue's to say, from an order this read does not ask for.
         place_in_line=None,
+        build=_section(node["body"], "What to build"),
+        criteria=_criteria(_section(node["body"], "Acceptance criteria") or ""),
     )
+
+
+def _mention(node: dict[str, Any] | None) -> Mention | None:
+    return None if node is None else Mention(number=node["number"], title=node["title"])
+
+
+def _section(body: str, heading: str) -> str | None:
+    """The text under `heading` in a ticket's body, as `/to-tickets` writes one, up to the
+    next heading; None when it has no such heading."""
+    sections = re.split(r"^#{1,6}[ \t]+(.*?)[ \t#]*$", body, flags=re.MULTILINE)
+    # Split on its headings, a body is its preamble, then each heading and its text.
+    for title, text in zip(sections[1::2], sections[2::2], strict=True):
+        if title.strip().casefold() == heading.casefold():
+            return text.strip()
+    return None
+
+
+def _criteria(section: str) -> list[str]:
+    """Each item of a criteria list, its box dropped whether ticked or not."""
+    return [
+        match.group(1).strip()
+        for match in re.finditer(
+            r"^[ \t]*[-*+][ \t]+(?:\[[ xX]\][ \t]+)?(.+)$", section, re.MULTILINE
+        )
+    ]
 
 
 def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | None:

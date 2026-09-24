@@ -130,6 +130,7 @@ type PageInfo { hasNextPage: Boolean! endCursor: String }
 type Issue {
   number: Int!
   title: String!
+  body: String!
   state: IssueState!
   stateReason: IssueStateReason
   labels(first: Int, after: String): LabelConnection
@@ -234,6 +235,7 @@ class Issue:
     title: str
     state: str = "OPEN"
     state_reason: str | None = None
+    body: str = ""
     labels: list[str] = field(default_factory=list)
     assignees: list[str] = field(default_factory=list)
     parent: int | None = None
@@ -886,6 +888,7 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
         {
             "number": issue.number,
             "title": issue.title,
+            "body": issue.body,
             "state": issue.state,
             "stateReason": issue.state_reason,
             "labels": paged(lambda: [_Node("Label", {"name": n}) for n in issue.labels]),

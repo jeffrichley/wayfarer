@@ -17,18 +17,36 @@ from wayfarer.models.chronicle import Mention
 from wayfarer.models.read_model import TicketState
 
 __all__ = [
+    "Blocker",
     "GraphCard",
-    "ImpliedEdge",
+    "Neighbour",
+    "Tally",
     "TicketGraph",
     "Wire",
 ]
 
 
-class ImpliedEdge(BaseModel):
-    """A blocker the ticket already waits on through another, so it is not drawn."""
+class Neighbour(BaseModel):
+    """A ticket one step away on the graph, landed or still to land, as the panel lists it."""
 
-    blocker: Mention
-    via: Mention = Field(description="The drawn blocker that itself waits on `blocker`.")
+    ticket: Mention
+    state: TicketState
+
+
+class Blocker(Neighbour):
+    """A ticket that blocks another directly."""
+
+    via: Mention | None = Field(
+        description="The drawn blocker that itself waits on this one, when the edge is "
+        "implied and so not drawn; null when it is drawn."
+    )
+
+
+class Tally(BaseModel):
+    """How many of an effort's tickets stand in one state."""
+
+    state: TicketState
+    count: int
 
 
 class GraphCard(BaseModel):
@@ -53,7 +71,13 @@ class GraphCard(BaseModel):
         description="Takeable under an armed cascade whose slots are full: it starts when a "
         "slot frees."
     )
-    implied: list[ImpliedEdge] = Field(description="Its blockers not drawn, and through which.")
+    blocked_by: list[Blocker] = Field(
+        description="Every ticket blocking it, landed or still to land, in ticket order; "
+        "one closed without landing blocks nothing."
+    )
+    unblocks: list[Neighbour] = Field(
+        description="Every ticket still to land that it blocks, in ticket order."
+    )
     upstream: list[int] = Field(
         description="Every ticket still on the graph it waits on, however far back."
     )
@@ -77,6 +101,10 @@ class TicketGraph(BaseModel):
     kind: Literal["ticket_graph"]
     id: str = Field(description="`graph:<effort>`.")
     effort: int
+    tally: list[Tally] = Field(
+        description="How many tickets stand in each state, in the order states rank; a "
+        "state no ticket is in is left out, and so is closed, which is off the graph."
+    )
     landed: list[Mention] = Field(
         description="Every landed ticket, folded into the start line, in dependency order."
     )

@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from wayfarer.models.asking import Asking
+from wayfarer.models.chronicle import Mention
 
 __all__ = [
     "Checks",
@@ -107,6 +108,13 @@ class Ticket(BaseModel):
         "the front; null when it is not in the queue. Read from GitHub, so a restart finds "
         "the same line."
     )
+    build: str | None = Field(
+        description="Its body's `What to build` section as written; null when it has none."
+    )
+    criteria: list[str] = Field(
+        description="Its body's acceptance criteria, one per item and as written: a box "
+        "ticked on GitHub proves nothing, so no tick is read (#70)."
+    )
 
 
 class Effort(BaseModel):
@@ -116,6 +124,10 @@ class Effort(BaseModel):
     id: str
     number: int
     title: str
+    map: Mention | None = Field(
+        description="The map its spec was charted on, the spec issue's parent; null when "
+        "it has none."
+    )
     trunk: str = Field(
         description="The repo's default branch, which the effort meets once, when it ships."
     )

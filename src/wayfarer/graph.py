@@ -17,12 +17,14 @@ from datetime import datetime
 from functools import cache
 
 from wayfarer.models import (
+    Blocker,
     Cascade,
     Effort,
     GraphCard,
-    ImpliedEdge,
     Item,
     Mention,
+    Neighbour,
+    Tally,
     Ticket,
     TicketGraph,
     TicketState,
@@ -151,14 +153,8 @@ def _graph(
     cards: list[GraphCard] = []
     for n in sorted(live):
         ticket = by[n]
-        drawn: list[int] = []
-        implied: list[ImpliedEdge] = []
-        for b in blockers(n):
-            via = implied_via(n, b)
-            if via is None:
-                drawn.append(b)
-            else:
-                implied.append(ImpliedEdge(blocker=_mention(by[b]), via=_mention(by[via])))
+        vias = {b: implied_via(n, b) for b in blockers(n)}
+        drawn = [b for b, via in vias.items() if via is None]
         opened = [b for b in drawn if b in live]
         wires += [Wire(blocker=b, blocked=n, kind="open") for b in opened]
         # Every landed blocker leaves the start line on one wire, and a ticket with
@@ -178,7 +174,19 @@ def _graph(
                 waiting_on=[_mention(by[b]) for b in blockers(n) if b in live],
                 since=started.get(n) if ticket.state is TicketState.BUILDING else None,
                 at_cap=at_cap and ticket.state is TicketState.TAKEABLE,
-                implied=implied,
+                blocked_by=[
+                    Blocker(
+                        ticket=_mention(by[b]),
+                        state=by[b].state,
+                        via=None if via is None else _mention(by[via]),
+                    )
+                    for b, via in vias.items()
+                ],
+                unblocks=[
+                    Neighbour(ticket=_mention(by[d]), state=by[d].state)
+                    for d in sorted(live)
+                    if n in by[d].blocked_by
+                ],
                 upstream=sorted(ancestors(n, still) & still),
                 downstream=sorted(downstream[n]),
             )
@@ -188,6 +196,11 @@ def _graph(
         kind="ticket_graph",
         id=f"graph:{effort.number}",
         effort=effort.number,
+        tally=[
+            Tally(state=state, count=count)
+            for state in TicketState
+            if state is not TicketState.CLOSED and (count := sum(t.state is state for t in tickets))
+        ],
         landed=[_mention(by[n]) for n in _in_dependency_order(landed, by)],
         cards=cards,
         wires=wires,

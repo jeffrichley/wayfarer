@@ -447,6 +447,16 @@ export interface components {
          */
         BeatKind: "read" | "remark" | "red" | "green" | "refactor" | "outcome" | "working";
         /**
+         * Blocker
+         * @description A ticket that blocks another directly.
+         */
+        Blocker: {
+            state: components["schemas"]["TicketState"];
+            ticket: components["schemas"]["Mention"];
+            /** @description The drawn blocker that itself waits on this one, when the edge is implied and so not drawn; null when it is drawn. */
+            via: components["schemas"]["Mention"] | null;
+        };
+        /**
          * BuildFinished
          * @description How the last build ended.
          */
@@ -622,6 +632,8 @@ export interface components {
              * @enum {string}
              */
             kind: "effort";
+            /** @description The map its spec was charted on, the spec issue's parent; null when it has none. */
+            map: components["schemas"]["Mention"] | null;
             /** Number */
             number: number;
             /**
@@ -736,15 +748,15 @@ export interface components {
              */
             at_cap: boolean;
             /**
+             * Blocked By
+             * @description Every ticket blocking it, landed or still to land, in ticket order; one closed without landing blocks nothing.
+             */
+            blocked_by: components["schemas"]["Blocker"][];
+            /**
              * Downstream
              * @description Every ticket it frees, however far on.
              */
             downstream: number[];
-            /**
-             * Implied
-             * @description Its blockers not drawn, and through which.
-             */
-            implied: components["schemas"]["ImpliedEdge"][];
             /**
              * Since
              * @description When the session building it started; null when it is not building.
@@ -764,6 +776,11 @@ export interface components {
              */
             step: number;
             ticket: components["schemas"]["Mention"];
+            /**
+             * Unblocks
+             * @description Every ticket still to land that it blocks, in ticket order.
+             */
+            unblocks: components["schemas"]["Neighbour"][];
             /**
              * Upstream
              * @description Every ticket still on the graph it waits on, however far back.
@@ -888,15 +905,6 @@ export interface components {
              * @description The tag an image of the current inputs has; null when refused.
              */
             tag: string | null;
-        };
-        /**
-         * ImpliedEdge
-         * @description A blocker the ticket already waits on through another, so it is not drawn.
-         */
-        ImpliedEdge: {
-            blocker: components["schemas"]["Mention"];
-            /** @description The drawn blocker that itself waits on `blocker`. */
-            via: components["schemas"]["Mention"];
         };
         /**
          * Landed
@@ -1120,6 +1128,14 @@ export interface components {
              * @enum {string}
              */
             kind: "needs_you";
+        };
+        /**
+         * Neighbour
+         * @description A ticket one step away on the graph, landed or still to land, as the panel lists it.
+         */
+        Neighbour: {
+            state: components["schemas"]["TicketState"];
+            ticket: components["schemas"]["Mention"];
         };
         /**
          * Orphan
@@ -1369,6 +1385,15 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * Tally
+         * @description How many of an effort's tickets stand in one state.
+         */
+        Tally: {
+            /** Count */
+            count: number;
+            state: components["schemas"]["TicketState"];
+        };
+        /**
          * TestRun
          * @description One test run, as `wf-test` reported it on its own line.
          */
@@ -1403,6 +1428,16 @@ export interface components {
             assignees: string[];
             /** Blocked By */
             blocked_by: number[];
+            /**
+             * Build
+             * @description Its body's `What to build` section as written; null when it has none.
+             */
+            build: string | null;
+            /**
+             * Criteria
+             * @description Its body's acceptance criteria, one per item and as written: a box ticked on GitHub proves nothing, so no tick is read (#70).
+             */
+            criteria: string[];
             /** Id */
             id: string;
             /**
@@ -1462,6 +1497,11 @@ export interface components {
              * @description Every landed ticket, folded into the start line, in dependency order.
              */
             landed: components["schemas"]["Mention"][];
+            /**
+             * Tally
+             * @description How many tickets stand in each state, in the order states rank; a state no ticket is in is left out, and so is closed, which is off the graph.
+             */
+            tally: components["schemas"]["Tally"][];
             /**
              * Wires
              * @description Every edge drawn: implied edges are not, and edges between landed tickets are folded away with them.
