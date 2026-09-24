@@ -170,7 +170,7 @@ def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
                 clone,
                 store,
                 Repo(github.owner, github.name),
-                agent=agent,
+                agent=lambda _: agent,
                 sandbox=NoSandbox(),
                 settings=settings,
                 stream=items,
