@@ -21,6 +21,7 @@ from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
+from wayfarer.graph import Graphs
 from wayfarer.home import HomePage
 from wayfarer.image import Images
 from wayfarer.merge_queue import MergeQueue
@@ -119,6 +120,7 @@ def create_app(
         efforts, github, store, settings, gate or start_gate, sessions or in_image, runs
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
+    graphs = Graphs(store, None if github.repo is None else cascades.record)
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
     # on the same loop (ADR-0001, ADR-0003). Stopping stops every session, each
@@ -129,6 +131,7 @@ def create_app(
             asyncio.create_task(poll(github, settings)),
             asyncio.create_task(efforts.follow()),
             asyncio.create_task(home.follow()),
+            asyncio.create_task(graphs.follow()),
         ]
         for task in tasks:
             task.add_done_callback(_report_death)

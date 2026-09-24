@@ -11,6 +11,7 @@
     "gen:types": "uv run python -m wayfarer.schema > openapi.json && openapi-typescript openapi.json -o src/api.gen.ts"
   },
   "dependencies": {
+    "elkjs": "^0.12.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zustand": "^5.0.15"

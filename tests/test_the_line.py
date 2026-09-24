@@ -44,7 +44,7 @@ def test_the_headline_leads_with_what_needs_you_then_the_landings(
     github.label(meter, ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         home = page.item(
             "home",
@@ -63,7 +63,7 @@ def test_the_headline_stays_under_fourteen_words_however_much_happened(
     github.label(tickets[12], ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         home = page.item(
             "home", headline="An agent has stopped to ask you something, and 12 tickets landed."
@@ -82,7 +82,7 @@ def test_one_standfirst_sentence_per_active_effort_from_its_own_counts(
     land(github, done)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, widgets, shipped)
         home = page.item("home", moving=1)
 
@@ -104,7 +104,7 @@ def test_each_effort_rows_course_reaches_the_furthest_station_its_tickets_have(
     github.close(dropped, "NOT_PLANNED")
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, widgets, sliced, shipped)
         rows = {n: page.items[f"line:{n}"] for n in (widgets.number, sliced.number, shipped.number)}
 
@@ -133,7 +133,7 @@ def test_needs_you_ranks_what_holds_up_the_most_first_and_reranks_live(
     github.block(ruler, by=scale)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(lambda items: _needs(items) == [_FLAG])
 
@@ -158,7 +158,7 @@ def test_needs_you_gives_a_tie_to_whatever_has_waited_longest(
     github.label(flag, ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(
             lambda items: _needs(items) == ["question Meter peaks", "question Flag loudness"]
@@ -244,7 +244,7 @@ def test_an_environment_failure_is_pinned_first_and_shipping_an_effort_last(
     land(github, done)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         # The clone has no session image, so the start gate refuses every start.
         for effort in (widgets, gadgets):
             assert post(f"{url}api/efforts/{effort.number}/arm").status_code == 202
@@ -265,14 +265,14 @@ def test_the_last_visit_ends_on_leaving_so_a_reload_keeps_the_headline(
     land(github, flag)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         post(f"{url}api/home/arrived")
         page.item("home", headline="One ticket landed so far.")
 
         # Leaving then reloading: the page says it left, and never that it arrived.
         post(f"{url}api/home/left")
-        with Stream(url, home=True) as reloaded:
+        with Stream(url, derived=True) as reloaded:
             assert reloaded.item("home")["headline"] == "One ticket landed so far."
 
         # Coming back is a new visit, counting from when the last one ended.
