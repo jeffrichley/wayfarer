@@ -20,6 +20,10 @@ RUN useradd --create-home --uid 1000 --shell /bin/bash agent \
     && chown agent:agent /workspace
 
 COPY --chmod=755 wf-test /usr/local/bin/wf-test
+# How a session asks by ending (#42): `wf-ask` defers the question and later hands
+# back its answer; `wf-ask-tool` is the permission prompt tool a session is named,
+# without which print mode offers no way to ask at all.
+COPY --chmod=755 wf-ask wf-ask-tool /usr/local/bin/
 
 USER agent
 ENV HOME=/home/agent \
@@ -34,6 +38,14 @@ RUN git clone --quiet https://github.com/mattpocock/skills.git "$HOME/.wayfarer/
     && git -C "$HOME/.wayfarer/skills" checkout --quiet "$SKILLS_COMMIT" \
     && claude plugin marketplace add "$HOME/.wayfarer/skills" \
     && claude plugin install mattpocock-skills@mattpocock --scope user
+
+# `wf-ask` runs before every question, beside whatever the plugin's install wrote.
+RUN python3 -c 'import json, pathlib; \
+p = pathlib.Path.home() / ".claude/settings.json"; \
+s = json.loads(p.read_text()) if p.exists() else {}; \
+s.setdefault("hooks", {}).setdefault("PreToolUse", []).append( \
+    {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "/usr/local/bin/wf-ask"}]}); \
+p.write_text(json.dumps(s, indent=2))'
 
 # The standing rules every session follows, under the repo's own CLAUDE.md.
 COPY --chown=agent:agent CLAUDE.md /home/agent/.claude/CLAUDE.md

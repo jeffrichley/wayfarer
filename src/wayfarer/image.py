@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import shlex
 import shutil
 import tempfile
 from collections.abc import Callable, Coroutine
@@ -43,14 +44,58 @@ REFUSAL = (
     "every red test would look like the agent's fault."
 )
 
-# How long the probe's one container may take. It runs four quick commands, so
+# How long the probe's one container may take. It runs five quick commands, so
 # this only bounds an image whose entrypoint or shell hangs.
 PROBE_TIMEOUT_SECONDS = 120.0
 
 _PLUGIN = "mattpocock-skills@mattpocock"
 
-# Printed between the probe's answers, so one container answers all four.
+# Printed between the probe's answers, so one container answers all five.
 _MARK = "@@wayfarer-probe@@"
+
+# Asking by ending, end to end but for the model (#42): the hook the settings name
+# for `AskUserQuestion` defers a question and writes it down, then answers it once
+# an answer is carried in; and the permission prompt tool a session is named
+# answers MCP's listing with `ask`. Printed as one JSON object of what held.
+_ASK_PROBE = """\
+import json, os, pathlib, shutil, subprocess, tempfile
+said = {}
+settings = json.loads((pathlib.Path.home() / ".claude/settings.json").read_text())
+hooks = [
+    hook["command"]
+    for matcher in settings.get("hooks", {}).get("PreToolUse", [])
+    if matcher.get("matcher") == "AskUserQuestion"
+    for hook in matcher.get("hooks", [])
+]
+said["hooked"] = bool(hooks)
+home = pathlib.Path(tempfile.mkdtemp())
+call = json.dumps({"tool_input": {"questions": [{"question": "Which?", "options": []}]}})
+def decide():
+    # Through a shell, as Claude Code runs a hook's command.
+    run = subprocess.run(hooks[0], shell=True, input=call, capture_output=True, text=True,
+                         env={**os.environ, "HOME": str(home)})
+    return json.loads(run.stdout or "{}").get("hookSpecificOutput", {})
+if hooks:
+    deferred = decide()
+    kept = home / ".wayfarer" / "question.json"
+    said["defers"] = deferred.get("permissionDecision") == "defer" and kept.is_file()
+    (home / ".wayfarer" / "answer.json").write_text(json.dumps({"Which?": "That one"}))
+    allowed = decide()
+    said["answers"] = allowed.get("permissionDecision") == "allow" and allowed.get(
+        "updatedInput", {}).get("answers") == {"Which?": "That one"}
+tool = shutil.which("wf-ask-tool")
+if tool:
+    asked = "\\n".join(json.dumps(m) for m in [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+    ])
+    replies = subprocess.run([tool], input=asked, capture_output=True, text=True).stdout
+    listed = [json.loads(line) for line in replies.splitlines() if line.strip()]
+    said["tool"] = any(
+        t.get("name") == "ask" for m in listed for t in m.get("result", {}).get("tools", [])
+    )
+print(json.dumps(said))
+"""
 _PROBE_SCRIPT = f"""\
 claude --version 2>&1
 echo {_MARK}
@@ -60,6 +105,8 @@ wf-test true 2>&1
 echo {_MARK}
 id -u
 stat -c %u /workspace 2>&1
+echo {_MARK}
+python3 -c {shlex.quote(_ASK_PROBE)} 2>&1
 """
 
 
@@ -356,8 +403,8 @@ async def _probe(image: str, recipe: Recipe) -> list[ProbeCheck]:
 
 
 def _judge(output: str, recipe: Recipe) -> list[ProbeCheck]:
-    answers = [*output.split(f"{_MARK}\n"), "", "", "", ""][:4]
-    judges: list[Callable[[str, Recipe], ProbeCheck]] = [_cli, _plugin, _wf_test, _owner]
+    answers = [*output.split(f"{_MARK}\n"), "", "", "", "", ""][:5]
+    judges: list[Callable[[str, Recipe], ProbeCheck]] = [_cli, _plugin, _wf_test, _owner, _asks]
     return [judge(answer.strip(), recipe) for judge, answer in zip(judges, answers, strict=True)]
 
 
@@ -406,4 +453,28 @@ def _owner(answer: str, recipe: Recipe) -> ProbeCheck:
         name="a non-root user owns the workspace",
         passed=user not in ("0", "?") and user == owner,
         detail=f"sessions run as uid {user}; /workspace is owned by uid {owner}",
+    )
+
+
+# What each part of asking the probe tried, in words for the person when it failed.
+_ASKING = {
+    "hooked": "the settings name a hook for AskUserQuestion",
+    "defers": "the hook defers a question and writes it down",
+    "answers": "the hook answers a question once its answer is carried in",
+    "tool": "wf-ask-tool lists its ask tool",
+}
+
+
+def _asks(answer: str, recipe: Recipe) -> ProbeCheck:
+    # A session that cannot ask guesses instead, and nothing it reports says so.
+    try:
+        said = json.loads(answer.splitlines()[-1]) if answer else {}
+    except ValueError:
+        said = {}
+    failed = [words for part, words in _ASKING.items() if said.get(part) is not True]
+    return ProbeCheck(
+        name="a session can ask by ending",
+        passed=not failed,
+        detail="; ".join(f"not so: {words}" for words in failed)
+        or "the hook defers and answers, and the prompt tool answers",
     )
