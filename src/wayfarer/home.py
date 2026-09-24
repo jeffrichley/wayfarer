@@ -171,12 +171,7 @@ def derive(
             *_environment(held),
             *sorted(waiting, key=_rank),
             *sorted((i for i in held if isinstance(i, ShipEffort)), key=lambda s: s.effort),
-            *(
-                NeedClosed(kind="closed", ticket=_mention(ticket), effort=_mention(effort))
-                for effort in efforts
-                for ticket in sorted(graph[effort.number], key=lambda t: t.number)
-                if ticket.live and ticket.state in _OVER
-            ),
+            *_closed(efforts, graph),
         ],
     )
 
@@ -240,6 +235,16 @@ def _environment(items: list[Item]) -> list[EnvironmentFailure]:
     return raised + [i for i in items if isinstance(i, EnvironmentFailure)]
 
 
+def _closed(efforts: list[Effort], graph: dict[int, list[Ticket]]) -> list[NeedClosed]:
+    """Every ticket GitHub closed while a session of Wayfarer's still runs on it."""
+    return [
+        NeedClosed(kind="closed", ticket=_mention(ticket), effort=_mention(effort))
+        for effort in efforts
+        for ticket in sorted(graph[effort.number], key=lambda t: t.number)
+        if ticket.live and ticket.state in _OVER
+    ]
+
+
 def _need(
     effort: Effort,
     ticket: Ticket,
@@ -281,7 +286,7 @@ def _need(
                 since=waited("held"),
                 reason=None,
             )
-        case TicketState.IN_REVIEW if (pull := _awaits_approval(ticket, auto_merge)) is not None:
+        case TicketState.IN_REVIEW if (pull := _for_approval(ticket, auto_merge)) is not None:
             return NeedReview(
                 kind="review",
                 ticket=mention,
@@ -294,7 +299,7 @@ def _need(
     return None
 
 
-def _awaits_approval(ticket: Ticket, auto_merge: bool) -> PullRequest | None:
+def _for_approval(ticket: Ticket, auto_merge: bool) -> PullRequest | None:
     """Its pull request, when that is clean and green and waiting only on the person,
     because auto-merge is off."""
     pull = ticket.pull_request
