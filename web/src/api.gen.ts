@@ -4,6 +4,49 @@
  */
 
 export interface paths {
+    "/api/cascades/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Paused
+         * @description Resume every cascade the environment paused, once the start gate admits a start;
+         *     a cascade the person paused stays paused.
+         */
+        post: operations["resume_paused_api_cascades_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/arrived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Arrived
+         * @description The person arrived at the desk: its queue is re-ranked, and holds its order from
+         *     now while they work through it. A reload is the same visit, and the page does not
+         *     say it arrived.
+         */
+        post: operations["arrived_api_desk_arrived_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/efforts/{number}/arm": {
         parameters: {
             query?: never;
@@ -648,6 +691,52 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * Desk
+         * @description Needs you as the desk shows it: in the order it stood when the person arrived, each
+         *     item said live, new ones at the bottom, and resolved ones kept in place. Arriving
+         *     again re-ranks it; before the first arrival it is the live order.
+         */
+        Desk: {
+            /** Entries */
+            entries: components["schemas"]["DeskEntry"][];
+            /**
+             * Id
+             * @constant
+             */
+            id: "desk";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "desk";
+        };
+        /**
+         * DeskEntry
+         * @description One item in the desk's queue, where it stood when the person arrived.
+         */
+        DeskEntry: {
+            /**
+             * Key
+             * @description Stays the same while the item lasts, whatever kind it turns: `ticket:<n>` for an item on a ticket, else the item's own id.
+             */
+            key: string;
+            /**
+             * Need
+             * @description The item as it stands, said live; once resolved, as it last stood.
+             */
+            need: components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["NeedClosed"];
+            /**
+             * New
+             * @description It arrived after the person did, so it joined at the bottom.
+             */
+            new: boolean;
+            /**
+             * Resolved
+             * @description What happened to it, in plain words, once it no longer needs the person; null while it does.
+             */
+            resolved: string | null;
+        };
+        /**
          * Effort
          * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
          */
@@ -1215,6 +1304,11 @@ export interface components {
              */
             since: string | null;
             /**
+             * Starting
+             * @description The tickets that become takeable the moment it lands, which the desk names before the person lands it.
+             */
+            starting: components["schemas"]["Mention"][];
+            /**
              * Starts
              * @description The tickets that become takeable the moment its ticket lands.
              */
@@ -1437,6 +1531,11 @@ export interface components {
          * @description The Needs you item an effort raises when every ticket in it is closed.
          */
         ShipEffort: {
+            /**
+             * Branch
+             * @description The effort branch, which its own pull request goes from.
+             */
+            branch: string;
             /** Effort */
             effort: number;
             /** Id */
@@ -1448,6 +1547,11 @@ export interface components {
             kind: "ship";
             /** Title */
             title: string;
+            /**
+             * Trunk
+             * @description The repo's default branch, which it goes into.
+             */
+            trunk: string;
         };
         /**
          * Shipped
@@ -1466,7 +1570,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1701,7 +1805,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1757,6 +1861,46 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    resume_paused_api_cascades_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    arrived_api_desk_arrived_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     arm_api_efforts__number__arm_post: {
         parameters: {
             query?: never;

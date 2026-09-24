@@ -2,7 +2,7 @@ import { type Need, NeedRow, NeedsList, QueueItem } from "./NeedsYou";
 import { layout, Section, Specimen } from "./gallery/Section";
 
 // One item of each kind Needs you has in this slice, across three efforts. The
-// question is also shown resolved, and the review open on the desk.
+// question is also shown resolved, and the review open on the desk and new to it.
 const QUESTION: Need = {
   kind: "question",
   effort: "ACX compliance",
@@ -55,6 +55,11 @@ export default function NeedsYouGallery() {
           <Specimen name="desk-selected">
             <div style={{ width: 350 }}>
               <QueueItem need={REVIEW} pressed />
+            </div>
+          </Specimen>
+          <Specimen name="desk-new">
+            <div style={{ width: 350 }}>
+              <QueueItem need={REVIEW} fresh />
             </div>
           </Specimen>
           <Specimen name="desk-resolved">

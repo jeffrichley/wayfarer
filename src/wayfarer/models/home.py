@@ -136,6 +136,10 @@ class NeedReview(BaseModel):
         description="When it started waiting, where the chronicle says; ties go to the "
         "longest waiting."
     )
+    starting: list[Mention] = Field(
+        description="The tickets that become takeable the moment it lands, which the desk "
+        "names before the person lands it."
+    )
 
 
 class NeedClosed(BaseModel):

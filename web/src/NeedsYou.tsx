@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { Need as Served } from "./api";
 import styles from "./NeedsYou.module.css";
 import { type Glyph, Mark } from "./State";
 import { Named } from "./Type";
@@ -24,6 +25,48 @@ export type Need =
   | (OnATicket & { kind: "closed" })
   | { kind: "unknown"; runId: string };
 
+// The server's item as a row says it: a ticket by its name, what it holds up, and
+// the question or reason, in plain words even before the session has given them.
+export function row(need: Served): Need {
+  switch (need.kind) {
+    case "environment":
+      return { kind: "environment", reason: need.reason };
+    case "ship":
+      return { kind: "ship", effort: need.title, name: need.title };
+    case "orphan":
+      // Named by its number alone when GitHub could not be read as Wayfarer started.
+      return {
+        kind: "orphan",
+        effort: need.effort?.title ?? "No effort",
+        ticket: { name: need.title ?? `Ticket ${need.ticket}`, id: need.ticket },
+      };
+    case "unknown_container":
+      return { kind: "unknown", runId: need.run_id };
+    case "closed":
+      return {
+        kind: "closed",
+        effort: need.effort.title,
+        ticket: { name: need.ticket.title, id: need.ticket.number },
+      };
+    default: {
+      const on = {
+        effort: need.effort.title,
+        ticket: { name: need.ticket.title, id: need.ticket.number },
+        holdsUp: need.holds_up,
+        starts: need.starts,
+      };
+      switch (need.kind) {
+        case "question":
+          return { ...on, kind: "question", question: need.gist ?? "It stopped to ask you something" };
+        case "held":
+          return { ...on, kind: "held", reason: need.reason ?? "It is held until you decide" };
+        case "review":
+          return { ...on, kind: "review" };
+      }
+    }
+  }
+}
+
 // What a row says. The spec's one-line sentences lead with the reason or the
 // question and end with what the item holds up; a row gives the item's name a
 // line of its own, so the sentence under it calls the item "it".
@@ -36,7 +79,7 @@ type Words = {
   heldUp?: HeldUp;
 };
 
-const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
+export const tickets = (n: number) => `${n} ${n === 1 ? "ticket" : "tickets"}`;
 
 function words(need: Need): Words {
   const named = "ticket" in need && <Named name={need.ticket.name} id={need.ticket.id} />;
@@ -130,7 +173,7 @@ function words(need: Need): Words {
 // say zero.
 const holdsUp = (n: number) => `Holds up ${tickets(n)}`;
 
-function holdsUpAndStarts({ holdsUp: n, starts }: HeldUp): string {
+export function holdsUpAndStarts({ holdsUp: n, starts }: HeldUp): string {
   return starts === 0 ? holdsUp(n) : `${holdsUp(n)} · ${starts} ${starts === 1 ? "starts" : "start"} the moment it lands`;
 }
 
@@ -160,20 +203,24 @@ export function NeedRow({ need, href }: { need: Need; href: string }) {
 
 // An item in the desk's queue: a button that opens it beside the queue. Once
 // resolved it stays where it was, dimmed, and says what happened in place of what
-// it held up, so the person's place in the queue never jumps
+// it held up, so the person's place in the queue never jumps. One that arrived
+// after the person did sits at the bottom, and says it is new
 // (docs/screens/review-desk.md).
 export function QueueItem({
   need,
   pressed = false,
+  fresh = false,
   resolved,
   onSelect,
 }: {
   need: Need;
   pressed?: boolean;
+  fresh?: boolean;
   resolved?: string;
   onSelect?: () => void;
 }) {
   const says = words(need);
+  const label = fresh ? `New · ${says.label}` : says.label;
   const closing = resolved ?? (says.heldUp && holdsUpAndStarts(says.heldUp));
   return (
     <button
@@ -183,7 +230,7 @@ export function QueueItem({
       onClick={onSelect}
     >
       {resolved === undefined ? <Mark glyph={says.glyph} word={says.word} /> : <Mark glyph="done" word="Resolved" />}
-      <span className={styles.itemKind}>{says.label}</span>
+      <span className={styles.itemKind}>{label}</span>
       <span className={styles.itemName}>{says.name}</span>
       <span className={styles.itemAsk}>{says.ask}</span>
       {closing && <span className={styles.itemHolds}>{closing}</span>}

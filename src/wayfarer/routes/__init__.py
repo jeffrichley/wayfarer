@@ -18,6 +18,7 @@ from fastapi import Depends, Request, Response
 
 from wayfarer.asking import Asker
 from wayfarer.cascade import Cascades
+from wayfarer.desk import DeskPage
 from wayfarer.gate import StartGate
 from wayfarer.home import HomePage
 from wayfarer.image import Images
@@ -35,6 +36,7 @@ class Services:
 
     asker: Asker
     cascades: Cascades
+    desk: DeskPage
     efforts: Efforts
     home: HomePage
     images: Images
