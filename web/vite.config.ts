@@ -9,6 +9,10 @@ export default defineConfig({
   build: {
     outDir: "../src/wayfarer/static",
     emptyOutDir: true,
+    // elkjs is one module compiled from Java, 1.4 MB that cannot be split, so it
+    // is loaded only by a screen with a graph to lay out (ADR-0004); every other
+    // chunk stays well under Vite's 500 kB default.
+    chunkSizeWarningLimit: 1500,
   },
   server: {
     proxy: {

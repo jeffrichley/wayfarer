@@ -51,6 +51,7 @@ The prototype that settled this is kept on the `prototype/ticket-graph-layout` b
     | State | Foot |
     |---|---|
     | Landing | "In the merge queue" |
+    | In review | "Its pull request is open": a PR that is not landing, drawn as Landing looks (#54) |
     | Building | "Working · 12 min" |
     | Asked | "Asked you a question" (in ink) |
     | Held | "Held · a blocking finding" (in ink) |

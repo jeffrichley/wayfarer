@@ -116,7 +116,7 @@ def test_a_session_that_never_finished_is_raised_by_its_ticket_and_offered_a_rea
     containers = Containers(left={"run-left"})
     app = wayfarer(containers=containers)
 
-    with page(app.url, home=True) as seen:
+    with page(app.url, derived=True) as seen:
         orphan = seen.item("orphan:run-left")
         # GitHub names its effort, which is read though no cascade on it was armed.
         seen.item(_ticket(left), state="blocked")
@@ -147,7 +147,7 @@ def test_a_container_no_session_accounts_for_is_shown_and_never_reaped(
     containers = Containers(left={"run-left", "someone-elses"})
     app = wayfarer(containers=containers)
 
-    with page(app.url, home=True) as seen:
+    with page(app.url, derived=True) as seen:
         unknown = seen.item("container:someone-elses")
         seen.until(lambda items: _needs(items) == ["orphan", "unknown_container"])
         # Asked outright, it is still not reaped: it may be another repo's Wayfarer's.
@@ -170,7 +170,7 @@ def test_what_the_last_wayfarer_left_is_pinned_below_shipping_an_effort(
     _crashed(tmp_path, "run-left", left, armed=shipped)
     app = wayfarer(containers=Containers(left={"someone-elses"}))
 
-    with page(app.url, home=True) as seen:
+    with page(app.url, derived=True) as seen:
         seen.until(
             lambda items: _needs(items) == ["question", "ship", "orphan", "unknown_container"]
         )

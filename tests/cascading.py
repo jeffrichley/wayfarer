@@ -221,9 +221,9 @@ def eventually(holds: Callable[[], bool], timeout: float = 20.0) -> None:
         time.sleep(0.05)
 
 
-def page(url: str, home: bool = False) -> Stream:
+def page(url: str, derived: bool = False) -> Stream:
     # The poll keeps a page busy, so a wait is bounded in all, not only per read.
-    return Stream(url, patience=20.0, home=home)
+    return Stream(url, patience=20.0, derived=derived)
 
 
 def cascade_id(effort: Issue) -> str:

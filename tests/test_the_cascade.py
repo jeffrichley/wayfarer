@@ -112,6 +112,35 @@ def test_the_cap_is_shared_by_every_armed_cascade_on_the_repo(
     assert len(app.started()) == 3
 
 
+def test_the_graph_says_how_long_a_ticket_has_built_and_that_the_next_waits_on_a_slot(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (first, _) = github.effort("Widgets", tickets=2)
+    app = wayfarer(cap=1)
+
+    with Stream(app.url, patience=20.0, derived=True) as seen:
+        app.arm(effort)
+        eventually(lambda: app.started() == [first.number])
+        seen.item(_ticket(first), state="building")
+        graph = f"graph:{effort.number}"
+        # The slot is taken from the claim, before the session is building.
+        seen.until(
+            lambda items: (
+                graph in items
+                and items[graph]["cards"][0]["state"] == "building"
+                and items[graph]["cards"][1]["at_cap"]
+            )
+        )
+        drawn = seen.items[graph]
+
+    building, waiting = drawn["cards"]
+    assert building["state"] == "building"
+    assert building["since"] is not None
+    assert building["at_cap"] is False
+    assert waiting["state"] == "takeable"
+    assert waiting["since"] is None
+
+
 def test_a_ticket_is_claimed_on_github_before_its_session_starts(
     wayfarer: Serve, github: GitHub
 ) -> None:
@@ -354,7 +383,7 @@ def test_a_ticket_closed_on_github_while_its_session_runs_is_flagged_last_until_
     effort, (ticket,) = github.effort("Widgets", tickets=1)
     app = wayfarer()
 
-    with Stream(app.url, patience=20.0, home=True) as seen:
+    with Stream(app.url, patience=20.0, derived=True) as seen:
         app.arm(effort)
         eventually(lambda: app.started() == [ticket.number])
 

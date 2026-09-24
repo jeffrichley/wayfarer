@@ -3,9 +3,10 @@ import { type Glyph } from "./State";
 import styles from "./TicketCard.module.css";
 
 // The states a ticket graph draws a card in. A landed ticket has no card: it
-// folds into the start line. A closed one is off the graph, and In review has no
-// card in this slice (wayfarer#23).
-export type CardState = Exclude<TicketState, "landed" | "closed" | "in_review">;
+// folds into the start line, and a closed one is off the graph. In review is
+// not in the prototype (wayfarer#23), but the read model still derives it for a
+// pull request that is not landing, so the canvas draws it as Landing looks (#54).
+export type CardState = Exclude<TicketState, "landed" | "closed">;
 
 // What a card's foot needs to say the one fact that matters for its state
 // (docs/screens/ticket-graph.md): how long a session has run, whether the slots
@@ -19,6 +20,7 @@ export type Doing =
 
 const LOOKS: Record<CardState, { glyph: Glyph; word: string }> = {
   landing: { glyph: "review", word: "Landing" },
+  in_review: { glyph: "review", word: "In review" },
   building: { glyph: "building", word: "Building" },
   asked: { glyph: "ask", word: "Asked" },
   held: { glyph: "held", word: "Held" },
@@ -30,6 +32,8 @@ function foot(doing: Doing): string {
   switch (doing.state) {
     case "landing":
       return "In the merge queue";
+    case "in_review":
+      return "Its pull request is open";
     case "building":
       return `Working · ${doing.minutes} min`;
     case "asked":
@@ -53,6 +57,8 @@ export type TicketCardProps = Doing & {
   size: "full" | "name-only";
   selected?: boolean;
   onSelect?: () => void;
+  // Its name on the screen that places it, as `data-piece`.
+  piece?: string;
 };
 
 // A ticket on the graph. The full card is its state word, its name and a foot
@@ -61,7 +67,7 @@ export type TicketCardProps = Doing & {
 // A name is never cut off: it wraps, and a name longer than the card's clamp
 // grows the card rather than losing its end (#48). The canvas places the card
 // and the graph owns selection; the card only says whether it is selected.
-export function TicketCard({ name, number, size, selected = false, onSelect, ...doing }: TicketCardProps) {
+export function TicketCard({ name, number, size, selected = false, onSelect, piece, ...doing }: TicketCardProps) {
   const { glyph, word } = LOOKS[doing.state];
   const mark = <span className={`st st-${glyph}`} aria-hidden="true" />;
   return (
@@ -70,6 +76,7 @@ export function TicketCard({ name, number, size, selected = false, onSelect, ...
       className={`${styles.card} ${styles[size]} ${styles[doing.state]}`}
       aria-pressed={selected}
       aria-label={`${name}, ${word}`}
+      data-piece={piece}
       onClick={onSelect}
     >
       {size === "full" ? (
