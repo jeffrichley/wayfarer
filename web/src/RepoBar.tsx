@@ -3,9 +3,10 @@ import { atWorkHref, deskHref } from "./links";
 import { useItems } from "./store";
 import { TopBar } from "./TopBar";
 
-// The top bar as every screen of the app draws it: the repo, what is at work, and
-// how much needs the person, live, from home's items.
-export function AppBar() {
+// The top bar on a screen that spans the repo rather than one effort: home, At
+// work and the desk. Home's item says the repo, how many efforts move and what is running,
+// and Needs you says what waits on the person.
+export function RepoBar() {
   const home = useItems((items) => items["home"] as Home | undefined);
   const needs = useItems((items) => (items["needs_you"] as NeedsYou | undefined)?.items.length ?? 0);
   const repo = home?.repo ?? "No GitHub repo";

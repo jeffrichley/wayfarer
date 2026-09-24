@@ -161,6 +161,29 @@ def test_blocking_comes_from_issue_dependencies_not_body_text(
     assert ticket["state"] == "takeable"
 
 
+def test_a_tickets_acceptance_criteria_are_read_from_its_body_as_written(
+    wayfarer: Launcher, github: GitHub
+) -> None:
+    spec, (ticket, bare) = github.effort("Widgets", tickets=2)
+    ticket.body = (
+        "## What to build\n\nA widget.\n\n- not a criterion\n\n"
+        "## Acceptance criteria\n\n"
+        "- [ ] A widget folds in half\n"
+        "- [x] Folding twice is refused, with `the reason`\n"
+        "* [ ] It unfolds\n\n"
+        "## Blocked by\n\n- #3 Something\n"
+    )
+
+    tickets = _tickets(_read(wayfarer.start().url(), spec.number))
+
+    assert tickets[ticket.number]["criteria"] == [
+        "A widget folds in half",
+        "Folding twice is refused, with `the reason`",
+        "It unfolds",
+    ]
+    assert tickets[bare.number]["criteria"] == []
+
+
 def test_a_pr_from_another_tickets_branch_is_not_this_tickets_pr(
     wayfarer: Launcher, github: GitHub
 ) -> None:

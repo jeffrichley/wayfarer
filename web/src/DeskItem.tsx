@@ -113,8 +113,8 @@ function Surface({
                       text: q.question,
                       options: q.options.map((o) => ({ label: o.label, consequence: o.description })),
                     }))}
-                    onSend={(answers) =>
-                      void command(`/api/tickets/${need.ticket.number}/answer`, { answers })
+                    onSend={async (answers) =>
+                      (await command(`/api/tickets/${need.ticket.number}/answer`, { answers })).ok
                     }
                   />
                 </div>

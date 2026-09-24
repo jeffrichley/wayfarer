@@ -596,6 +596,33 @@ export interface components {
             waiting: boolean;
         };
         /**
+         * Changes
+         * @description What one session has changed so far, as its own edits say: not a diff, so a file
+         *     it wrote whole without having written it before counts every line as added.
+         */
+        Changes: {
+            /**
+             * Files
+             * @description In the order each was first changed.
+             */
+            files: components["schemas"]["FileChange"][];
+            /**
+             * Id
+             * @description `changes:<session>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "changes";
+            /**
+             * Session
+             * @description The session's run id.
+             */
+            session: string;
+        };
+        /**
          * Checks
          * @description A pull request's checks, rolled up. A PR with no checks has none of these.
          * @enum {string}
@@ -770,6 +797,21 @@ export interface components {
              * @description What failed and why, in plain words.
              */
             reason: string;
+        };
+        /**
+         * FileChange
+         * @description One file a session changed, and by how many lines.
+         */
+        FileChange: {
+            /** Added */
+            added: number;
+            /**
+             * Path
+             * @description Relative to the session's workspace.
+             */
+            path: string;
+            /** Removed */
+            removed: number;
         };
         /**
          * GateCheck
@@ -1012,6 +1054,68 @@ export interface components {
              * @description Those of them the cascade started a session on.
              */
             started: components["schemas"]["Mention"][];
+            ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * Lane
+         * @description One ticket with a session on it now, or whose session stopped to ask the person.
+         */
+        Lane: {
+            /**
+             * Branch
+             * @description Where its work goes: its pull request's, or its own.
+             */
+            branch: string;
+            /**
+             * Changes
+             * @description What its story's sessions have changed, added up file by file.
+             */
+            changes: components["schemas"]["FileChange"][];
+            /**
+             * Criteria
+             * @description Its acceptance criteria, as its ticket words them.
+             */
+            criteria: string[];
+            effort: components["schemas"]["Mention"];
+            /**
+             * Id
+             * @description `lane:<ticket>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "lane";
+            /**
+             * Last Green
+             * @description When its story last ran green.
+             */
+            last_green: string | null;
+            /**
+             * Latest
+             * @description What its latest session last did, in one sentence; for an Asked ticket, what it asked. Null before its first beat.
+             */
+            latest: string | null;
+            /** @description What it asked, while it waits on an answer. */
+            question: components["schemas"]["Asking"] | null;
+            /**
+             * Rhythm
+             * @description Its story's test runs, in order.
+             */
+            rhythm: components["schemas"]["TestMark"][];
+            /**
+             * Sessions
+             * @description The run ids whose beats tell its story, oldest first: its latest session's and each it carried on from, as a resume carries on the session that asked. Empty until one is recorded.
+             */
+            sessions: string[];
+            /**
+             * Started
+             * @description When its latest session started.
+             */
+            started: string | null;
+            /** @description Building, or Asked. */
+            state: components["schemas"]["TicketState"];
             ticket: components["schemas"]["Mention"];
         };
         /**
@@ -1440,7 +1544,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1471,6 +1575,22 @@ export interface components {
              */
             kind: "taken";
             ticket: components["schemas"]["Mention"];
+        };
+        /**
+         * TestMark
+         * @description One test run, as its mark in a session's rhythm.
+         */
+        TestMark: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Passed
+             * @description Green by its exit status; red otherwise.
+             */
+            passed: boolean;
         };
         /**
          * TestRun
@@ -1507,6 +1627,11 @@ export interface components {
             assignees: string[];
             /** Blocked By */
             blocked_by: number[];
+            /**
+             * Criteria
+             * @description Its acceptance criteria as its body words them, ticked or not: nothing ticks one in this slice.
+             */
+            criteria: string[];
             /** Id */
             id: string;
             /**
@@ -1606,7 +1731,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

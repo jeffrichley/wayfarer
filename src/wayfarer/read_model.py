@@ -23,6 +23,7 @@ comments, and whose token Wayfarer holds, which is all the chronicle is told fro
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Collection, Container, Iterator
 from contextlib import contextmanager
@@ -66,6 +67,7 @@ query Effort($owner: String!, $name: String!, $effort: Int!, $perPage: Int!, $af
         nodes {
           number
           title
+          body
           state
           stateReason
           labels(first: 100) { nodes { name } }
@@ -368,9 +370,29 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
         pull_request=pull_request,
         live=number in building,
         question=latest(events),
+        criteria=criteria(node["body"]),
         # The merge queue's to say, from an order this read does not ask for.
         place_in_line=None,
     )
+
+
+# A ticket's criteria are the items under its "Acceptance criteria" heading, ticked or
+# not, as `/to-tickets` writes them.
+_CRITERIA = re.compile(r"^#+\s*acceptance criteria\s*$", re.IGNORECASE)
+_HEADING = re.compile(r"^#+\s")
+_ITEM = re.compile(r"^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$")
+
+
+def criteria(body: str) -> list[str]:
+    """The acceptance criteria in a ticket's `body`, in order and as worded."""
+    found: list[str] = []
+    within = False
+    for line in body.splitlines():
+        if _HEADING.match(line):
+            within = bool(_CRITERIA.match(line))
+        elif within and (item := _ITEM.match(line)):
+            found.append(item[1])
+    return found
 
 
 def _pull_request(ticket: int, timeline: list[dict[str, Any]]) -> PullRequest | None:

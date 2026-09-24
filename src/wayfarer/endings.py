@@ -52,6 +52,7 @@ __all__ = [
     "fault",
     "ticket_branch",
     "what_happened",
+    "work_branch",
 ]
 
 STOPPED = "You stopped it."
@@ -110,6 +111,12 @@ def effort_branch(effort: Effort) -> str:
 def ticket_branch(ticket: Ticket) -> str:
     """The branch a ticket's commits are pushed to, unless its pull request has one."""
     return f"ticket/{ticket.number}-{_slug(ticket.title)}"
+
+
+def work_branch(ticket: Ticket) -> str:
+    """Where a ticket's work goes now: its open pull request's branch, or its own."""
+    pull = ticket.pull_request
+    return pull.branch if pull is not None and not pull.merged else ticket_branch(ticket)
 
 
 class Endings:
@@ -176,7 +183,7 @@ class Endings:
             said = why or _nothing_committed(outcome)
             await self._comment_held(ticket.number, self._held(said, events))
             return
-        branch = pull.branch if pull is not None else ticket_branch(ticket)
+        branch = work_branch(ticket)
         if preserved is not None:
             await self._push(preserved, branch, over=over)
         if outcome is not None and why is None:

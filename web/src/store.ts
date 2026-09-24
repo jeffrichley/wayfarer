@@ -31,7 +31,7 @@ export function connect(): () => void {
 }
 
 // A command says only that it was accepted; its effect arrives over the stream.
-// What it carries, if anything, goes as JSON.
+// What it is given, if anything, goes as JSON.
 export async function command(path: string, body?: unknown): Promise<Response> {
   if (body === undefined) {
     return fetch(path, { method: "POST" });

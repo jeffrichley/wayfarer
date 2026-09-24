@@ -16,6 +16,7 @@ it raised; the list that orders them all lives with home, which shows it.
 """
 
 from wayfarer.models.asking import *
+from wayfarer.models.at_work import *
 from wayfarer.models.cascade import *
 from wayfarer.models.chronicle import *
 from wayfarer.models.desk import *

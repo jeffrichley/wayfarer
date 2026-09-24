@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { Desk as DeskItems, DeskEntry } from "./api";
-import { AppBar } from "./AppBar";
+import { RepoBar } from "./RepoBar";
 import styles from "./Desk.module.css";
 import { DeskItem } from "./DeskItem";
 import { Frame, Split } from "./Frame";
@@ -71,7 +71,7 @@ export function Desk() {
   );
 
   return (
-    <Frame bar={<AppBar />}>
+    <Frame bar={<RepoBar />}>
       <Split left={{ label: "Needs you", width: 350, children: queue }}>
         <section id="desk-item" className={styles.item} data-piece="desk-item">
           {open === undefined ? (

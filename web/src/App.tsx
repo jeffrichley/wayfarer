@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from "react";
 
+import { AtWork } from "./AtWork";
 import { Desk } from "./Desk";
 import { EffortGraph } from "./EffortGraph";
 import { Gallery } from "./gallery/Gallery";
@@ -15,6 +16,9 @@ export function App() {
   const effort = /^\/efforts\/(\d+)$/.exec(window.location.pathname);
   if (effort !== null) {
     return <EffortGraph effort={Number(effort[1])} />;
+  }
+  if (window.location.pathname === "/at-work") {
+    return <Screen screen={<AtWork />} />;
   }
   if (window.location.pathname === "/desk") {
     return <Screen screen={<Desk />} />;

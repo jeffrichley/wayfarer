@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { ChronicleLine, Home, LineRow, Need, NeedsYou } from "./api";
-import { AppBar } from "./AppBar";
 import { Button } from "./Button";
 import { Chronicle } from "./Chronicle";
 import { useNow } from "./clock";
@@ -10,6 +9,7 @@ import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
 import { NeedRow, NeedsList, row } from "./NeedsYou";
+import { RepoBar } from "./RepoBar";
 import { SectionHead } from "./SectionHead";
 import { SessionImage } from "./SessionImage";
 import { useItems } from "./store";
@@ -92,7 +92,7 @@ export function TheLine() {
   const working = home?.working ?? [];
 
   return (
-    <Frame bar={<AppBar />}>
+    <Frame bar={<RepoBar />}>
       <Pane>
         <div className={styles.page}>
           <section className={styles.masthead} data-piece="masthead">
