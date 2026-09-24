@@ -2,20 +2,26 @@
 
 `Replayed` hands Waystation's token-free `ScriptedAgent` lines written the way
 Claude Code's stream-json prints them, and reads them back with Claude Code's own
-parser, so a session's events are the real ones for free. The builders below
-write those lines.
+parser, so a session's events are the real ones for free. `Playing` plays each
+ticket's own lines, for a Wayfarer whose cascade starts several. The builders
+below write those lines.
 """
 
 from __future__ import annotations
 
 import json
+import re
+import shlex
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 from waystation import ClaudeCode
 from waystation.agents import AgentCommand, AgentEvent
 from waystation.testing import ScriptedAgent
+
+from wayfarer.asking import QUESTION
 
 DONE = {"status": "done", "summary": "Added the widget.", "open_findings": [], "assumptions": []}
 
@@ -36,6 +42,65 @@ class Replayed:
 
     def parse(self, line: str) -> Sequence[AgentEvent]:
         return ClaudeCode().parse(line)
+
+
+@dataclass
+class Playing:
+    """Each ticket's session plays `first`, waits until the test lets its ticket go,
+    plays `then`, and keeps running until it is stopped.
+
+    A ticket in `asking` asks instead: its first session plays `first`, writes the
+    question down where the image's hook does, and ends without reporting, as a
+    deferred call ends one (#42). The session that carries on plays `then`.
+    """
+
+    released: Path
+    first: dict[int, list[str]] = field(default_factory=dict)
+    then: dict[int, list[str]] = field(default_factory=dict)
+    asking: dict[int, dict[str, Any]] = field(default_factory=dict)
+    _asked: set[int] = field(default_factory=set)
+
+    def let_go(self, ticket: int) -> None:
+        (self.released / str(ticket)).touch()
+
+    def preflight(self) -> None:
+        return None
+
+    def command(self, prompt: str, outcome_schema: dict[str, Any]) -> AgentCommand:
+        found = re.search(r"implement (\d+)", prompt)
+        # A resume is told only to carry on; the one ticket that asked is its ticket.
+        ticket = int(found[1]) if found else next(iter(self._asked))
+        if ticket in self._asked:
+            script = [*_printed([init(), *self.then.get(ticket, [])]), *_LINGER]
+        elif ticket in self.asking:
+            self._asked.add(ticket)
+            asked = shlex.quote(json.dumps(self.asking[ticket]))
+            script = [
+                *_printed([init(), *self.first.get(ticket, [])]),
+                f'mkdir -p "$HOME/{Path(QUESTION).parent}"',
+                f'printf %s {asked} > "$HOME/{QUESTION}"',
+            ]
+        else:
+            let_go = shlex.quote(str(self.released / str(ticket)))
+            script = [
+                *_printed([init(), *self.first.get(ticket, [])]),
+                f"while [ ! -e {let_go} ]; do sleep 0.05; done",
+                *_printed(self.then.get(ticket, [])),
+                *_LINGER,
+            ]
+        return replace(ScriptedAgent().command(prompt, outcome_schema), script="\n".join(script))
+
+    def parse(self, line: str) -> Sequence[AgentEvent]:
+        return ClaudeCode().parse(line)
+
+
+# Running until it is stopped, as `ScriptedAgent(linger=True)` does: a child in the
+# background, and the shell waiting on it as its process group's leader.
+_LINGER = ["( sleep 999 ) &", "wait"]
+
+
+def _printed(lines: Sequence[str]) -> list[str]:
+    return [f"printf '%s\\n' {shlex.quote(line)}" for line in lines]
 
 
 def _message(kind: str, *content: dict[str, Any]) -> str:

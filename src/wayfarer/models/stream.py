@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from wayfarer.models.at_work import Changes, Lane
 from wayfarer.models.cascade import Cascade, ShipEffort
 from wayfarer.models.chronicle import ChronicleLine
 from wayfarer.models.gate import EnvironmentFailure, GateStatus
@@ -44,11 +45,13 @@ Item = Annotated[
     | Orphan
     | UnknownContainer
     | Beat
+    | Changes
     | ChronicleLine
     | Home
     | LineRow
     | NeedsYou
-    | TicketGraph,
+    | TicketGraph
+    | Lane,
     Field(discriminator="kind"),
 ]
 """Anything the browser holds, keyed by its `id`."""

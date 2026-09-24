@@ -25,6 +25,7 @@ export type Someone = Schemas["Someone"];
 export type Blocker = Schemas["Blocker"];
 export type GraphCard = Schemas["GraphCard"];
 export type Home = Schemas["Home"];
+export type Lane = Schemas["Lane"];
 export type LineRow = Schemas["LineRow"];
 export type Neighbour = Schemas["Neighbour"];
 export type NeedsYou = Schemas["NeedsYou"];

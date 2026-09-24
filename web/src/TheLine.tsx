@@ -9,9 +9,9 @@ import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
 import { NeedRow, NeedsList, type Need as Row } from "./NeedsYou";
+import { RepoBar } from "./RepoBar";
 import { SectionHead } from "./SectionHead";
 import { SessionImage } from "./SessionImage";
-import { ShellBar } from "./ShellBar";
 import { command, useItems } from "./store";
 import { Kicker, Named } from "./Type";
 import styles from "./TheLine.module.css";
@@ -156,7 +156,7 @@ export function TheLine() {
   const working = home?.working ?? [];
 
   return (
-    <Frame bar={<ShellBar />}>
+    <Frame bar={<RepoBar />}>
       <Pane>
         <div className={styles.page}>
           <section className={styles.masthead} data-piece="masthead">

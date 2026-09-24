@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from waystation import DockerSandbox, SandboxBackend
 
 from wayfarer.asking import Asker
+from wayfarer.at_work import AtWork
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.endings import Endings
@@ -137,6 +138,7 @@ def create_app(
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
     graphs = Graphs(store, None if github.repo is None else cascades.record)
+    at_work = AtWork(store, None if github.repo is None else cascades.record)
     restart = Restart(store, github, cascades, efforts, containers or DockerContainers(settings))
 
     # The poll, and the re-reads it sets off, run for as long as the app serves,
@@ -152,6 +154,7 @@ def create_app(
             asyncio.create_task(efforts.follow()),
             asyncio.create_task(home.follow()),
             asyncio.create_task(graphs.follow()),
+            asyncio.create_task(at_work.follow()),
             asyncio.create_task(restart.recover()),
         ]
         for task in tasks:

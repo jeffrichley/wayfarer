@@ -103,6 +103,11 @@ class Ticket(BaseModel):
         "asked while it is Asked, and the answer once a person gave one; null if it never "
         "asked (#42)."
     )
+    criteria: list[str] = Field(
+        description="Its body's acceptance criteria, one per item and as worded: a box "
+        "ticked on GitHub proves nothing, so no tick is read and nothing ticks one in "
+        "this slice (#70)."
+    )
     place_in_line: int | None = Field(
         description="Its place in its effort branch's merge queue while it is Landing, 1 at "
         "the front; null when it is not in the queue. Read from GitHub, so a restart finds "
@@ -110,10 +115,6 @@ class Ticket(BaseModel):
     )
     build: str | None = Field(
         description="Its body's `What to build` section as written; null when it has none."
-    )
-    criteria: list[str] = Field(
-        description="Its body's acceptance criteria, one per item and as written: a box "
-        "ticked on GitHub proves nothing, so no tick is read (#70)."
     )
 
 

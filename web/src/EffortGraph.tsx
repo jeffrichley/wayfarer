@@ -4,7 +4,7 @@ import type { Cascade, Effort, Tally, Ticket, TicketGraph } from "./api";
 import { Arming } from "./Arming";
 import { Frame, Split } from "./Frame";
 import { GraphCanvas, type Selection } from "./GraphCanvas";
-import { ShellBar } from "./ShellBar";
+import { RepoBar } from "./RepoBar";
 import { State } from "./State";
 import { command, connect, useItems } from "./store";
 import { LOOKS } from "./TicketCard";
@@ -52,7 +52,7 @@ export function EffortGraph({ effort: number }: { effort: number }) {
   };
 
   return (
-    <Frame bar={<ShellBar />}>
+    <Frame bar={<RepoBar />}>
       <Split
         right={{
           label: "The selected ticket",

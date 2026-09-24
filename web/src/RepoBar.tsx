@@ -1,15 +1,15 @@
-import type { Home, Need, NeedsYou } from "./api";
+import type { Home, NeedsYou } from "./api";
 import { atWorkHref, deskHref } from "./links";
 import { useItems } from "./store";
 import { TopBar } from "./TopBar";
 
-const NOTHING: Need[] = [];
-
-// The top bar as every screen of the app carries it: the repo, what is working
-// and what needs the person, as the server last said (docs/design/shell.md).
-export function ShellBar() {
+// The top bar on a screen that spans the repo rather than one effort: home, and
+// At work. The ticket graph carries it too, until an effort's screens have the
+// effort switcher. Home's item says the repo, how many efforts move and what is running,
+// and Needs you says what waits on the person.
+export function RepoBar() {
   const home = useItems((items) => items["home"] as Home | undefined);
-  const needs = useItems((items) => (items["needs_you"] as NeedsYou | undefined)?.items ?? NOTHING);
+  const needs = useItems((items) => (items["needs_you"] as NeedsYou | undefined)?.items.length ?? 0);
   const repo = home?.repo ?? "No GitHub repo";
   const moving = home?.moving ?? 0;
   return (
@@ -24,7 +24,7 @@ export function ShellBar() {
         },
       ]}
       working={{ count: home?.working.length ?? 0, href: atWorkHref() }}
-      needsYou={{ count: needs.length, href: deskHref() }}
+      needsYou={{ count: needs, href: deskHref() }}
     />
   );
 }
