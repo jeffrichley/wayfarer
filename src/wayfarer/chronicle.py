@@ -23,8 +23,8 @@ landing when a comment carrying `LANDED_MARKER` came before it, and a person's
 otherwise. A person's movement is "you" for the token's own login, and names
 any other.
 
-The asked gist, the held reason and whether a retry started over are left null:
-their sources are #42 and #41.
+The asked gist is the question comment's first question (#42). The held reason
+and whether a retry started over are left null: their source is #41.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Literal
 
+from wayfarer.asking import gist
 from wayfarer.merge_queue import LANDED_MARKER
 from wayfarer.models import (
     Answered,
@@ -116,7 +117,10 @@ class _Telling:
                 by = self._who(e.subject)
                 return self._line(number, e, Taken(kind="taken", ticket=ticket, by=by))
             case "LabeledEvent", label if label == ASKED:
-                return self._line(number, e, Asked(kind="asked", ticket=ticket, gist=None))
+                # Quoted from the question comment posted just before the label (#42).
+                at = next(i for i, told in enumerate(timeline) if told is e)
+                asked = Asked(kind="asked", ticket=ticket, gist=gist(timeline, at))
+                return self._line(number, e, asked)
             case "LabeledEvent", label if label == HELD:
                 return self._line(number, e, Held(kind="held", ticket=ticket, reason=None))
             case "UnlabeledEvent", label if label == ASKED:

@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from wayfarer.models.asking import Asking
+
 __all__ = [
     "Checks",
     "Effort",
@@ -94,6 +96,11 @@ class Ticket(BaseModel):
         description="A session Wayfarer started is running on it. GitHub owns its state, so "
         "a ticket closed there keeps its session, and it is flagged in Needs you "
         "(ADR-0002)."
+    )
+    question: Asking | None = Field(
+        description="Its latest question, from its question comment: what the session "
+        "asked while it is Asked, and the answer once a person gave one; null if it never "
+        "asked (#42)."
     )
     place_in_line: int | None = Field(
         description="Its place in its effort branch's merge queue while it is Landing, 1 at "

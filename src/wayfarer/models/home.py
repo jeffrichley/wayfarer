@@ -102,7 +102,10 @@ class NeedQuestion(BaseModel):
         description="When it started waiting, where the chronicle says; ties go to the "
         "longest waiting."
     )
-    gist: str | None = Field(description="The question's gist; null until asking gives it.")
+    gist: str | None = Field(
+        description="The question's gist, its first question; null when its question "
+        "comment is missing."
+    )
 
 
 class NeedHeld(BaseModel):

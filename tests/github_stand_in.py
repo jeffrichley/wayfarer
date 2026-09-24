@@ -404,8 +404,11 @@ class GitHub:
 
     def unlabel(self, issue: Issue, name: str, by: str | None = None) -> None:
         with self._lock:
-            issue.labels.remove(name)
-            self._happened(issue, "UnlabeledEvent", by or self.viewer, label=name)
+            self._unlabel(issue, name, by or self.viewer)
+
+    def _unlabel(self, issue: Issue, name: str, by: str) -> None:
+        issue.labels.remove(name)
+        self._happened(issue, "UnlabeledEvent", by, label=name)
 
     def comment(self, issue: Issue, body: str, by: str | None = None) -> None:
         with self._lock:
@@ -576,6 +579,15 @@ class GitHub:
                 issue = self._live.issues[number]
                 for label_name in body["labels"]:
                     self._label(issue, label_name, self.viewer)
+                return JSONResponse([{"name": n} for n in issue.labels])
+
+        @app.delete("/repos/{owner}/{name}/issues/{number}/labels/{label_name}")
+        async def unlabel(owner: str, name: str, number: int, label_name: str) -> Response:
+            with self._lock:
+                issue = self._live.issues[number]
+                if label_name not in issue.labels:
+                    return JSONResponse({"message": "Label does not exist"}, status_code=404)
+                self._unlabel(issue, label_name, self.viewer)
                 return JSONResponse([{"name": n} for n in issue.labels])
 
         @app.post("/repos/{owner}/{name}/issues/{number}/comments")

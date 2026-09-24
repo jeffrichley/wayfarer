@@ -274,7 +274,7 @@ def _need(
                 holds_up=holds_up,
                 starts=starts,
                 since=waited("asked"),
-                gist=None,
+                gist=_gist(ticket),
             )
         case TicketState.HELD:
             return NeedHeld(
@@ -370,3 +370,10 @@ def _standfirst(effort: Effort, tickets: list[Ticket], waiting: list[_OnATicket]
     if on_you:
         counts.insert(0, f"{_tickets(on_you)} waiting on you")
     return f"{lead}, with {' and '.join(counts)}."
+
+
+def _gist(ticket: Ticket) -> str | None:
+    """What an Asked ticket's session asked, as its question comment has it (#42)."""
+    if ticket.question is None or not ticket.question.questions:
+        return None
+    return ticket.question.questions[0].question

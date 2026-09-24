@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from wayfarer.asking import ASKED, latest
 from wayfarer.freshness import Watch
 from wayfarer.github import GitHub, GitHubError, NoSuchIssue, NotConnected
 from wayfarer.models import (
@@ -46,7 +47,6 @@ from wayfarer.stream import Store
 
 __all__ = ["ASKED", "HELD", "Efforts", "Event", "History", "derive_state", "read_effort"]
 
-ASKED = "wayfarer:asked"
 HELD = "wayfarer:held"
 
 # Leaf connections cost the same whatever their size, so each asks for GitHub's
@@ -342,6 +342,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
     labels = [label["name"] for label in node["labels"]["nodes"]]
     assignees = [user["login"] for user in node["assignees"]["nodes"]]
     open_blockers: int = node["issueDependenciesSummary"]["blockedBy"]
+    events = [_event(e) for e in node["events"]["nodes"]]
     pull_request = _pull_request(number, node["timelineItems"]["nodes"])
     is_open = node["state"] == "OPEN"
     return Ticket(
@@ -366,6 +367,7 @@ def _ticket(node: dict[str, Any], *, auto_merge: bool, building: Container[int])
         open_blockers=open_blockers,
         pull_request=pull_request,
         live=number in building,
+        question=latest(events),
         # The merge queue's to say, from an order this read does not ask for.
         place_in_line=None,
     )
