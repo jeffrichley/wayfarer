@@ -76,6 +76,8 @@ class _Claude:
     scratch: Path
     asking: set[int] = field(default_factory=set)
     waiting: set[int] = field(default_factory=set)
+    breaking: set[int] = field(default_factory=set)
+    """Tickets whose next resume cannot even be started: the environment's failure."""
     sessions: list[_Session] = field(default_factory=list)
     _tickets: dict[str, int] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -113,6 +115,9 @@ class _Played:
 
     def command(self, prompt: str, outcome_schema: dict[str, Any]) -> AgentCommand:
         session, asks = self.claude.handed(self.args, prompt)
+        if prompt == RESUMED and session.ticket in self.claude.breaking:
+            self.claude.breaking.discard(session.ticket)
+            raise RuntimeError("The agent's command could not be made.")
         conversation = shlex.quote(self.args[-1])
         seen = shlex.quote(str(session.seen))
         go = shlex.quote(str(self.claude.scratch / f"go-{session.ticket}"))
@@ -349,3 +354,51 @@ def test_a_resume_whose_conversation_was_lost_starts_cold_told_the_question_and_
     assert cold.args[-2] == "--session-id"
     assert cold.prompt.startswith(f"/mattpocock-skills:implement {ticket.number}")
     assert f"You asked: {_WHICH}\nThe answer: Warn" in cold.prompt
+
+
+def test_a_question_github_would_not_take_releases_the_ticket_unspent_and_pauses_the_cascade(
+    serve: Any, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Exports", tickets=1)
+    github.forbid(f"/issues/{ticket.number}/labels")
+    app = serve()
+    app.claude.asking.add(ticket.number)
+
+    with Stream(app.url, patience=20.0) as page:
+        app.arm(effort)
+        paused = page.item(f"cascade:{effort.number}", paused=True)
+        eventually(lambda: ticket.assignees == [])
+
+    # The label is the question's state, so without it the ticket was never asked:
+    # it is back on the frontier, not held, and its automatic start is unspent.
+    assert paused["reason"] is not None
+    assert "wayfarer:held" not in github.labels(ticket.number)
+    github.unforbid(f"/issues/{ticket.number}/labels")
+    app.resume(effort)
+    eventually(lambda: len(app.claude.of(ticket)) == 2)
+    assert app.claude.of(ticket)[1].args[-2] == "--session-id"
+
+
+def test_a_resume_the_environment_failed_resumes_again_with_its_answer_when_the_cascade_does(
+    serve: Any, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Exports", tickets=1)
+    app = serve()
+    app.claude.asking.add(ticket.number)
+    app.claude.breaking.add(ticket.number)
+    app.arm(effort)
+    eventually(lambda: _asked(github, ticket))
+
+    with Stream(app.url, patience=20.0) as page:
+        app.answer(ticket, {_WHICH: "Warn"})
+        page.item(f"cascade:{effort.number}", paused=True)
+
+    # Not held, and still claimed: it is the same answered question, waiting to resume.
+    assert "wayfarer:held" not in github.labels(ticket.number)
+    assert ticket.assignees == [LOGIN]
+    app.resume(effort)
+    eventually(lambda: len(app.claude.of(ticket)) == 3)
+    again = app.claude.of(ticket)[2]
+    assert again.args[-2] == "--resume"
+    eventually(lambda: again.found("answer") is not None)
+    assert json.loads(again.found("answer") or "") == {_WHICH: "Warn"}

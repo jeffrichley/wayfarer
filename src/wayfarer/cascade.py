@@ -395,22 +395,33 @@ class Cascades:
         return True
 
     def _answered(self, tickets: list[Ticket], store: Store) -> list[Ticket]:
-        """The tickets whose question a person answered, and whose last session is still
-        the one that asked it: the label is off, and nothing has carried on from it."""
-        last = {row.ticket: row for row in store.sessions() if row.purpose is not Purpose.RESOLVE}
+        """The open tickets whose question a person answered and that nothing has carried
+        on from yet: the label is off, and no session runs on them."""
         return [
             ticket
             for ticket in tickets
             if ticket.open
             and ticket.state is not TicketState.ASKED
             and HELD not in ticket.labels
-            and ticket.question is not None
-            and ticket.question.answered
             and ticket.number not in self._running
-            and (asked := last.get(ticket.number)) is not None
-            and asked.run_id == ticket.question.session
-            and asked.ended is not None
+            and self._still_asking(ticket, store)
         ]
+
+    def _still_asking(self, ticket: Ticket, store: Store) -> bool:
+        """Whether `ticket`'s question was answered and its last session is still the one
+        that asked it. A session the environment failed never ran, so it carried nothing
+        on: a resume that failed so is resumed again, answer and all."""
+        asking = ticket.question
+        if asking is None or not asking.answered:
+            return False
+        ran = [
+            row
+            for row in store.sessions()
+            if row.ticket == ticket.number
+            and row.purpose is not Purpose.RESOLVE
+            and row.fault is not Fault.ENVIRONMENT
+        ]
+        return bool(ran) and ran[-1].run_id == asking.session and ran[-1].ended is not None
 
     async def _gate_refused(self, effort: int) -> None:
         """The gate refused: pause, and show the one item it raised. Running sessions carry on."""
@@ -477,9 +488,16 @@ class Cascades:
             if whose is Fault.ENVIRONMENT:
                 await self._released(ticket, effort, why)
                 return
-            if isinstance(result.failure, OutcomeMissing) and await self._asked(
-                ticket.number, result.run_id, sessions.carried(result.run_id, QUESTION)
-            ):
+            try:
+                if isinstance(result.failure, OutcomeMissing) and await self._asked(
+                    ticket.number, result.run_id, sessions.carried(result.run_id, QUESTION)
+                ):
+                    return
+            except _ENVIRONMENT as error:
+                # Its question never reached GitHub, which is all the state a question has,
+                # so the session counts as never having run (#42).
+                store.failed(result.run_id, Fault.ENVIRONMENT, _detail(error))
+                await self._released(ticket, effort, _detail(error))
                 return
         row = store.session(result.run_id)
         try:
@@ -502,9 +520,17 @@ class Cascades:
         frontier, pause the cascade and raise one item, as a refused start gate does.
 
         A person's retry is held again instead: its ticket spent its automatic start
-        long ago, so on the frontier nothing would ever start it."""
-        retried = ticket.number in self.record().built()
-        where = "held it again" if retried else "the ticket went back on the frontier"
+        long ago, so on the frontier nothing would ever start it. A resume is left as it
+        was, still claimed and answered, and resumes again when the cascade does (#42)."""
+        store = self.record()
+        resuming = self._still_asking(ticket, store)
+        retried = not resuming and ticket.number in store.built()
+        if resuming:
+            where = "it resumes when the cascade does"
+        elif retried:
+            where = "held it again"
+        else:
+            where = "the ticket went back on the frontier"
         reason = (
             f"A session on #{ticket.number} failed for a reason that was not its own, so {where}."
         )
@@ -518,6 +544,8 @@ class Cascades:
                 failed=[GateCheck(name="A session can run", passed=False, detail=detail)],
             )
         )
+        if resuming:
+            return
         try:
             if retried:
                 await self._endings.hold_saying(ticket.number, f"A retry could not run: {detail}")

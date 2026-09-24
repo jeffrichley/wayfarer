@@ -485,6 +485,11 @@ class GitHub:
         with self._lock:
             self._forbidden.append(path)
 
+    def unforbid(self, path: str) -> None:
+        """Let `path` be read and written again, as a token granted the permission is."""
+        with self._lock:
+            self._forbidden.remove(path)
+
     def meanwhile(self, change: Callable[[], object]) -> None:
         """Make `change` just after Wayfarer's next write, as a person racing it would."""
         with self._lock:
