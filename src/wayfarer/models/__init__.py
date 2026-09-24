@@ -20,6 +20,7 @@ from wayfarer.models.at_work import *
 from wayfarer.models.cascade import *
 from wayfarer.models.chronicle import *
 from wayfarer.models.desk import *
+from wayfarer.models.diff import *
 from wayfarer.models.gate import *
 from wayfarer.models.graph import *
 from wayfarer.models.health import *

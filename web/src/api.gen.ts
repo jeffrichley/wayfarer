@@ -262,6 +262,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/pulls/{number}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Diff
+         * @description Read the pull request's diff from GitHub afresh, and again each time its head
+         *     moves; it arrives on the stream as `diff:<number>` (ADR-0003).
+         */
+        post: operations["read_diff_api_pulls__number__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{run_id}/reap": {
         parameters: {
             query?: never;
@@ -737,6 +758,35 @@ export interface components {
             resolved: string | null;
         };
         /**
+         * DiffFile
+         * @description One changed file, sent whole.
+         */
+        DiffFile: {
+            /**
+             * Lines
+             * @description Every hunk's lines, in order.
+             */
+            lines: components["schemas"]["DiffLine"][];
+            /** Path */
+            path: string;
+        };
+        /**
+         * DiffLine
+         * @description One line of a file's change: an added line has only a new number, a removed one
+         *     only an old number, and a line of context around them has both.
+         */
+        DiffLine: {
+            /**
+             * Code
+             * @description The line as written, without its sign.
+             */
+            code: string;
+            /** New */
+            new: number | null;
+            /** Old */
+            old: number | null;
+        };
+        /**
          * Effort
          * @description An effort's whole ticket graph: its spec issue, and every ticket under it.
          */
@@ -1137,6 +1187,19 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * LeftOut
+         * @description A changed file whose lines were not sent, named with its counts.
+         */
+        LeftOut: {
+            /** Added */
+            added: number;
+            /** Path */
+            path: string;
+            /** Removed */
+            removed: number;
+            why: components["schemas"]["Omission"];
+        };
+        /**
          * LineRow
          * @description One effort on the line: its tickets at the stations they have reached.
          */
@@ -1346,6 +1409,12 @@ export interface components {
             ticket: components["schemas"]["Mention"];
         };
         /**
+         * Omission
+         * @description Why a changed file's lines were not sent.
+         * @enum {string}
+         */
+        Omission: "bound" | "no_patch";
+        /**
          * Orphan
          * @description A session the store has as started and never finished: the Wayfarer running it
          *     stopped before it did. Offered a reap, which removes whatever container it left and
@@ -1416,6 +1485,64 @@ export interface components {
              * @description How many tickets it published.
              */
             tickets: number;
+        };
+        /**
+         * PullDiff
+         * @description A pull request's changed files as its head has them, in GitHub's order.
+         */
+        PullDiff: {
+            /**
+             * Files
+             * @description Each file sent, until the next would pass the bound on lines sent.
+             */
+            files: components["schemas"]["DiffFile"][];
+            /**
+             * Head Commit
+             * @description The head the diff was read at.
+             */
+            head_commit: string;
+            /**
+             * Id
+             * @description `diff:<pull request>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pull_diff";
+            /**
+             * Left Out
+             * @description Each file read but not sent, in GitHub's order among the rest.
+             */
+            left_out: components["schemas"]["LeftOut"][];
+            /** Pull */
+            pull: number;
+            /**
+             * Unread
+             * @description Changed files past the bound that were never read from GitHub, so are counted rather than named.
+             */
+            unread: number;
+        };
+        /**
+         * PullDiffUnreadable
+         * @description A pull request whose diff GitHub would not give, and why.
+         */
+        PullDiffUnreadable: {
+            /**
+             * Id
+             * @description `diff:<pull request>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pull_diff_unreadable";
+            /** Pull */
+            pull: number;
+            /** Reason */
+            reason: string;
         };
         /**
          * PullRequest
@@ -1570,7 +1697,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["PullDiff"] | components["schemas"]["PullDiffUnreadable"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1805,7 +1932,7 @@ export interface components {
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["Changes"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["Desk"] | components["schemas"]["PullDiff"] | components["schemas"]["PullDiffUnreadable"] | components["schemas"]["TicketGraph"] | components["schemas"]["Lane"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2172,6 +2299,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    read_diff_api_pulls__number__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

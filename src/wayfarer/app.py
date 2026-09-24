@@ -22,6 +22,7 @@ from wayfarer.at_work import AtWork
 from wayfarer.cascade import Cascades, Gate, SessionsFor
 from wayfarer.chronicle import chronicle
 from wayfarer.desk import DeskPage
+from wayfarer.diffs import Diffs
 from wayfarer.endings import Endings
 from wayfarer.gate import StartGate
 from wayfarer.github import GitHub
@@ -43,6 +44,7 @@ from wayfarer.routes import gate as gate_routes
 from wayfarer.routes import health as health_routes
 from wayfarer.routes import home as home_routes
 from wayfarer.routes import image as image_routes
+from wayfarer.routes import pulls as pulls_routes
 from wayfarer.routes import restart as restart_routes
 from wayfarer.routes import tickets as tickets_routes
 from wayfarer.sessions import Sessions
@@ -141,6 +143,7 @@ def create_app(
     )
     home = HomePage(store, github.repo, cascades.record, auto_merge=settings.auto_merge)
     desk = DeskPage(store)
+    diffs = Diffs(github, store, settings)
     graphs = Graphs(store, None if github.repo is None else cascades.record)
     at_work = AtWork(store, None if github.repo is None else cascades.record)
     restart = Restart(store, github, cascades, efforts, containers or DockerContainers(settings))
@@ -158,6 +161,7 @@ def create_app(
             asyncio.create_task(efforts.follow()),
             asyncio.create_task(home.follow()),
             asyncio.create_task(desk.follow()),
+            asyncio.create_task(diffs.follow()),
             asyncio.create_task(graphs.follow()),
             asyncio.create_task(at_work.follow()),
             asyncio.create_task(restart.recover()),
@@ -180,6 +184,7 @@ def create_app(
         asker=asker,
         cascades=cascades,
         desk=desk,
+        diffs=diffs,
         efforts=efforts,
         home=home,
         images=images,
@@ -198,6 +203,7 @@ def create_app(
     app.include_router(health_routes.router)
     app.include_router(home_routes.router)
     app.include_router(image_routes.router)
+    app.include_router(pulls_routes.router)
     app.include_router(restart_routes.router)
     app.include_router(tickets_routes.router)
     page.include(app)

@@ -168,15 +168,19 @@ class GitHub:
         """
         headers = {"If-None-Match": etag} if etag else {}
         response = await self._rest("GET", path, headers=headers, params=params)
-        if _rate_limited(response):
-            raise RateLimited(response.status_code, _asked_wait(response.headers))
-        if response.status_code not in (200, 304):
-            raise GitHubError(f"GitHub refused the read ({response.status_code}): {response.text}")
+        _raise_if_refused(response, (200, 304))
         return Answer(
             changed=response.status_code == 200,
             etag=response.headers.get("ETag", etag),
             poll_interval=_seconds(response.headers.get("X-Poll-Interval")) or 0.0,
         )
+
+    async def read(self, path: str, params: dict[str, str] | None = None) -> Any:
+        """What GitHub answers one REST read of the repo's `path`, for what GraphQL does
+        not carry, such as a pull request's patches."""
+        response = await self._rest("GET", path, params=params)
+        _raise_if_refused(response, (200,))
+        return response.json()
 
     async def write(self, method: str, path: str, body: dict[str, Any]) -> Any:
         """Send one REST write to the repo's `path`, and return what GitHub answered.
@@ -239,6 +243,14 @@ def _raise_if_cancelled(cause: BaseException | None = None) -> None:
 
 # GitHub's rules for its rate-limit responses:
 # https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#handle-rate-limit-errors-appropriately
+
+
+def _raise_if_refused(response: httpx.Response, answers: tuple[int, ...]) -> None:
+    """Raise unless a read was answered with one of `answers`."""
+    if _rate_limited(response):
+        raise RateLimited(response.status_code, _asked_wait(response.headers))
+    if response.status_code not in answers:
+        raise GitHubError(f"GitHub refused the read ({response.status_code}): {response.text}")
 
 
 def _rate_limited(response: httpx.Response) -> bool:

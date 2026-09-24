@@ -31,6 +31,10 @@ class Settings:
     """The person's token, from `GH_TOKEN` or else `GITHUB_TOKEN`, as `gh` reads them."""
     github_timeout: float = 30.0
     """Seconds one request to GitHub may take before the read fails."""
+    diff_lines: int = 3000
+    """Lines of a pull request's diff sent to the page at most. A file that would pass it
+    is left out, named with its counts, and so is every file after it, so a very large
+    pull request costs a bounded read and a bounded page. `WAYFARER_DIFF_LINES` changes it."""
     tickets_per_page: int = 50
     """Tickets read per GraphQL query. Each costs about (1 + 4 x this) / 100 points,
     so 50 keeps a thirty-ticket effort to one query of 2 points, inside the 3 its
@@ -82,6 +86,7 @@ class Settings:
             port=int(env.get("WAYFARER_PORT", cls.port)),
             github_api=env.get("WAYFARER_GITHUB_API", cls.github_api),
             github_token=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN") or None,
+            diff_lines=int(env.get("WAYFARER_DIFF_LINES", cls.diff_lines)),
             poll_active=float(env.get("WAYFARER_POLL_ACTIVE", cls.poll_active)),
             poll_idle=float(env.get("WAYFARER_POLL_IDLE", cls.poll_idle)),
             rate_limit_backoff=float(
