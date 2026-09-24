@@ -177,7 +177,10 @@ def runs_tests(
 
 def busy(path: Path, cycles: int = 200) -> Path:
     """A recorded session written to `path`: an Orient, then `cycles` of reading,
-    editing and testing, each saying what it did, as a long session narrates."""
+    editing and testing, each saying what it did, as a long session narrates.
+
+    At `Playing`'s pace the default runs over a minute: long enough to outlast any
+    test that watches it, however slow the worker it lands on."""
     lines = [init(), says("Reading the ticket.")]
     for n in range(cycles):
         lines += [

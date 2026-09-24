@@ -1,6 +1,6 @@
 """Focus stays where the person clicked, on every screen, under load (#59).
 
-Principle 12, proved rather than asserted: each screen gets the one check in
+Principle 12, proved rather than asserted (ADR-0004): each screen gets the one check in
 `focus.py` while recorded sessions stream through the real server, so the page is
 busy with live updates the whole time, never quiet. One ticket stops to ask, so At
 work has an answer to type into; the other two stream a long recorded session each.
@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.git, pytest.mark.browser]
 
 
 @dataclass(frozen=True)
-class Busy:
+class Loaded:
     """Wayfarer with an effort's cascade armed: one ticket asking, two streaming."""
 
     url: str
@@ -37,7 +37,7 @@ class Busy:
 
 
 @pytest.fixture
-def busy_line(tmp_path: Path, github: GitHub) -> Iterator[Busy]:
+def loaded(tmp_path: Path, github: GitHub) -> Iterator[Loaded]:
     effort, (asking, *streaming) = github.effort("Widgets", tickets=3)
     released = tmp_path / "released"
     released.mkdir()
@@ -49,7 +49,7 @@ def busy_line(tmp_path: Path, github: GitHub) -> Iterator[Busy]:
     )
     with playing(tmp_path, github, agent) as url:
         assert post(f"{url}api/efforts/{effort.number}/arm").status_code == 202
-        yield Busy(url, effort, asking, (streaming[0], streaming[1]))
+        yield Loaded(url, effort, asking, (streaming[0], streaming[1]))
 
 
 @pytest.fixture
@@ -59,8 +59,8 @@ def page(browser: Browser) -> Iterator[Page]:
     opened.close()
 
 
-def test_on_home_a_switcher_keeps_focus_while_sessions_stream(busy_line: Busy, page: Page) -> None:
-    page.goto(busy_line.url)
+def test_on_home_a_switcher_keeps_focus_while_sessions_stream(loaded: Loaded, page: Page) -> None:
+    page.goto(loaded.url)
     switcher = page.locator("[data-piece=repo-switcher]")
 
     keeps_focus(page, switcher, "Escape")
@@ -71,11 +71,11 @@ def test_on_home_a_switcher_keeps_focus_while_sessions_stream(busy_line: Busy, p
 
 
 def test_on_the_ticket_graph_a_card_keeps_focus_while_sessions_stream(
-    busy_line: Busy, page: Page
+    loaded: Loaded, page: Page
 ) -> None:
-    page.goto(f"{busy_line.url}efforts/{busy_line.effort.number}")
+    page.goto(f"{loaded.url}efforts/{loaded.effort.number}")
     page.wait_for_selector("[data-piece=graph-canvas][data-laid-out=true]")
-    card = page.locator(f"[data-piece=ticket-card-{busy_line.streaming[0].number}]")
+    card = page.locator(f"[data-piece=ticket-card-{loaded.streaming[0].number}]")
 
     keeps_focus(page, card, "Escape")
 
@@ -85,10 +85,10 @@ def test_on_the_ticket_graph_a_card_keeps_focus_while_sessions_stream(
 
 
 def test_at_work_a_lane_keeps_focus_while_its_own_session_streams_into_it(
-    busy_line: Busy, page: Page
+    loaded: Loaded, page: Page
 ) -> None:
-    first, second = busy_line.streaming
-    page.goto(f"{busy_line.url}at-work")
+    first, second = loaded.streaming
+    page.goto(f"{loaded.url}at-work")
     lane = page.locator(f"[data-piece=lane-{first.number}]")
     expect(lane).to_be_visible()
 
@@ -100,9 +100,9 @@ def test_at_work_a_lane_keeps_focus_while_its_own_session_streams_into_it(
 
 
 def test_at_work_an_answer_can_be_typed_while_the_other_sessions_stream(
-    busy_line: Busy, page: Page
+    loaded: Loaded, page: Page
 ) -> None:
-    page.goto(f"{busy_line.url}at-work#{busy_line.asking.number}")
+    page.goto(f"{loaded.url}at-work#{loaded.asking.number}")
     note = page.get_by_label("Anything the agent should know")
 
     keeps_focus(page, note, "W")
@@ -111,16 +111,18 @@ def test_at_work_an_answer_can_be_typed_while_the_other_sessions_stream(
     expect(note).to_have_value("Warn them")
 
 
-def test_the_check_fails_when_a_live_update_moves_focus(busy_line: Busy, page: Page) -> None:
-    page.goto(f"{busy_line.url}at-work")
-    lane = page.locator(f"[data-piece=lane-{busy_line.streaming[0].number}]")
+def test_the_check_fails_when_a_live_update_moves_focus(loaded: Loaded, page: Page) -> None:
+    page.goto(f"{loaded.url}at-work")
+    first, second = loaded.streaming
+    lane = page.locator(f"[data-piece=lane-{first.number}]")
     expect(lane).to_be_visible()
-    # A screen that, whenever an update redraws it, puts focus somewhere of its own.
+    # A screen that, whenever an update redraws a lane, puts focus on another one.
     page.evaluate(
-        "new MutationObserver(() => document.querySelector('[data-piece=session-story] a').focus())"
+        "n => new MutationObserver(() => document.querySelector(`[data-piece=lane-${n}]`).focus())"
         ".observe(document.querySelector('[data-piece=session-lanes]'),"
-        " {subtree: true, childList: true, characterData: true})"
+        " {subtree: true, childList: true, characterData: true})",
+        second.number,
     )
 
-    with pytest.raises(AssertionError, match="focus is on a Ticket"):
+    with pytest.raises(AssertionError, match=f"a live update moved focus to lane-{second.number}"):
         keeps_focus(page, lane, "Tab")
