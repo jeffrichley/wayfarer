@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { ChronicleLine, Home, LineRow, Need, NeedsYou } from "./api";
 import { Button } from "./Button";
 import { Chronicle } from "./Chronicle";
+import { useNow } from "./clock";
 import { Frame, Pane } from "./Frame";
 import { Line } from "./Line";
 import { atWorkHref, deskHref } from "./links";
@@ -55,16 +56,6 @@ function useVisit() {
   }, []);
 }
 
-// The clock the dateline reads, to the minute.
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const tick = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(tick);
-  }, []);
-  return now;
-}
-
 const NOTHING: Need[] = [];
 
 const DAY = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
@@ -95,6 +86,21 @@ function row(need: Need): Row {
       return { kind: "environment", reason: need.reason };
     case "ship":
       return { kind: "ship", effort: need.title, name: need.title };
+    case "orphan":
+      // Named by its number alone when GitHub could not be read as Wayfarer started.
+      return {
+        kind: "orphan",
+        effort: need.effort?.title ?? "No effort",
+        ticket: { name: need.title ?? `Ticket ${need.ticket}`, id: need.ticket },
+      };
+    case "unknown_container":
+      return { kind: "unknown", runId: need.run_id };
+    case "closed":
+      return {
+        kind: "closed",
+        effort: need.effort.title,
+        ticket: { name: need.ticket.title, id: need.ticket.number },
+      };
     default: {
       const on = {
         effort: need.effort.title,
@@ -115,7 +121,15 @@ function row(need: Need): Row {
 }
 
 function needKey(need: Need): string {
-  return "ticket" in need ? `ticket:${need.ticket.number}` : need.id;
+  switch (need.kind) {
+    case "question":
+    case "held":
+    case "review":
+    case "closed":
+      return `ticket:${need.ticket.number}`;
+    default:
+      return need.id;
+  }
 }
 
 export function TheLine() {

@@ -219,6 +219,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{run_id}/reap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reap
+         * @description Remove whatever the orphan `run_id` left running, and hold its ticket.
+         */
+        post: operations["reap_api_sessions__run_id__reap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tickets/{number}/retry": {
         parameters: {
             query?: never;
@@ -633,6 +653,56 @@ export interface components {
             /** @description The item the gate raised when it last refused a start; null when it has not refused one, or has admitted one since. */
             raised: components["schemas"]["EnvironmentFailure"] | null;
         };
+        /**
+         * GraphCard
+         * @description A ticket that has not landed, as its card on the graph.
+         */
+        GraphCard: {
+            /**
+             * At Cap
+             * @description Takeable under an armed cascade whose slots are full: it starts when a slot frees.
+             */
+            at_cap: boolean;
+            /**
+             * Downstream
+             * @description Every ticket it frees, however far on.
+             */
+            downstream: number[];
+            /**
+             * Implied
+             * @description Its blockers not drawn, and through which.
+             */
+            implied: components["schemas"]["ImpliedEdge"][];
+            /**
+             * Since
+             * @description When the session building it started; null when it is not building.
+             */
+            since: string | null;
+            /**
+             * Size
+             * @description Full when it is on the frontier or one step out; name-only further out.
+             * @enum {string}
+             */
+            size: "full" | "name-only";
+            /** @description Never landed, which folds, or closed, which is off. */
+            state: components["schemas"]["TicketState"];
+            /**
+             * Step
+             * @description How many tickets that have not landed stand between it and a session: 0 on the frontier, the column beside the start line.
+             */
+            step: number;
+            ticket: components["schemas"]["Mention"];
+            /**
+             * Upstream
+             * @description Every ticket still on the graph it waits on, however far back.
+             */
+            upstream: number[];
+            /**
+             * Waiting On
+             * @description Its blockers that have not landed or closed, in ticket order.
+             */
+            waiting_on: components["schemas"]["Mention"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -748,6 +818,15 @@ export interface components {
             tag: string | null;
         };
         /**
+         * ImpliedEdge
+         * @description A blocker the ticket already waits on through another, so it is not drawn.
+         */
+        ImpliedEdge: {
+            blocker: components["schemas"]["Mention"];
+            /** @description The drawn blocker that itself waits on `blocker`. */
+            via: components["schemas"]["Mention"];
+        };
+        /**
          * Landed
          * @description A ticket landed on its effort branch, with what that directly caused (#22).
          */
@@ -839,6 +918,20 @@ export interface components {
             number: number;
             /** Title */
             title: string;
+        };
+        /**
+         * NeedClosed
+         * @description A ticket GitHub closed while its session still runs. It holds up no work, and the
+         *     session is not stopped for it, so a person decides (ADR-0002).
+         */
+        NeedClosed: {
+            effort: components["schemas"]["Mention"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "closed";
+            ticket: components["schemas"]["Mention"];
         };
         /**
          * NeedHeld
@@ -938,7 +1031,9 @@ export interface components {
          * NeedsYou
          * @description Everything waiting on a person, across every effort, in live order (#24): an
          *     environment failure pinned first, then what holds up the most, then what holds up
-         *     nothing. Home shows it as it stands; the desk freezes its own copy.
+         *     nothing: shipping an effort, then what a Wayfarer before this one left, then a
+         *     ticket closed while its session runs. Home shows it as it stands; the desk freezes
+         *     its own copy.
          */
         NeedsYou: {
             /**
@@ -947,12 +1042,46 @@ export interface components {
              */
             id: "needs_you";
             /** Items */
-            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"])[];
+            items: (components["schemas"]["EnvironmentFailure"] | components["schemas"]["NeedQuestion"] | components["schemas"]["NeedHeld"] | components["schemas"]["NeedReview"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["NeedClosed"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "needs_you";
+        };
+        /**
+         * Orphan
+         * @description A session the store has as started and never finished: the Wayfarer running it
+         *     stopped before it did. Offered a reap, which removes whatever container it left and
+         *     holds its ticket; its work is not recovered (ADR-0002).
+         */
+        Orphan: {
+            /** @description The effort its ticket is in; null when GitHub has it in none, or could not be read. */
+            effort: components["schemas"]["Mention"] | null;
+            /**
+             * Id
+             * @description `orphan:<run id>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "orphan";
+            /** Run Id */
+            run_id: string;
+            /**
+             * Started
+             * Format: date-time
+             */
+            started: string;
+            /** Ticket */
+            ticket: number;
+            /**
+             * Title
+             * @description Its ticket's title; null when GitHub could not be read as Wayfarer started.
+             */
+            title: string | null;
         };
         /**
          * ProbeCheck
@@ -1014,6 +1143,11 @@ export interface components {
             merged: boolean;
             /** Number */
             number: number;
+            /**
+             * Opened
+             * Format: date-time
+             */
+            opened: string;
         };
         /**
          * ReadyToShip
@@ -1107,7 +1241,7 @@ export interface components {
          */
         Snapshot: {
             /** Items */
-            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"])[];
+            items: (components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"])[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1183,6 +1317,11 @@ export interface components {
             kind: "ticket";
             /** Labels */
             labels: string[];
+            /**
+             * Live
+             * @description A session Wayfarer started is running on it. GitHub owns its state, so a ticket closed there keeps its session, and it is flagged in Needs you (ADR-0002).
+             */
+            live: boolean;
             /** Number */
             number: number;
             /** Open */
@@ -1200,6 +1339,39 @@ export interface components {
             title: string;
         };
         /**
+         * TicketGraph
+         * @description One effort's ticket graph: the size of the work left, not the work done.
+         */
+        TicketGraph: {
+            /**
+             * Cards
+             * @description Every ticket still to land, in ticket order.
+             */
+            cards: components["schemas"]["GraphCard"][];
+            /** Effort */
+            effort: number;
+            /**
+             * Id
+             * @description `graph:<effort>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ticket_graph";
+            /**
+             * Landed
+             * @description Every landed ticket, folded into the start line, in dependency order.
+             */
+            landed: components["schemas"]["Mention"][];
+            /**
+             * Wires
+             * @description Every edge drawn: implied edges are not, and edges between landed tickets are folded away with them.
+             */
+            wires: components["schemas"]["Wire"][];
+        };
+        /**
          * TicketState
          * @description Where a ticket stands, derived from GitHub on every read and never stored.
          *
@@ -1208,12 +1380,32 @@ export interface components {
          */
         TicketState: "landed" | "closed" | "asked" | "held" | "landing" | "in_review" | "building" | "takeable" | "blocked";
         /**
+         * UnknownContainer
+         * @description A container Waystation labelled with a run id the store has never heard of. The
+         *     label carries no repo, so it may be another repo's Wayfarer's: it is shown, and
+         *     never reaped automatically.
+         */
+        UnknownContainer: {
+            /**
+             * Id
+             * @description `container:<run id>`.
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unknown_container";
+            /** Run Id */
+            run_id: string;
+        };
+        /**
          * Upsert
          * @description One item, new or replacing the one with its id.
          */
         Upsert: {
             /** Item */
-            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"];
+            item: components["schemas"]["ImageStatus"] | components["schemas"]["BuildOutput"] | components["schemas"]["BuildFinished"] | components["schemas"]["Effort"] | components["schemas"]["EffortUnreadable"] | components["schemas"]["Ticket"] | components["schemas"]["GateStatus"] | components["schemas"]["EnvironmentFailure"] | components["schemas"]["Cascade"] | components["schemas"]["ShipEffort"] | components["schemas"]["Orphan"] | components["schemas"]["UnknownContainer"] | components["schemas"]["Beat"] | components["schemas"]["ChronicleLine"] | components["schemas"]["Home"] | components["schemas"]["LineRow"] | components["schemas"]["NeedsYou"] | components["schemas"]["TicketGraph"];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1232,6 +1424,25 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * Wire
+         * @description A drawn edge, from blocker to blocked.
+         */
+        Wire: {
+            /** Blocked */
+            blocked: number;
+            /**
+             * Blocker
+             * @description The blocker's number; null for the start line.
+             */
+            blocker: number | null;
+            /**
+             * Kind
+             * @description `met` where the blocker landed, so it leaves the start line; `open` where it has not; `start` from the start line to a ticket with nothing to wait on.
+             * @enum {string}
+             */
+            kind: "met" | "open" | "start";
         };
         /**
          * Working
@@ -1521,6 +1732,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    reap_api_sessions__run_id__reap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

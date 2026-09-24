@@ -137,6 +137,7 @@ type Issue {
   issueDependenciesSummary: IssueDependenciesSummary!
   blockedBy(first: Int, after: String): IssueConnection!
   subIssues(first: Int, after: String): IssueConnection!
+  parent: Issue
   timelineItems(
     itemTypes: [IssueTimelineItemsItemType!], first: Int, last: Int
   ): IssueTimelineItemsConnection!
@@ -476,8 +477,8 @@ class GitHub:
             self._refusals += refusals
 
     def forbid(self, path: str) -> None:
-        """Refuse every read of paths ending in `path`, and every claim, as GitHub
-        refuses a token without the permission that path needs."""
+        """Refuse every read of paths ending in `path`, and every claim or label written
+        there, as GitHub refuses a token without the permission that path needs."""
         with self._lock:
             self._forbidden.append(path)
 
@@ -579,6 +580,8 @@ class GitHub:
         async def label(owner: str, name: str, number: int, request: Request) -> Response:
             body = await request.json()
             with self._lock:
+                if refused := self._refused_write(request):
+                    return refused
                 issue = self._live.issues[number]
                 for label_name in body["labels"]:
                     self._label(issue, label_name, self.viewer)
@@ -894,6 +897,7 @@ def _issue(repo: _Repo, issue: Issue) -> _Node:
                     if c.parent == issue.number
                 ]
             ),
+            "parent": None if issue.parent is None else _issue(repo, repo.issues[issue.parent]),
             "timelineItems": timeline_items,
         },
     )

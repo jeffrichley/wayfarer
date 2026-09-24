@@ -44,7 +44,7 @@ def test_the_headline_leads_with_what_needs_you_then_the_landings(
     github.label(meter, ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         home = page.item(
             "home",
@@ -63,7 +63,7 @@ def test_the_headline_stays_under_fourteen_words_however_much_happened(
     github.label(tickets[12], ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         home = page.item(
             "home", headline="An agent has stopped to ask you something, and 12 tickets landed."
@@ -82,7 +82,7 @@ def test_one_standfirst_sentence_per_active_effort_from_its_own_counts(
     land(github, done)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, widgets, shipped)
         home = page.item("home", moving=1)
 
@@ -104,7 +104,7 @@ def test_each_effort_rows_course_reaches_the_furthest_station_its_tickets_have(
     github.close(dropped, "NOT_PLANNED")
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, widgets, sliced, shipped)
         rows = {n: page.items[f"line:{n}"] for n in (widgets.number, sliced.number, shipped.number)}
 
@@ -133,7 +133,7 @@ def test_needs_you_ranks_what_holds_up_the_most_first_and_reranks_live(
     github.block(ruler, by=scale)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(lambda items: _needs(items) == [_FLAG])
 
@@ -158,7 +158,7 @@ def test_needs_you_gives_a_tie_to_whatever_has_waited_longest(
     github.label(flag, ASKED)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         page.until(
             lambda items: _needs(items) == ["question Meter peaks", "question Flag loudness"]
@@ -172,6 +172,67 @@ def test_needs_you_gives_a_tie_to_whatever_has_waited_longest(
         )
 
 
+def test_needs_you_is_one_list_across_efforts_where_the_bigger_stall_goes_first(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    widgets, (flag,) = github.effort("Widgets", tickets=1)
+    gadgets, (meter, scale, ruler) = github.effort("Gadgets", tickets=3)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, ASKED)
+    github.label(meter, ASKED)
+    github.block(scale, by=meter)
+    github.block(ruler, by=scale)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, widgets, gadgets)
+        page.until(lambda items: _needs(items) == [_METER, _FLAG])
+        needs = page.items["needs_you"]["items"]
+
+    # A three-ticket stall in the later effort sits above a one-ticket question.
+    assert [(n["effort"]["title"], n["holds_up"]) for n in needs] == [
+        ("Gadgets", 3),
+        ("Widgets", 1),
+    ]
+
+
+def test_two_items_stalling_one_ticket_both_count_it_and_nothing_sums_them(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter, ruler) = github.effort("Widgets", tickets=3)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.label(flag, ASKED)
+    github.label(meter, ASKED)
+    github.block(ruler, by=flag)
+    github.block(ruler, by=meter)
+    url = wayfarer.start(env=quick(tmp_path)).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: len(_needs(items)) == 2)
+        needs = page.items["needs_you"]["items"]
+
+    # Each holds up itself and the ruler; neither alone starts it.
+    assert [(n["holds_up"], n["starts"]) for n in needs] == [(2, 0), (2, 0)]
+
+
+def test_a_review_waits_from_when_its_pull_request_opened_and_the_longest_goes_first(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    older = github.pull_request(meter, base=EFFORT_BRANCH)
+    github.pull_request(flag, base=EFFORT_BRANCH)
+    url = wayfarer.start(env={**quick(tmp_path), "WAYFARER_AUTO_MERGE": "0"}).url()
+
+    with Stream(url, patience=30, derived=True) as page:
+        read(url, page, spec)
+        page.until(lambda items: _needs(items) == ["review Meter peaks", "review Flag loudness"])
+        first = page.items["needs_you"]["items"][0]
+
+    assert datetime.fromisoformat(first["since"]) == datetime.fromisoformat(older.created_at)
+
+
 def test_an_environment_failure_is_pinned_first_and_shipping_an_effort_last(
     wayfarer: Launcher, github: GitHub, tmp_path: Path
 ) -> None:
@@ -183,7 +244,7 @@ def test_an_environment_failure_is_pinned_first_and_shipping_an_effort_last(
     land(github, done)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         # The clone has no session image, so the start gate refuses every start.
         for effort in (widgets, gadgets):
             assert post(f"{url}api/efforts/{effort.number}/arm").status_code == 202
@@ -204,14 +265,14 @@ def test_the_last_visit_ends_on_leaving_so_a_reload_keeps_the_headline(
     land(github, flag)
     url = wayfarer.start(env=quick(tmp_path)).url()
 
-    with Stream(url, patience=30, home=True) as page:
+    with Stream(url, patience=30, derived=True) as page:
         read(url, page, spec)
         post(f"{url}api/home/arrived")
         page.item("home", headline="One ticket landed so far.")
 
         # Leaving then reloading: the page says it left, and never that it arrived.
         post(f"{url}api/home/left")
-        with Stream(url, home=True) as reloaded:
+        with Stream(url, derived=True) as reloaded:
             assert reloaded.item("home")["headline"] == "One ticket landed so far."
 
         # Coming back is a new visit, counting from when the last one ended.

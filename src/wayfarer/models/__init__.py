@@ -18,9 +18,11 @@ it raised; the list that orders them all lives with home, which shows it.
 from wayfarer.models.cascade import *
 from wayfarer.models.chronicle import *
 from wayfarer.models.gate import *
+from wayfarer.models.graph import *
 from wayfarer.models.health import *
 from wayfarer.models.home import *
 from wayfarer.models.image import *
 from wayfarer.models.read_model import *
+from wayfarer.models.restart import *
 from wayfarer.models.sessions import *
 from wayfarer.models.stream import *

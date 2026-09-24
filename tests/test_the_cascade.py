@@ -1,132 +1,36 @@
 """The cascade: arming an effort is the only way a session ever starts.
 
-Each test serves Wayfarer in this process, against the GitHub stand-in, with its
-sessions really running a scripted agent (`cascading.py`). Everything else is HTTP.
-
-Every session is held until its test lets its ticket go, so a test decides when
-each one ends, and every start is written down where the test can count it.
+Each test serves Wayfarer in this process, sessions and all, with nothing spent
+(`cascading.py`).
 """
 
 from __future__ import annotations
 
-import shlex
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from waystation.agents import AgentCommand, AgentEvent
-from waystation.testing import ScriptedAgent
 
-import cascading
-from cascading import Gate, eventually, git, origin_clone
+from cascading import Serve, eventually, git, host_clone, serving
+from cascading import cascade_id as _cascade
+from cascading import page as _page
+from cascading import ticket_id as _ticket
 from conftest import Stream, post
-from github_stand_in import LOGIN, GitHub, Issue
+from github_stand_in import LOGIN, GitHub
 
 pytestmark = pytest.mark.git
-
-_DONE = {"status": "done", "summary": "Built it.", "open_findings": [], "assumptions": []}
 
 
 @pytest.fixture
 def clone(tmp_path: Path, github: GitHub) -> Path:
-    return origin_clone(tmp_path, github)
-
-
-@dataclass(frozen=True)
-class _Held:
-    """The scripted agent, writing its ticket down as it starts, leaving some work
-    uncommitted, and then holding until the test lets that ticket go."""
-
-    released: Path
-    started: Path
-
-    def preflight(self) -> None:
-        return None
-
-    def command(self, prompt: str, outcome_schema: dict[str, Any]) -> AgentCommand:
-        ticket = prompt.rsplit(" ", 1)[-1]
-        played = ScriptedAgent(outcome=_DONE).command(prompt, outcome_schema)
-        let_go = shlex.quote(str(self.released / ticket))
-        held = [
-            f"printf 'work on {ticket}\\n' > work-{ticket}.txt",
-            f"printf '%s\\n' {ticket} >> {shlex.quote(str(self.started))}",
-            f"while [ ! -e {let_go} ]; do sleep 0.05; done",
-        ]
-        assert played.script is not None
-        return replace(played, script="\n".join([*held, played.script]))
-
-    def parse(self, line: str) -> Sequence[AgentEvent]:
-        return ScriptedAgent().parse(line)
-
-
-@dataclass
-class Wayfarer:
-    """One Wayfarer serving in this process, and the sessions it has started."""
-
-    url: str
-    released: Path
-    started_log: Path
-    gate: Gate
-
-    def started(self) -> list[int]:
-        """Every ticket a session was started on, in the order they started."""
-        if not self.started_log.exists():
-            return []
-        return [int(line) for line in self.started_log.read_text().split()]
-
-    def let_go(self, ticket: Issue) -> None:
-        """Let the session on `ticket` finish."""
-        (self.released / str(ticket.number)).touch()
-
-    def arm(self, effort: Issue) -> None:
-        assert post(f"{self.url}api/efforts/{effort.number}/arm").status_code == 202
-
-
-Serve = Callable[..., Wayfarer]
+    return host_clone(tmp_path, github)
 
 
 @pytest.fixture
 def wayfarer(clone: Path, tmp_path: Path, github: GitHub) -> Iterator[Serve]:
-    """Serves Wayfarer on `clone`; the same data directory each time, as a restart has."""
-    released = tmp_path / "released"
-    released.mkdir()
-    started = tmp_path / "started.txt"
-    serving: list[Any] = []
-
-    def serve(cap: int = 3) -> Wayfarer:
-        for running in serving:
-            running.__exit__(None, None, None)
-        serving.clear()
-        gate = Gate()
-        agent = _Held(released, started)
-        context = cascading.serving(
-            clone, tmp_path / "data", github, lambda _: agent, gate, cap=cap
-        )
-        url = context.__enter__()
-        serving.append(context)
-        return Wayfarer(url, released, started, gate)
-
-    yield serve
-    # Anything still held is let go, so shutting down waits on nothing.
-    for ticket in range(1, 100):
-        (released / str(ticket)).touch()
-    for running in serving:
-        running.__exit__(None, None, None)
-
-
-def _page(url: str) -> Stream:
-    # The poll keeps a page busy, so a wait is bounded in all, not only per read.
-    return Stream(url, patience=20.0)
-
-
-def _cascade(effort: Issue) -> str:
-    return f"cascade:{effort.number}"
-
-
-def _ticket(ticket: Issue) -> str:
-    return f"ticket:{ticket.number}"
+    with serving(clone, tmp_path, github) as serve:
+        yield serve
 
 
 def test_arming_is_offered_with_how_many_tickets_are_takeable_and_the_cap(
@@ -206,6 +110,37 @@ def test_the_cap_is_shared_by_every_armed_cascade_on_the_repo(
 
     assert left["takeable"] == 1
     assert len(app.started()) == 3
+
+
+def test_the_graph_says_how_long_a_ticket_has_built_and_that_the_next_waits_on_a_slot(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (first, _) = github.effort("Widgets", tickets=2)
+    app = wayfarer(cap=1)
+
+    with Stream(app.url, patience=20.0, derived=True) as seen:
+        app.arm(effort)
+        eventually(lambda: app.started() == [first.number])
+        seen.item(_ticket(first), state="building")
+        graph = f"graph:{effort.number}"
+        # The slot is taken from the claim, before the session is building; how long
+        # it has built is known once its session has started.
+        seen.until(
+            lambda items: (
+                graph in items
+                and items[graph]["cards"][0]["state"] == "building"
+                and items[graph]["cards"][0]["since"] is not None
+                and items[graph]["cards"][1]["at_cap"]
+            )
+        )
+        drawn = seen.items[graph]
+
+    building, waiting = drawn["cards"]
+    assert building["state"] == "building"
+    assert building["since"] is not None
+    assert building["at_cap"] is False
+    assert waiting["state"] == "takeable"
+    assert waiting["since"] is None
 
 
 def test_a_ticket_is_claimed_on_github_before_its_session_starts(
@@ -442,6 +377,36 @@ def test_when_every_ticket_is_closed_the_cascade_disarms_and_raises_shipping(
         "effort": effort.number,
         "title": "Widgets",
     }
+
+
+def test_a_ticket_closed_on_github_while_its_session_runs_is_flagged_last_until_it_ends(
+    wayfarer: Serve, github: GitHub
+) -> None:
+    effort, (ticket,) = github.effort("Widgets", tickets=1)
+    app = wayfarer()
+
+    with Stream(app.url, patience=20.0, derived=True) as seen:
+        app.arm(effort)
+        eventually(lambda: app.started() == [ticket.number])
+
+        # GitHub owns the state, so the card says closed; the session is not stopped.
+        github.close(ticket, reason="NOT_PLANNED")
+        seen.item(_ticket(ticket), state="closed", live=True)
+        seen.until(lambda items: _kinds(items) == ["ship", "closed"])
+        closed = seen.items["needs_you"]["items"][-1]
+
+        app.let_go(ticket)
+        seen.until(lambda items: _kinds(items) == ["ship"])
+
+    assert closed == {
+        "kind": "closed",
+        "ticket": {"number": ticket.number, "title": ticket.title},
+        "effort": {"number": effort.number, "title": "Widgets"},
+    }
+
+
+def _kinds(items: dict[str, dict[str, Any]]) -> list[str]:
+    return [need["kind"] for need in items.get("needs_you", {"items": []})["items"]]
 
 
 def test_a_refused_start_gate_pauses_the_cascade_and_raises_one_item(

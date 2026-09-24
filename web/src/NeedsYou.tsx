@@ -21,7 +21,8 @@ export type Need =
   | { kind: "drafts"; effort: string; spec: string; drafted: number }
   | { kind: "ship"; effort: string; name: string }
   | (OnATicket & { kind: "orphan" })
-  | (OnATicket & { kind: "closed" });
+  | (OnATicket & { kind: "closed" })
+  | { kind: "unknown"; runId: string };
 
 // What a row says. The spec's one-line sentences lead with the reason or the
 // question and end with what the item holds up; a row gives the item's name a
@@ -110,6 +111,16 @@ function words(need: Need): Words {
         word: "Still running",
         name: named,
         ask: "Closed on GitHub while its session runs",
+      };
+    case "unknown":
+      // Its label carries no repo, so it may be another repo's Wayfarer's: shown,
+      // and never reaped on its own (#43).
+      return {
+        label: "Unknown container · No effort",
+        glyph: "building",
+        word: "Unknown",
+        name: `A container from run ${need.runId}`,
+        ask: "No session here accounts for it; it is left for you",
       };
   }
 }
