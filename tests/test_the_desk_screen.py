@@ -167,7 +167,7 @@ def test_each_kind_of_item_has_its_own_surface_with_exactly_one_primary_action(
         "environment-header": "Resume the cascades",
         "question-header": "Send answer and resume",
         "held-header": "Continue",
-        "pr-header": "Review it on GitHub",
+        "pr-header": "Land it",
     }
 
 
@@ -211,3 +211,51 @@ def test_answering_on_the_desk_posts_the_answer_and_the_item_resolves_in_place(
     expect(queue.nth(0)).to_contain_text("Answered")
     expect(queue.nth(1)).to_contain_text("Meter peaks")
     assert ASKED not in github.labels(flag.number)
+
+
+def test_a_review_shows_its_pull_requests_diff_and_land_it_approves_it(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path, page: Page
+) -> None:
+    spec, (flag,) = github.effort("Widgets", tickets=1)
+    flag.title = "Flag loudness"
+    github.pull_request(
+        flag,
+        base=EFFORT_BRANCH,
+        files={"src/limits.py": "@@ -1,2 +1,2 @@\n PEAK = 0\n-RMS = 1\n+RMS = 2"},
+    )
+    _open(wayfarer, tmp_path, page, spec, auto_merge=False)
+
+    # Opening the review reads its diff, which shows beneath what landing frees.
+    diff = _surface(page).locator("[data-piece=pr-diff]")
+    expect(diff.get_by_role("tab")).to_have_text("src/limits.py+1 \u22121")
+    expect(diff).to_contain_text("RMS = 2")
+
+    _surface(page).get_by_role("button", name="Land it").click()
+
+    # The approval is a comment on the ticket, since GitHub refuses the author (#108).
+    comments = f"/issues/{flag.number}/comments"
+    expect(_queue(page).nth(0)).to_contain_text("Landing · in the merge queue")
+    assert [r for r in github.requests if r.method == "POST" and r.path.endswith(comments)]
+
+
+def test_a_held_ticket_with_a_pull_request_can_be_let_land(
+    wayfarer: Launcher, github: GitHub, tmp_path: Path, page: Page
+) -> None:
+    spec, (flag, meter) = github.effort("Widgets", tickets=2)
+    flag.title, meter.title = "Flag loudness", "Meter peaks"
+    github.pull_request(flag, base=EFFORT_BRANCH, draft=True)
+    github.label(flag, HELD)
+    github.label(meter, HELD)
+    _open(wayfarer, tmp_path, page, spec)
+    queue = _queue(page)
+    expect(queue).to_have_count(2)
+
+    # Without a pull request there is nothing to let land.
+    queue.nth(1).click()
+    expect(_surface(page).get_by_role("button", name="Let it land")).to_have_count(0)
+
+    queue.nth(0).click()
+    _surface(page).get_by_role("button", name="Let it land").click()
+
+    expect(queue.nth(0)).to_contain_text("Landing")
+    assert HELD not in github.labels(flag.number)

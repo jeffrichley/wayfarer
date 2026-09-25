@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
-import type { DeskEntry, Home, Mention, Need, Ticket } from "./api";
+import type { DeskEntry, Home, Mention, Need, PullDiff, PullDiffUnreadable, Ticket } from "./api";
 import { Button } from "./Button";
 import styles from "./Desk.module.css";
+import { Diff, type Line } from "./Diff";
 import { ticketHref } from "./links";
 import { holdsUpAndStarts, row, tickets } from "./NeedsYou";
 import { QuestionCard } from "./Question";
@@ -144,6 +145,8 @@ function Surface({
               <p className={styles.consequence}>
                 Continuing starts a session where the last one stopped. Starting over begins again from the
                 effort branch, and closes its pull request.
+                {ticket?.pull_request &&
+                  " Letting it land takes its pull request as it is: ready, and into the merge queue."}
               </p>
               <div className={styles.actions}>
                 <Button
@@ -162,6 +165,15 @@ function Surface({
                 >
                   Start over
                 </Button>
+                {ticket?.pull_request && (
+                  <Button
+                    variant="secondary"
+                    piece="let-it-land"
+                    onClick={() => void command(`/api/tickets/${need.ticket.number}/let-it-land`)}
+                  >
+                    Let it land
+                  </Button>
+                )}
               </div>
             </section>
           )}
@@ -203,15 +215,23 @@ function Surface({
                 )}
                 {waiting > 0 && ` ${tickets(waiting)} further on still ${waiting === 1 ? "waits" : "wait"}.`}
               </p>
-              {pull !== null && repo !== null && (
-                <div className={styles.actions}>
-                  <Button variant="primary" arrow piece="open-pull-request" href={`https://github.com/${repo}/pull/${pull.number}`}>
-                    Review it on GitHub
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  piece="land-it"
+                  onClick={() => void command(`/api/tickets/${need.ticket.number}/land-it`)}
+                >
+                  Land it
+                </Button>
+                {pull !== null && repo !== null && (
+                  <Button variant="ghost" arrow piece="open-pull-request" href={`https://github.com/${repo}/pull/${pull.number}`}>
+                    Open it on GitHub
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </section>
           )}
+          {done || (pull !== null && <Changes pull={pull.number} head={pull.head_commit} />)}
         </>
       );
     }
@@ -371,4 +391,48 @@ function Surface({
         </>
       );
   }
+}
+
+// The pull request's changes, read when the review opens and again as its head
+// moves (#109). The page asks; the diff arrives on the stream.
+function Changes({ pull, head }: { pull: number; head: string }) {
+  useEffect(() => {
+    void command(`/api/pulls/${pull}/read`);
+  }, [pull, head]);
+  const read = useItems((items) => items[`diff:${pull}`] as PullDiff | PullDiffUnreadable | undefined);
+  let body: ReactNode;
+  if (read === undefined) {
+    body = <p className="meta">Reading its changes from GitHub.</p>;
+  } else if (read.kind === "pull_diff_unreadable") {
+    body = <p className={styles.prose}>{read.reason}</p>;
+  } else {
+    const [first, ...rest] = read.files.map((file) => ({
+      path: file.path,
+      // A line has an old number, a new one, or both; the server never sends neither.
+      lines: file.lines as Line[],
+    }));
+    const unsent = read.left_out.length + read.unread;
+    body = (
+      <>
+        {first === undefined ? (
+          <p className={styles.prose}>It changes nothing that can be shown here.</p>
+        ) : (
+          <Diff files={[first, ...rest]} />
+        )}
+        {unsent > 0 && (
+          <p className={styles.consequence}>
+            {`${unsent} more changed ${unsent === 1 ? "file is" : "files are"} not shown here`}
+            {read.left_out.length > 0 && `: ${read.left_out.map((file) => file.path).join(", ")}`}
+            {read.unread > 0 && read.left_out.length > 0 && `, and ${read.unread} more`}.
+          </p>
+        )}
+      </>
+    );
+  }
+  return (
+    <section className={`${styles.sec} ${styles.changes}`} data-piece="pr-diff">
+      <Kicker>Changes</Kicker>
+      {body}
+    </section>
+  );
 }

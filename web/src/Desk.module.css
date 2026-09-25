@@ -14,6 +14,9 @@
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); align-items: center; }
 
 .sec { margin-top: 34px; max-width: 720px; }
+/* The diff takes the page's width, under a ruled kicker as the prototype's. */
+.changes { max-width: none; }
+.changes > :global(.kicker) { display: block; padding-bottom: 10px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
 .prose { font-size: 15px; line-height: 1.6; }
 /* What the primary action will do, said before it (principle 5), as the
    prototype's merge bar says it. */
