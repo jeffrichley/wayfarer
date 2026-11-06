@@ -32,6 +32,8 @@ written beside it.
 `gh pr merge <n> --merge --delete-branch`, then `git fetch --prune`. A green PR
 left sitting is the ticket unfinished.
 
+Renovate merges its own grouped non-major pull request once CI is green.
+
 ## Rules that live nowhere else
 
 - **Every shape the browser sees is a pydantic model in the `wayfarer.models`
