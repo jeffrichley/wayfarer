@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 24
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Sync dependencies
         run: uv sync
@@ -80,7 +80,7 @@ jobs:
         with:
           node-version: 24
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Install the web toolchain
         # From inside web/, where corepack finds the pinned pnpm (see justfile).
